@@ -1,18 +1,61 @@
+# Environment
+.env
+*.env
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-.env
+*.pyd
 venv/
-storage/
+.venv/
 *.egg-info/
-.DS_Store
-node_modules/
+
+# Models (large binary files)
+models/*.bin
+models/*.gguf
+models/*.pt
+
+# Build artifacts
+build/
+dist/
+whisper.cpp/build/
+
+# Node / frontend
+frontend/node_modules/
 frontend/dist/
-*.tsbuildinfo
+
+# Uploads and temp files
+uploads/
+storage/
 *.wav
 *.mp3
 *.mp4
 *.m4a
+*.webm
+*.json.tmp
+
+# Transcription artifacts
+storage/**/*.json
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
 *.log
+celerybeat-schedule
+
+# Claude Code
 .claude/
-ARTICLE.md
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
