@@ -16,25 +16,25 @@ router = APIRouter(prefix="/api", tags=["protocol"])
 
 MAX_TRANSCRIPT_CHARS = 15000
 
-PROTOCOL_PROMPT = """Du ar en professionell protokollforsare for svensk offentlig sektor.
-Skapa ett formellt motesprotokoll baserat pa transkriberingen nedan.
+PROTOCOL_PROMPT = """You are a professional meeting secretary.
+Create a formal meeting protocol based on the transcript below.
 
-Protokollet ska folja svensk standard for offentlig sektor med foljande struktur:
+The protocol should follow this structure:
 
-1. **Rubrik** - Protokoll fran [typ av mote]
-2. **Datum och tid** - Om det framgar, annars anvand det du vet
-3. **Narvarande** - Lista alla deltagare (anvand namnen fran transkriberingen)
-4. **Dagordning** - Identifiera dagordningspunkter fran vad som diskuterades
-5. **Paragrafpunkter** - Numrerade paragrafer (§1, §2, etc.) med:
-   - Rubrik for varje punkt
-   - Kort sammanfattning av diskussionen
-   - Eventuella BESLUT markerade tydligt
-   - Eventuella ATGARDSPUNKTER med ansvarig person
-6. **Justering** - Plats for underskrifter
+1. **Title** - Protocol from [type of meeting]
+2. **Date and time** - If mentioned, otherwise use what you know
+3. **Attendees** - List all participants (use the names from the transcript)
+4. **Agenda** - Identify agenda items from what was discussed
+5. **Sections** - Numbered sections (§1, §2, etc.) with:
+   - Heading for each item
+   - Brief summary of the discussion
+   - Any DECISIONS clearly marked
+   - Any ACTION ITEMS with the responsible person
+6. **Sign-off** - Space for signatures
 
-Skriv pa korrekt svenska. Var koncis men fullstandig.
-Markera beslut med "BESLUT:" och atgardspunkter med "ATGARD:".
-Svara med ren text (inte JSON), formaterad med markdown."""
+Write in clear English. Be concise but complete.
+Mark decisions with "DECISION:" and action items with "ACTION:".
+Respond with plain text (not JSON), formatted with markdown."""
 
 
 @router.post("/meetings/{meeting_id}/generate-protocol")
@@ -62,13 +62,13 @@ def generate_protocol(meeting_id: str, db: Session = Depends(get_db)):
 
     lines = []
     for seg in segments:
-        speaker = speaker_map.get(seg.speaker_id, "Okand") if seg.speaker_id else "Okand"
+        speaker = speaker_map.get(seg.speaker_id, "Unknown") if seg.speaker_id else "Unknown"
         ts = f"{int(seg.start_time // 60)}:{int(seg.start_time % 60):02d}"
         lines.append(f"[{ts}] [{speaker}]: {seg.text}")
 
     transcript_text = "\n".join(lines)
     if len(transcript_text) > MAX_TRANSCRIPT_CHARS:
-        transcript_text = transcript_text[:MAX_TRANSCRIPT_CHARS] + "\n\n[...transkribering trunkerad...]"
+        transcript_text = transcript_text[:MAX_TRANSCRIPT_CHARS] + "\n\n[...transcript truncated...]"
 
     preset = get_model_config().get_model_for_task("actions")
     llm = LLMService(preset=preset)
@@ -77,16 +77,16 @@ def generate_protocol(meeting_id: str, db: Session = Depends(get_db)):
     duration_str = ""
     if meeting.duration:
         mins = int(meeting.duration // 60)
-        duration_str = f"{mins} minuter"
+        duration_str = f"{mins} minutes"
 
     messages = [
         {"role": "system", "content": PROTOCOL_PROMPT},
         {"role": "user", "content": (
-            f"Motestitel: {meeting.title}\n"
-            f"Datum: {date_str}\n"
-            f"Langd: {duration_str}\n"
-            f"Deltagare: {', '.join(speaker_names)}\n\n"
-            f"Transkribering:\n{transcript_text}"
+            f"Meeting title: {meeting.title}\n"
+            f"Date: {date_str}\n"
+            f"Duration: {duration_str}\n"
+            f"Attendees: {', '.join(speaker_names)}\n\n"
+            f"Transcript:\n{transcript_text}"
         )},
     ]
 
@@ -169,9 +169,9 @@ def _md_to_docx(doc, protocol_text):
         if m_bullet:
             content = m_bullet.group(1)
             p = doc.add_paragraph(style="List Bullet")
-            if "BESLUT:" in content:
+            if "DECISION:" in content:
                 _add_inline_runs(p, content, base_color=RGBColor(0, 100, 0))
-            elif "ATGARD:" in content or "ÅTGÄRD:" in content:
+            elif "ACTION:" in content:
                 _add_inline_runs(p, content, base_color=RGBColor(0, 0, 150))
             else:
                 _add_inline_runs(p, content)
@@ -188,7 +188,7 @@ def _md_to_docx(doc, protocol_text):
             continue
 
         # BESLUT / ÅTGÄRD highlight lines
-        if "BESLUT:" in stripped:
+        if "DECISION:" in stripped:
             p = doc.add_paragraph()
             _add_inline_runs(p, stripped, base_color=RGBColor(0, 100, 0))
             for run in p.runs:
@@ -196,7 +196,7 @@ def _md_to_docx(doc, protocol_text):
             i += 1
             continue
 
-        if "ATGARD:" in stripped or "ÅTGÄRD:" in stripped:
+        if "ACTION:" in stripped:
             p = doc.add_paragraph()
             _add_inline_runs(p, stripped, base_color=RGBColor(0, 0, 150))
             for run in p.runs:
@@ -249,10 +249,10 @@ def export_protocol_docx(meeting_id: str, body: dict, db: Session = Depends(get_
     doc.add_paragraph()
     doc.add_paragraph()
     p = doc.add_paragraph("_" * 40)
-    p.add_run("\nOrdforande")
+    p.add_run("\nChairperson")
     doc.add_paragraph()
     p = doc.add_paragraph("_" * 40)
-    p.add_run("\nJusterare")
+    p.add_run("\nReviewer")
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -263,6 +263,6 @@ def export_protocol_docx(meeting_id: str, body: dict, db: Session = Depends(get_
         buf,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={
-            "Content-Disposition": f'attachment; filename="Protokoll - {safe_title}.docx"',
+            "Content-Disposition": f'attachment; filename="Protocol - {safe_title}.docx"',
         },
     )

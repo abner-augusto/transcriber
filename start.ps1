@@ -9,7 +9,12 @@ Write-Host "Starting Transcriber services..." -ForegroundColor Cyan
 Write-Host ""
 
 # Make sure Docker services are running
-docker compose up -d 2>$null
+# Suppress the error for Docker specifically so it doesn't trigger the global "Stop" preference
+try {
+    docker compose up -d 2>$null
+} catch {
+    Write-Host "Docker is already running or provided status output." -ForegroundColor Yellow
+}
 
 # Backend
 Start-Process powershell -ArgumentList "-NoExit", "-Command", `
