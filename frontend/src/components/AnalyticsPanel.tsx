@@ -47,21 +47,21 @@ export default function AnalyticsPanel({ meetingId }: Props) {
 
   return (
     <div className="space-y-5">
-      <h3 className="text-sm font-semibold text-slate-300">Talaranalys</h3>
+      <h3 className="text-sm font-semibold text-slate-300">Speaker Analysis</h3>
 
       {/* Summary stats */}
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-slate-800/50 rounded-lg p-2.5 text-center">
           <div className="text-lg font-bold text-white">{speakers.length}</div>
-          <div className="text-[10px] text-slate-500 mt-0.5">Talare</div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Speakers</div>
         </div>
         <div className="bg-slate-800/50 rounded-lg p-2.5 text-center">
           <div className="text-lg font-bold text-white">{formatDuration(total_speaking_time)}</div>
-          <div className="text-[10px] text-slate-500 mt-0.5">Talad tid</div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Speaking time</div>
         </div>
         <div className="bg-slate-800/50 rounded-lg p-2.5 text-center">
           <div className="text-lg font-bold text-white">{silence_percentage}%</div>
-          <div className="text-[10px] text-slate-500 mt-0.5">Tystnad</div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Silence</div>
         </div>
       </div>
 
@@ -95,7 +95,7 @@ export default function AnalyticsPanel({ meetingId }: Props) {
       {/* Timeline visualization */}
       {total_duration > 0 && (
         <div>
-          <div className="text-xs text-slate-500 mb-2">Tidslinje</div>
+          <div className="text-xs text-slate-500 mb-2">Timeline</div>
           <div className="bg-slate-800/50 rounded-lg p-2">
             {speakers.map((spk) => (
               <div key={spk.name} className="flex items-center gap-2 mb-1 last:mb-0">
@@ -128,7 +128,7 @@ export default function AnalyticsPanel({ meetingId }: Props) {
 
       {/* Segment counts */}
       <div>
-        <div className="text-xs text-slate-500 mb-2">Antal inlagg</div>
+        <div className="text-xs text-slate-500 mb-2">Segments</div>
         <div className="space-y-1">
           {speakers.map((spk) => (
             <div key={spk.name} className="flex items-center justify-between text-xs">

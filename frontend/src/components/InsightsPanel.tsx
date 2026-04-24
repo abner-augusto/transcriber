@@ -7,9 +7,9 @@ interface Props {
 }
 
 const TYPE_CONFIG = {
-  decision: { label: "Beslut", icon: "scale", color: "emerald" },
-  action_item: { label: "Atgard", icon: "check", color: "violet" },
-  open_question: { label: "Fraga", icon: "question", color: "amber" },
+  decision: { label: "Decision", icon: "scale", color: "emerald" },
+  action_item: { label: "Action", icon: "check", color: "violet" },
+  open_question: { label: "Question", icon: "question", color: "amber" },
 };
 
 export default function InsightsPanel({ meetingId }: Props) {
@@ -82,12 +82,12 @@ export default function InsightsPanel({ meetingId }: Props) {
           {extracting ? (
             <>
               <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Analyserar...
+              Analyzing...
             </>
           ) : insights.length > 0 ? (
-            "Analysera igen"
+            "Re-analyze"
           ) : (
-            "Extrahera insights"
+            "Extract insights"
           )}
         </button>
       </div>
@@ -100,7 +100,7 @@ export default function InsightsPanel({ meetingId }: Props) {
 
       {!loading && insights.length === 0 && !extracting && (
         <p className="text-xs text-slate-600 text-center py-4">
-          Klicka "Extrahera insights" for att analysera motet med AI.
+          Click "Extract insights" to analyze the meeting with AI.
         </p>
       )}
 
@@ -109,7 +109,7 @@ export default function InsightsPanel({ meetingId }: Props) {
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-xs font-medium text-emerald-400">Beslut ({decisions.length})</span>
+            <span className="text-xs font-medium text-emerald-400">Decisions ({decisions.length})</span>
           </div>
           <div className="space-y-1.5">
             {decisions.map((d) => (
@@ -124,7 +124,7 @@ export default function InsightsPanel({ meetingId }: Props) {
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <div className="w-2 h-2 rounded-full bg-violet-500" />
-            <span className="text-xs font-medium text-violet-400">Atgardspunkter ({actions.length})</span>
+            <span className="text-xs font-medium text-violet-400">Action items ({actions.length})</span>
           </div>
           <div className="space-y-1.5">
             {actions.map((a) => (
@@ -139,7 +139,7 @@ export default function InsightsPanel({ meetingId }: Props) {
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <div className="w-2 h-2 rounded-full bg-amber-500" />
-            <span className="text-xs font-medium text-amber-400">Oppna fragor ({questions.length})</span>
+            <span className="text-xs font-medium text-amber-400">Open questions ({questions.length})</span>
           </div>
           <div className="space-y-1.5">
             {questions.map((q) => (
