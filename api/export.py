@@ -93,7 +93,8 @@ def _export_srt(meeting: Meeting, segments: list[Segment]) -> PlainTextResponse:
 
     content = "\n".join(lines)
     return PlainTextResponse(
-        content,
+        "﻿" + content,  # UTF-8 BOM so media players detect encoding correctly
+        media_type="text/plain; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{_safe_filename(meeting.title)}.srt"',
         },
@@ -111,6 +112,7 @@ def _export_vtt(meeting: Meeting, segments: list[Segment]) -> PlainTextResponse:
     content = "\n".join(lines)
     return PlainTextResponse(
         content,
+        media_type="text/plain; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{_safe_filename(meeting.title)}.vtt"',
         },
