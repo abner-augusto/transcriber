@@ -38,7 +38,9 @@ class DiarizationService:
                 "pyannote/speaker-diarization-3.1",
                 **kwargs,
             )
-            if torch.backends.mps.is_available():
+            if torch.cuda.is_available():
+                cls._pipeline.to(torch.device("cuda"))
+            elif torch.backends.mps.is_available():
                 cls._pipeline.to(torch.device("mps"))
         return cls._pipeline
 

@@ -22,7 +22,7 @@ class WhisperService:
             self.cli_path,
             "-m", self.model_path,
             "-f", audio_path,
-            "-l", "sv",
+            "-l", "pt",
             "-oj",  # output JSON
             "-of", audio_path,  # output file prefix (creates audio.wav.json)
         ]
@@ -72,7 +72,7 @@ class WhisperService:
             self.cli_path,
             "-m", model,
             "-f", audio_path,
-            "-l", "sv",
+            "-l", "pt",
             "-oj",
             "-of", audio_path,
             "--no-speech-thold", "0.5",  # Skip segments with high no-speech probability
