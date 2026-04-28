@@ -148,23 +148,30 @@ export default function ActionsPanel({ meetingId, onResultEvent }: Props) {
       {!showManage && (
         <>
           <div className="space-y-1.5 mb-4">
-            {actions.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => handleRun(a.id)}
-                className="w-full text-left px-3 py-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600/50 transition text-sm text-slate-300 hover:text-white flex items-center justify-between group"
-              >
-                <span className="truncate">{a.name}</span>
-                <svg
-                  className="w-3.5 h-3.5 text-slate-600 group-hover:text-violet-400 transition flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+            {actions.map((a) => {
+              // Temporary translation mapping for existing Swedish actions in DB
+              const displayName = a.name === "Sammanfattning" ? "Summary" :
+                                 a.name === "Atgardslista" ? "Action Items" :
+                                 a.name === "Avidentifierad version" ? "Anonymized Version" : a.name;
+              
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => handleRun(a.id)}
+                  className="w-full text-left px-3 py-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600/50 transition text-sm text-slate-300 hover:text-white flex items-center justify-between group"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                </svg>
-              </button>
-            ))}
+                  <span className="truncate">{displayName}</span>
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-600 group-hover:text-violet-400 transition flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  </svg>
+                </button>
+              );
+            })}
           </div>
 
           {/* Results */}

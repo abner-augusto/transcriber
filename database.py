@@ -131,11 +131,44 @@ def cleanup_orphaned_storage():
 
 
 def seed_default_actions():
-    """Create default actions if none exist."""
+    """Create default actions if none exist, and migrate existing Swedish ones to English."""
     from models.action import Action
 
     db = SessionLocal()
     try:
+        # Migration: Rename existing Swedish actions to English
+        translations = {
+            "Sammanfattning": ("Summary", (
+                "You are a meeting assistant. Write a clear and concise summary of the meeting. "
+                "Include: main topics discussed, key decisions made, "
+                "and any unresolved questions. Write in English."
+            )),
+            "Atgardslista": ("Action Items", (
+                "You are a meeting assistant. Create a structured list of action items from the meeting. "
+                "For each item, specify:\n"
+                "- What needs to be done\n"
+                "- Who is responsible (if specified)\n"
+                "- Deadline (if mentioned)\n\n"
+                "Format as a numbered list. Write in English."
+            )),
+            "Avidentifierad version": ("Anonymized Version", (
+                "You are a privacy specialist. Rewrite the transcription so that all "
+                "personal names are replaced with 'Person A', 'Person B', 'Person C', etc. "
+                "Also replace organization names, locations, and other identifying details "
+                "with generic terms. Keep the content intact. Write in English."
+            ))
+        }
+
+        for old_name, (new_name, new_prompt) in translations.items():
+            action = db.query(Action).filter(Action.name == old_name).first()
+            if action:
+                log.info(f"Migrating action '{old_name}' to '{new_name}'")
+                action.name = new_name
+                # Only update prompt if it looks like the default Swedish one (contains 'svenska')
+                if "svenska" in action.prompt.lower():
+                    action.prompt = new_prompt
+        db.commit()
+
         if db.query(Action).count() > 0:
             return
 
