@@ -47,7 +47,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         speaker_id_service = SpeakerIdService(llm_preset=analysis_preset)
 
         # Step 1: Extract audio
-        update_progress(db, job, meeting, 2, "Extraherar ljud...")
+        update_progress(db, job, meeting, 2, "Extracting audio...")
         audio_path = audio_service.extract_audio(
             meeting.audio_filepath, meeting.id
         )
@@ -55,21 +55,21 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         meeting.duration = duration
         meeting.audio_filepath = audio_path
         db.commit()
-        update_progress(db, job, meeting, 5, "Ljud extraherat")
+        update_progress(db, job, meeting, 5, "Audio extracted")
 
         # Step 2: Transcription (before diarization so LLM can count speakers)
-        update_progress(db, job, meeting, 7, "Transkriberar med Whisper...")
+        update_progress(db, job, meeting, 7, "Transcribing with Whisper...")
         whisper_segments = whisper_service.transcribe(audio_path, vocabulary=meeting.vocabulary)
         meeting.raw_transcription = whisper_segments
         db.commit()
-        update_progress(db, job, meeting, 35, "Transkribering klar")
+        update_progress(db, job, meeting, 35, "Transcription complete")
 
         # Step 3: Iterative intro analysis - LLM reads chunks until intro is over
         min_speakers = meeting.min_speakers
         max_speakers = meeting.max_speakers
 
         if not min_speakers:
-            update_progress(db, job, meeting, 37, "Analyserar presentationsfas med AI...")
+            update_progress(db, job, meeting, 37, "Analyzing introduction phase with AI...")
             from services.llm_service import LLMService
             llm = LLMService(preset=analysis_preset)
 
@@ -87,11 +87,11 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                 meeting.intro_end_time = intro_result["intro_end_time"]
                 names_str = ", ".join(intro_result["names"])
                 update_progress(db, job, meeting, 40,
-                    f"Hittade {min_speakers} deltagare ({names_str}), "
-                    f"intro slutade vid {intro_result['intro_end_time']:.0f}s")
+                    f"Found {min_speakers} participants ({names_str}), "
+                    f"intro ended at {intro_result['intro_end_time']:.0f}s")
 
         # Step 4: Diarization (with speaker count from LLM)
-        update_progress(db, job, meeting, 42, "Identifierar talare (diarization)...")
+        update_progress(db, job, meeting, 42, "Identifying speakers (diarization)...")
         diarization_segments = diarization_service.diarize(
             audio_path,
             min_speakers=min_speakers,
@@ -99,21 +99,21 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         )
         meeting.raw_diarization = diarization_segments
         db.commit()
-        update_progress(db, job, meeting, 65, "Diarization klar")
+        update_progress(db, job, meeting, 65, "Diarization complete")
 
         # Step 5: Alignment
-        update_progress(db, job, meeting, 67, "Synkroniserar talare med text...")
+        update_progress(db, job, meeting, 67, "Synchronizing speakers with text...")
         aligned = align_segments(whisper_segments, diarization_segments)
-        update_progress(db, job, meeting, 75, "Synkronisering klar")
+        update_progress(db, job, meeting, 75, "Synchronization complete")
 
         # Step 6: Speaker identification
-        update_progress(db, job, meeting, 77, "Identifierar talare...")
+        update_progress(db, job, meeting, 77, "Identifying speakers...")
 
         speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
         speaker_info = {}
 
         if speaker_id_service.has_intro(aligned):
-            update_progress(db, job, meeting, 80, "Analyserar presentationer med AI...")
+            update_progress(db, job, meeting, 80, "Analyzing introductions with AI...")
             speaker_info = speaker_id_service.identify_speakers_model2(
                 aligned, audio_path, diarization_segments
             )
@@ -126,14 +126,14 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             offset = len(speaker_info)
             for i, (label, info) in enumerate(fallback.items()):
                 if offset > 0:
-                    info["name"] = f"Deltagare {offset + i + 1}"
+                    info["name"] = f"Participant {offset + i + 1}"
                 speaker_info[label] = info
 
         # Step 6b: Match against saved speaker profiles (if enabled)
         prefs = load_preferences()
         profiles = []
         if prefs.get("speaker_profiles_enabled", True):
-            update_progress(db, job, meeting, 87, "Matchar mot sparade röstprofiler...")
+            update_progress(db, job, meeting, 87, "Matching against saved voice profiles...")
             from models.speaker_profile import SpeakerProfile
             from services.embedding_service import EmbeddingService
             profiles = db.query(SpeakerProfile).all()
@@ -190,7 +190,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                 except Exception as e:
                     log.debug(f"Profile matching failed for {label}: {e}")
 
-        update_progress(db, job, meeting, 90, "Sparar resultat...")
+        update_progress(db, job, meeting, 90, "Saving results...")
 
         # Create speakers in DB
         speaker_map = {}  # label -> Speaker
@@ -212,7 +212,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             unknown_speaker = Speaker(
                 meeting_id=meeting.id,
                 label="UNKNOWN",
-                display_name="Okand",  # Swedish for "Unknown"
+                display_name="Unknown",
                 color="#9ca3af",
             )
             db.add(unknown_speaker)
@@ -243,11 +243,11 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         meeting.status = MeetingStatus.COMPLETED
         job.status = JobStatus.COMPLETED
         job.progress = 100
-        job.current_step = "Klar!"
+        job.current_step = "Done!"
         job.completed_at = datetime.utcnow()
         db.commit()
 
-        update_progress(db, job, meeting, 100, "Klar!")
+        update_progress(db, job, meeting, 100, "Done!")
 
         # Auto-extract insights (decisions, action items, open questions)
         try:

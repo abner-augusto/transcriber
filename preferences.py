@@ -18,7 +18,7 @@ _SECRET_KEYS = {"hf_auth_token", "openrouter_api_key"}
 def load_preferences() -> dict:
     if PREFS_PATH.exists():
         try:
-            with open(PREFS_PATH) as f:
+            with open(PREFS_PATH, encoding="utf-8") as f:
                 data = json.load(f)
             # Merge with defaults for any missing keys
             return {**DEFAULTS, **data}
@@ -28,7 +28,7 @@ def load_preferences() -> dict:
 
 
 def save_preferences(prefs: dict):
-    with open(PREFS_PATH, "w") as f:
+    with open(PREFS_PATH, "w", encoding="utf-8") as f:
         json.dump(prefs, f, indent=2, ensure_ascii=False)
 
 

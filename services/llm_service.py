@@ -128,16 +128,16 @@ class LLMService:
             {
                 "role": "system",
                 "content": (
-                    "Du ar en motesanalytiker. Du far en transkribering av ett mote "
-                    "i omgangar (chunk for chunk). Din uppgift ar att identifiera "
-                    "presentationsfasen - den del dar deltagarna presenterar sig. "
-                    "For varje ny chunk, analysera om presentationerna fortfarande pagar "
-                    "eller om motet har gatt vidare till annat innehall.\n\n"
-                    "Svara ALLTID med JSON i exakt detta format:\n"
+                    "You are a meeting analyst. You receive a transcription of a meeting "
+                    "in stages (chunk by chunk). Your task is to identify "
+                    "the introduction phase - the part where participants introduce themselves. "
+                    "For each new chunk, analyze if introductions are still ongoing "
+                    "or if the meeting has moved on to other content.\n\n"
+                    "ALWAYS respond with JSON in exactly this format:\n"
                     '{"intro_ongoing": true/false, '
-                    '"speaker_count": <antal unika deltagare hittills>, '
-                    '"names": ["namn1", "namn2"], '
-                    '"reasoning": "kort forklaring"}'
+                    '"speaker_count": <number of unique participants identified so far>, '
+                    '"names": ["name1", "name2"], '
+                    '"reasoning": "short explanation"}'
                 ),
             }
         ]
@@ -154,15 +154,15 @@ class LLMService:
             messages.append({
                 "role": "user",
                 "content": (
-                    f"Chunk {i + 1} (tid {chunk['start_time']:.0f}s - {chunk_end:.0f}s):\n"
+                    f"Chunk {i + 1} (time {chunk['start_time']:.0f}s - {chunk_end:.0f}s):\n"
                     f"{chunk_text}\n\n"
-                    f"Pagar presentationsfasen fortfarande? "
-                    f"Hur manga unika deltagare har du identifierat hittills?"
+                    f"Is the introduction phase still ongoing? "
+                    f"How many unique participants have you identified so far?"
                 ),
             })
 
             if on_progress:
-                on_progress(f"Analyserar chunk {i + 1}/{len(chunks)} ({chunk_end:.0f}s)...")
+                on_progress(f"Analyzing chunk {i + 1}/{len(chunks)} ({chunk_end:.0f}s)...")
 
             try:
                 response_text = self._call(messages, max_tokens=500)
@@ -232,20 +232,20 @@ class LLMService:
         Send intro transcript (with speaker labels) to LLM to map names.
         Returns list of {speaker_label, name}.
         """
-        prompt = f"""Analysera denna transkribering fran borjan av ett mote.
-Identifiera vilka personer som presenterar sig och koppla deras namn till deras talaretiketter.
+        prompt = f"""Analyze this transcription from the beginning of a meeting.
+Identify which people are introducing themselves and link their names to their speaker labels.
 
-Transkribering:
+Transcription:
 {intro_text}
 
-Svara ENBART med en JSON-array i detta format:
+Respond ONLY with a JSON array in this format:
 [
-  {{"speaker_label": "SPEAKER_00", "name": "Fornamn Efternamn"}},
-  {{"speaker_label": "SPEAKER_01", "name": "Fornamn Efternamn"}}
+  {{"speaker_label": "SPEAKER_00", "name": "Firstname Lastname"}},
+  {{"speaker_label": "SPEAKER_01", "name": "Firstname Lastname"}}
 ]
 
-Om du inte kan identifiera nagra namn, svara med en tom array: []
-Svara ENBART med JSON, ingen annan text."""
+If you cannot identify any names, respond with an empty array: []
+Respond ONLY with JSON, no other text."""
 
         try:
             content = self._call([{"role": "user", "content": prompt}])

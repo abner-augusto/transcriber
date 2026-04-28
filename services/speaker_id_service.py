@@ -24,8 +24,13 @@ INTRO_PATTERNS = [
     r"jag heter\s+(\w+)",
     r"mitt namn [aä]r\s+(\w+)",
     r"jag [aä]r\s+(\w+)",
+    r"my name is\s+(\w+)",
+    r"i am\s+(\w+)",
+    r"this is\s+(\w+)",
     r"hej.{0,20}jag heter",
     r"hej.{0,20}mitt namn",
+    r"hi.{0,20}my name is",
+    r"hello.{0,20}i am",
 ]
 
 INTRO_DURATION = 120.0  # First 2 minutes
@@ -89,12 +94,12 @@ class SpeakerIdService:
 
     def identify_speakers_model3(self, speaker_labels: list[str]) -> dict[str, dict]:
         """
-        Model 3 (fallback): Label speakers as Deltagare 1, 2, etc.
+        Model 3 (fallback): Label speakers as Participant 1, 2, etc.
         """
         result = {}
         for i, label in enumerate(sorted(set(speaker_labels))):
             result[label] = {
-                "name": f"Deltagare {i + 1}",
+                "name": f"Participant {i + 1}",
                 "confidence": None,
                 "identified_by": None,
             }

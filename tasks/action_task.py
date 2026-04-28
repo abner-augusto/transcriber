@@ -61,7 +61,7 @@ def run_action_task(self, action_result_id: str):
 
         transcript_text = "\n".join(lines)
         if len(transcript_text) > MAX_TRANSCRIPT_CHARS:
-            transcript_text = transcript_text[:MAX_TRANSCRIPT_CHARS] + "\n\n[...transkribering trunkerad...]"
+            transcript_text = transcript_text[:MAX_TRANSCRIPT_CHARS] + "\n\n[...transcription truncated...]"
 
         # Call LLM (with model preset for "actions" task)
         preset = get_model_config().get_model_for_task("actions")
@@ -73,7 +73,7 @@ def run_action_task(self, action_result_id: str):
             },
             {
                 "role": "user",
-                "content": f"Motestitel: {meeting.title}\n\nTranskribering:\n{transcript_text}",
+                "content": f"Meeting title: {meeting.title}\n\nTranscription:\n{transcript_text}",
             },
         ]
 

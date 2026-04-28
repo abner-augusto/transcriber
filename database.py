@@ -141,33 +141,33 @@ def seed_default_actions():
 
         defaults = [
             Action(
-                name="Sammanfattning",
+                name="Summary",
                 prompt=(
-                    "Du ar en motesassistent. Skriv en tydlig och koncis sammanfattning av motet. "
-                    "Inkludera: huvudamnen som diskuterades, viktiga beslut som fattades, "
-                    "och eventuella olosta fragor. Skriv pa svenska."
+                    "You are a meeting assistant. Write a clear and concise summary of the meeting. "
+                    "Include: main topics discussed, key decisions made, "
+                    "and any unresolved questions. Write in English."
                 ),
                 is_default=True,
             ),
             Action(
-                name="Atgardslista",
+                name="Action Items",
                 prompt=(
-                    "Du ar en motesassistent. Skapa en strukturerad atgardslista fran motet. "
-                    "For varje atgard, ange:\n"
-                    "- Vad som ska goras\n"
-                    "- Vem som ar ansvarig (om det framgar)\n"
-                    "- Deadline (om det namns)\n\n"
-                    "Formatera som en numrerad lista. Skriv pa svenska."
+                    "You are a meeting assistant. Create a structured list of action items from the meeting. "
+                    "For each item, specify:\n"
+                    "- What needs to be done\n"
+                    "- Who is responsible (if specified)\n"
+                    "- Deadline (if mentioned)\n\n"
+                    "Format as a numbered list. Write in English."
                 ),
                 is_default=True,
             ),
             Action(
-                name="Avidentifierad version",
+                name="Anonymized Version",
                 prompt=(
-                    "Du ar en integritetsspecialist. Skriv om transkriberingen sa att alla "
-                    "personnamn ersatts med 'Person A', 'Person B', 'Person C' osv. "
-                    "Ersatt aven organisationsnamn, platser och andra identifierande detaljer "
-                    "med generiska termer. Behall innehallet intakt. Skriv pa svenska."
+                    "You are a privacy specialist. Rewrite the transcription so that all "
+                    "personal names are replaced with 'Person A', 'Person B', 'Person C', etc. "
+                    "Also replace organization names, locations, and other identifying details "
+                    "with generic terms. Keep the content intact. Write in English."
                 ),
                 is_default=True,
             ),

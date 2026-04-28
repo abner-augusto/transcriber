@@ -11,7 +11,7 @@ from models.action import Action, ActionResult
 
 router = APIRouter(prefix="/api", tags=["export"])
 
-UNKNOWN_SPEAKER = "Okand"
+UNKNOWN_SPEAKER = "Unknown"
 
 
 def _safe_filename(name: str) -> str:

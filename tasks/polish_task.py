@@ -141,23 +141,21 @@ def polish_pass_task(self, meeting_id: str, job_id: str, pass_number: int):
         speaker_names = {}
         if speaker_blocks:
             prompt = (
-                "Du analyserar en transkribering fran ett mote med "
-                f"{len(speaker_blocks)} deltagare. "
-                "Varje talare har en etikett (Speaker 1, Speaker 2, osv). "
-                "Identifiera VARJE talares namn baserat pa:\n"
-                "- Presentationer: 'jag heter...', 'jag ar...', 'mitt namn ar...'\n"
-                "- Nar andra tilltalar dem vid namn\n"
-                "- Ledtradar i vad de sager om sig sjalva\n\n"
+                f"You are analyzing a transcription from a meeting with {len(speaker_blocks)} participants. "
+                "Each speaker has a label (Speaker 1, Speaker 2, etc.). "
+                "Identify EACH speaker's name based on:\n"
+                "- Introductions: 'my name is...', 'I am...', 'this is...', 'jag heter...', 'mitt namn är...'\n"
+                "- When others address them by name\n"
+                "- Clues in what they say about themselves\n\n"
                 + "\n\n".join(speaker_blocks)
-                + "\n\nVIKTIGT:\n"
-                "- Varje talare MASTE fa ett UNIKT namn\n"
-                "- Om du inte kan identifiera ett namn, anvand 'Deltagare N' "
-                "(t.ex. 'Deltagare 1', 'Deltagare 2')\n"
-                "- Anvand ALDRIG 'Speaker N' som namn\n"
-                "- Ge ALLA talare ett namn, inte bara nagra\n\n"
-                "Svara ENBART med JSON:\n"
-                '{"speakers": [{"label": "Speaker 1", "name": "Fornamn"}, '
-                '{"label": "Speaker 2", "name": "Fornamn"}]}'
+                + "\n\nIMPORTANT:\n"
+                "- Each speaker MUST be given a UNIQUE name\n"
+                "- If you cannot identify a name, use 'Participant N' (e.g., 'Participant 1', 'Participant 2')\n"
+                "- NEVER use 'Speaker N' as the display name\n"
+                "- Give ALL speakers a name, not just some\n\n"
+                "Respond ONLY with JSON:\n"
+                '{"speakers": [{"label": "Speaker 1", "name": "Name"}, '
+                '{"label": "Speaker 2", "name": "Name"}]}'
             )
 
             try:

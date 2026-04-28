@@ -42,7 +42,7 @@ def rediarize_task(self, meeting_id: str, job_id: str):
         speaker_id_service = SpeakerIdService(llm_preset=analysis_preset)
 
         # Step 1: Fresh diarization
-        update_progress(db, job, meeting, 10, "Kör ny talaridentifiering...")
+        update_progress(db, job, meeting, 10, "Running new speaker identification...")
         diarization_segments = diarization_service.diarize(
             audio_path,
             min_speakers=meeting.min_speakers,
@@ -50,14 +50,14 @@ def rediarize_task(self, meeting_id: str, job_id: str):
         )
         meeting.raw_diarization = diarization_segments
         db.commit()
-        update_progress(db, job, meeting, 50, "Diarization klar")
+        update_progress(db, job, meeting, 50, "Diarization complete")
 
         # Step 2: Re-align
-        update_progress(db, job, meeting, 55, "Synkroniserar talare med text...")
+        update_progress(db, job, meeting, 55, "Synchronizing speakers with text...")
         aligned = align_segments(whisper_segments, diarization_segments)
 
         # Step 3: Speaker identification
-        update_progress(db, job, meeting, 65, "Identifierar talare...")
+        update_progress(db, job, meeting, 65, "Identifying speakers...")
         speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
         speaker_info = {}
 
@@ -72,20 +72,20 @@ def rediarize_task(self, meeting_id: str, job_id: str):
             offset = len(speaker_info)
             for i, (label, info) in enumerate(fallback.items()):
                 if offset > 0:
-                    info["name"] = f"Deltagare {offset + i + 1}"
+                    info["name"] = f"Participant {offset + i + 1}"
                 speaker_info[label] = info
 
         # Step 4: Collect edits, recreate speakers + segments
-        update_progress(db, job, meeting, 85, "Sparar resultat...")
+        update_progress(db, job, meeting, 85, "Saving results...")
         _rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service)
 
         meeting.status = MeetingStatus.COMPLETED
         job.status = JobStatus.COMPLETED
         job.progress = 100
-        job.current_step = "Klar!"
+        job.current_step = "Done!"
         job.completed_at = datetime.utcnow()
         db.commit()
-        update_progress(db, job, meeting, 100, "Klar!")
+        update_progress(db, job, meeting, 100, "Done!")
         return {"status": "completed", "meeting_id": meeting_id}
 
     except Exception as e:
@@ -128,11 +128,11 @@ def reidentify_task(self, meeting_id: str, job_id: str):
         speaker_id_service = SpeakerIdService(llm_preset=analysis_preset)
 
         # Step 1: Re-align (uses existing data)
-        update_progress(db, job, meeting, 20, "Synkroniserar talare med text...")
+        update_progress(db, job, meeting, 20, "Synchronizing speakers with text...")
         aligned = align_segments(whisper_segments, diarization_segments)
 
         # Step 2: Re-identify speakers via LLM
-        update_progress(db, job, meeting, 40, "Identifierar talare med AI...")
+        update_progress(db, job, meeting, 40, "Identifying speakers with AI...")
         speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
         speaker_info = {}
 
@@ -147,20 +147,20 @@ def reidentify_task(self, meeting_id: str, job_id: str):
             offset = len(speaker_info)
             for i, (label, info) in enumerate(fallback.items()):
                 if offset > 0:
-                    info["name"] = f"Deltagare {offset + i + 1}"
+                    info["name"] = f"Participant {offset + i + 1}"
                 speaker_info[label] = info
 
         # Step 3: Rebuild
-        update_progress(db, job, meeting, 80, "Sparar resultat...")
+        update_progress(db, job, meeting, 80, "Saving results...")
         _rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service)
 
         meeting.status = MeetingStatus.COMPLETED
         job.status = JobStatus.COMPLETED
         job.progress = 100
-        job.current_step = "Klar!"
+        job.current_step = "Done!"
         job.completed_at = datetime.utcnow()
         db.commit()
-        update_progress(db, job, meeting, 100, "Klar!")
+        update_progress(db, job, meeting, 100, "Done!")
         return {"status": "completed", "meeting_id": meeting_id}
 
     except Exception as e:
@@ -208,7 +208,7 @@ def _rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_i
         unk = Speaker(
             meeting_id=meeting.id,
             label="UNKNOWN",
-            display_name="Okand",
+            display_name="Unknown",
             color="#9ca3af",
         )
         db.add(unk)

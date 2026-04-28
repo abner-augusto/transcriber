@@ -13,28 +13,28 @@ log = logging.getLogger(__name__)
 
 MAX_TRANSCRIPT_CHARS = 15000
 
-EXTRACTION_PROMPT = """Du ar en motesanalytiker. Analysera transkriberingen och extrahera:
+EXTRACTION_PROMPT = """You are a meeting analyst. Analyze the transcription and extract:
 
-1. **Beslut** - Konkreta beslut som fattades under motet
-2. **Atgardspunkter** - Uppgifter som nagon ska utfora, med ansvarig person om det framgar
-3. **Oppna fragor** - Fragor som diskuterades men inte fick nagot svar eller beslut
+1. **Decisions** - Concrete decisions made during the meeting
+2. **Action Items** - Tasks to be performed, with the responsible person if specified
+3. **Open Questions** - Questions discussed but not answered or resolved
 
-Svara ENBART med JSON i detta format:
+Respond ONLY with JSON in this format:
 {
   "decisions": [
-    {"content": "Beskrivning av beslutet", "timestamp": 123.4}
+    {"content": "Description of the decision", "timestamp": 123.4}
   ],
   "action_items": [
-    {"content": "Vad som ska goras", "assignee": "Personnamn eller null", "timestamp": 234.5}
+    {"content": "What needs to be done", "assignee": "Person name or null", "timestamp": 234.5}
   ],
   "open_questions": [
-    {"content": "Fragan som ar olost", "timestamp": 345.6}
+    {"content": "Question that is unresolved", "timestamp": 345.6}
   ]
 }
 
-Tidsstamplar (timestamp) ska vara i sekunder fran start, matcha den narmaste tidsstampeln i transkriberingen.
-Om du inte hittar nagra av en kategori, returnera en tom lista.
-Skriv pa svenska. Svara ENBART med JSON."""
+Timestamps should be in seconds from start, matching the nearest timestamp in the transcription.
+If you find none for a category, return an empty list.
+Write in English. Respond ONLY with JSON."""
 
 
 @celery_app.task(bind=True, time_limit=180)
@@ -73,14 +73,14 @@ def extract_insights_task(self, meeting_id: str, job_id: str):
 
         transcript_text = "\n".join(lines)
         if len(transcript_text) > MAX_TRANSCRIPT_CHARS:
-            transcript_text = transcript_text[:MAX_TRANSCRIPT_CHARS] + "\n\n[...transkribering trunkerad...]"
+            transcript_text = transcript_text[:MAX_TRANSCRIPT_CHARS] + "\n\n[...transcription truncated...]"
 
         # Call LLM
         preset = get_model_config().get_model_for_task("actions")
         llm = LLMService(preset=preset)
         messages = [
             {"role": "system", "content": EXTRACTION_PROMPT},
-            {"role": "user", "content": f"Motestitel: {meeting.title}\n\nTranskribering:\n{transcript_text}"},
+            {"role": "user", "content": f"Meeting title: {meeting.title}\n\nTranscription:\n{transcript_text}"},
         ]
 
         response = llm._call(messages, max_tokens=4000)
@@ -123,7 +123,7 @@ def extract_insights_task(self, meeting_id: str, job_id: str):
 
         job.status = JobStatus.COMPLETED
         job.progress = 100
-        job.current_step = "Klar!"
+        job.current_step = "Done!"
         job.completed_at = datetime.utcnow()
         db.commit()
 

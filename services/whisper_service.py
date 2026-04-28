@@ -39,7 +39,7 @@ class WhisperService:
         if result.returncode != 0:
             raise RuntimeError(f"whisper-cli failed: {result.stderr}")
 
-        with open(output_json, "r") as f:
+        with open(output_json, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         segments = []
@@ -96,7 +96,7 @@ class WhisperService:
         if result.returncode != 0:
             raise RuntimeError(f"whisper-cli chunk failed: {result.stderr}")
 
-        with open(output_json, "r") as f:
+        with open(output_json, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         segments = []

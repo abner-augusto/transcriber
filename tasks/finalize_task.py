@@ -53,24 +53,24 @@ def finalize_live_task(self, meeting_id: str, job_id: str):
         speaker_id_service = SpeakerIdService(llm_preset=analysis_preset)
 
         # Get duration
-        update_progress(db, job, meeting, 5, "Beräknar ljudlängd...")
+        update_progress(db, job, meeting, 5, "Calculating audio duration...")
         duration = audio_service.get_duration(audio_path)
         meeting.duration = duration
         db.commit()
 
         # Step 1: Re-transcribe with medium (high-quality) model
-        update_progress(db, job, meeting, 10, "Transkriberar med högkvalitetsmodell...")
+        update_progress(db, job, meeting, 10, "Transcribing with high-quality model...")
         whisper_segments = whisper_service.transcribe(audio_path, vocabulary=meeting.vocabulary)
         meeting.raw_transcription = whisper_segments
         db.commit()
-        update_progress(db, job, meeting, 40, "Transkribering klar")
+        update_progress(db, job, meeting, 40, "Transcription complete")
 
         # Step 2: LLM intro analysis
         min_speakers = meeting.min_speakers
         max_speakers = meeting.max_speakers
 
         if not min_speakers:
-            update_progress(db, job, meeting, 42, "Analyserar presentationsfas med AI...")
+            update_progress(db, job, meeting, 42, "Analyzing introduction phase with AI...")
             from services.llm_service import LLMService
             llm = LLMService(preset=analysis_preset)
 
@@ -81,7 +81,7 @@ def finalize_live_task(self, meeting_id: str, job_id: str):
                 meeting.intro_end_time = intro_result["intro_end_time"]
 
         # Step 3: Full diarization
-        update_progress(db, job, meeting, 50, "Fullständig talaridentifiering...")
+        update_progress(db, job, meeting, 50, "Full speaker identification...")
         diarization_segments = diarization_service.diarize(
             audio_path,
             min_speakers=min_speakers,
@@ -89,14 +89,14 @@ def finalize_live_task(self, meeting_id: str, job_id: str):
         )
         meeting.raw_diarization = diarization_segments
         db.commit()
-        update_progress(db, job, meeting, 70, "Diarization klar")
+        update_progress(db, job, meeting, 70, "Diarization complete")
 
         # Step 4: Alignment
-        update_progress(db, job, meeting, 72, "Synkroniserar talare med text...")
+        update_progress(db, job, meeting, 72, "Synchronizing speakers with text...")
         aligned = align_segments(whisper_segments, diarization_segments)
 
         # Step 5: Speaker identification
-        update_progress(db, job, meeting, 80, "Identifierar talare...")
+        update_progress(db, job, meeting, 80, "Identifying speakers...")
         speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
         speaker_info = {}
 
@@ -111,10 +111,10 @@ def finalize_live_task(self, meeting_id: str, job_id: str):
             offset = len(speaker_info)
             for i, (label, info) in enumerate(fallback.items()):
                 if offset > 0:
-                    info["name"] = f"Deltagare {offset + i + 1}"
+                    info["name"] = f"Participant {offset + i + 1}"
                 speaker_info[label] = info
 
-        update_progress(db, job, meeting, 90, "Sparar slutgiltigt resultat...")
+        update_progress(db, job, meeting, 90, "Saving final results...")
 
         # Step 6: Collect edited segments before cleanup
         existing_segments = (
@@ -153,7 +153,7 @@ def finalize_live_task(self, meeting_id: str, job_id: str):
             unk = Speaker(
                 meeting_id=meeting_id,
                 label="UNKNOWN",
-                display_name="Okand",
+                display_name="Unknown",
                 color="#9ca3af",
             )
             db.add(unk)
@@ -198,14 +198,14 @@ def finalize_live_task(self, meeting_id: str, job_id: str):
         meeting.recording_status = RecordingStatus.COMPLETE.value
         job.status = JobStatus.COMPLETED
         job.progress = 100
-        job.current_step = "Klar!"
+        job.current_step = "Done!"
         job.completed_at = datetime.utcnow()
         db.commit()
 
         publish_event(meeting_id, {
             "type": "finalize_complete",
             "progress": 100,
-            "step": "Klar!",
+            "step": "Done!",
         })
 
         return {"status": "completed", "meeting_id": meeting_id}

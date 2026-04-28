@@ -39,7 +39,7 @@ class ModelConfigManager:
             return
         for f in sorted(PRESETS_DIR.glob("*.json")):
             try:
-                data = json.loads(f.read_text())
+                data = json.loads(f.read_text(encoding="utf-8"))
                 preset_id = data.get("id", f.stem)
                 self._presets[preset_id] = data
             except Exception as e:
@@ -50,7 +50,7 @@ class ModelConfigManager:
         path = get_storage_path() / "settings.json"
         if path.exists():
             try:
-                self._settings = json.loads(path.read_text())
+                self._settings = json.loads(path.read_text(encoding="utf-8"))
             except Exception as e:
                 log.warning(f"Failed to load settings: {e}")
                 self._settings = {}
@@ -60,7 +60,7 @@ class ModelConfigManager:
     def _save_settings(self):
         """Persist task->preset assignments."""
         path = get_storage_path() / "settings.json"
-        path.write_text(json.dumps(self._settings, indent=2))
+        path.write_text(json.dumps(self._settings, indent=2), encoding="utf-8")
 
     def reload(self):
         """Reload presets and settings from disk."""
