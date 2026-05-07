@@ -26,6 +26,7 @@ export default function MeetingPage() {
     liveSegments, setLiveSegments,
     liveSpeakers, setLiveSpeakers,
     polishNotification, setPolishNotification,
+    llmEnabled,
   } = useStore();
   const [showExport, setShowExport] = useState(false);
   const [showEncrypt, setShowEncrypt] = useState(false);
