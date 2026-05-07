@@ -1,25 +1,21 @@
-import torchaudio
 import torch
+import numpy as np
+import soundfile as sf
 from config import settings
 from preferences import get_secret
 
-# torchaudio 2.10+ removed list_audio_backends; pyannote still calls it
-if not hasattr(torchaudio, "list_audio_backends"):
-    torchaudio.list_audio_backends = lambda: ["torchcodec"]
 
-# torchaudio 2.10+ removed AudioMetaData; pyannote still references it
-if not hasattr(torchaudio, "AudioMetaData"):
-    from dataclasses import dataclass
-
-    @dataclass
-    class _AudioMetaData:
-        sample_rate: int = 0
-        num_frames: int = 0
-        num_channels: int = 0
-        bits_per_sample: int = 0
-        encoding: str = ""
-
-    torchaudio.AudioMetaData = _AudioMetaData
+def _load_audio_tensor(path: str, target_sr: int = 16000):
+    """Load audio file to a (channels, samples) float32 tensor via soundfile,
+    resampling to target_sr with scipy if needed."""
+    data, sr = sf.read(path, dtype="float32", always_2d=True)
+    # soundfile returns (samples, channels) — transpose to (channels, samples)
+    waveform = torch.from_numpy(data.T)
+    if sr != target_sr:
+        import torchaudio.functional as F
+        waveform = F.resample(waveform, sr, target_sr)
+        sr = target_sr
+    return waveform, sr
 
 
 class DiarizationService:
@@ -56,13 +52,16 @@ class DiarizationService:
         """
         pipeline = self.get_pipeline()
 
+        waveform, sr = _load_audio_tensor(audio_path)
+        audio_input = {"waveform": waveform, "sample_rate": sr}
+
         kwargs = {}
         if min_speakers is not None:
             kwargs["min_speakers"] = min_speakers
         if max_speakers is not None:
             kwargs["max_speakers"] = max_speakers
 
-        result = pipeline(audio_path, **kwargs)
+        result = pipeline(audio_input, **kwargs)
 
         # pyannote v4 returns DiarizeOutput with .serialize()
         if hasattr(result, "serialize"):

@@ -11,6 +11,7 @@ pyannote.audio
 speechbrain
 torch
 torchaudio
+soundfile
 requests
 numpy
 scipy
