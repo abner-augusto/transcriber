@@ -184,6 +184,7 @@ def finalize_live_task(self, meeting_id: str, job_id: str):
                 original_text=seg["text"],
                 order=i,
                 is_edited=is_edited,
+                confidence=seg.get("confidence"),
             )
             db.add(segment)
 

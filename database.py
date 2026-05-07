@@ -69,6 +69,7 @@ def init_db():
         # Full-text search index on segment text
         "CREATE INDEX IF NOT EXISTS ix_segments_text_search ON segments USING gin (to_tsvector('simple', text))",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS protocol_text TEXT",
+        "ALTER TABLE segments ADD COLUMN IF NOT EXISTS confidence FLOAT",
     ]
     with engine.connect() as conn:
         for sql in migrations:

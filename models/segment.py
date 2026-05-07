@@ -21,6 +21,7 @@ class Segment(Base):
     original_text: Mapped[str] = mapped_column(Text, nullable=True)
     order: Mapped[int] = mapped_column(Integer, nullable=False)
     is_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=True)
 
     meeting = relationship("Meeting", back_populates="segments")
     speaker = relationship("Speaker", back_populates="segments")
@@ -39,4 +40,5 @@ class Segment(Base):
             "original_text": self.original_text,
             "order": self.order,
             "is_edited": self.is_edited,
+            "confidence": self.confidence,
         }

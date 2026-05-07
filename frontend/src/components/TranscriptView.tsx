@@ -204,9 +204,24 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
                           isActive ? "text-white font-medium" : "text-slate-300 hover:text-white"
                         } ${seg.is_edited ? "italic text-slate-400" : ""}`}
                         onClick={() => startEdit(seg)}
-                        title="Click to edit"
+                        title={
+                          seg.confidence != null
+                            ? `Confidence: ${Math.round(seg.confidence * 100)}%${seg.confidence < 0.6 ? " — low confidence" : ""}`
+                            : "Click to edit"
+                        }
                       >
-                        {seg.text}
+                        {seg.confidence != null && seg.confidence < 0.6 ? (
+                          <span className="underline decoration-amber-500/70 decoration-wavy underline-offset-2">
+                            {seg.text}
+                          </span>
+                        ) : (
+                          seg.text
+                        )}
+                        {seg.confidence != null && seg.confidence < 0.6 && (
+                          <span className="ml-1.5 text-[10px] text-amber-500/80 font-mono align-middle">
+                            {Math.round(seg.confidence * 100)}%
+                          </span>
+                        )}
                       </p>
                     )}
                   </div>

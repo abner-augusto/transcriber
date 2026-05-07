@@ -51,10 +51,14 @@ class WhisperService:
             # Timestamps from whisper are in format "HH:MM:SS.mmm" -> convert
             start = self._parse_timestamp(item["timestamps"]["from"])
             end = self._parse_timestamp(item["timestamps"]["to"])
+            tokens = item.get("tokens", [])
+            probs = [t["p"] for t in tokens if "p" in t and t.get("p", 0) > 0]
+            confidence = sum(probs) / len(probs) if probs else None
             segments.append({
                 "start": start,
                 "end": end,
                 "text": text,
+                "confidence": confidence,
             })
 
         return segments
@@ -108,10 +112,14 @@ class WhisperService:
                 continue
             start = self._parse_timestamp(item["timestamps"]["from"])
             end = self._parse_timestamp(item["timestamps"]["to"])
+            tokens = item.get("tokens", [])
+            probs = [t["p"] for t in tokens if "p" in t and t.get("p", 0) > 0]
+            confidence = sum(probs) / len(probs) if probs else None
             segments.append({
                 "start": start,
                 "end": end,
                 "text": text,
+                "confidence": confidence,
             })
 
         return segments

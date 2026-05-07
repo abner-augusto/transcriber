@@ -230,6 +230,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                 text=seg["text"],
                 original_text=seg["text"],
                 order=i,
+                confidence=seg.get("confidence"),
             )
             db.add(segment)
 

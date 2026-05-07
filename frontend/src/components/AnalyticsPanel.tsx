@@ -67,8 +67,8 @@ export default function AnalyticsPanel({ meetingId }: Props) {
 
       {/* Speaking time distribution (horizontal bars) */}
       <div className="space-y-2">
-        {speakers.map((spk) => (
-          <div key={spk.name}>
+        {speakers.map((spk, i) => (
+          <div key={i}>
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: spk.color }} />
@@ -97,8 +97,8 @@ export default function AnalyticsPanel({ meetingId }: Props) {
         <div>
           <div className="text-xs text-slate-500 mb-2">Timeline</div>
           <div className="bg-slate-800/50 rounded-lg p-2">
-            {speakers.map((spk) => (
-              <div key={spk.name} className="flex items-center gap-2 mb-1 last:mb-0">
+            {speakers.map((spk, i) => (
+              <div key={i} className="flex items-center gap-2 mb-1 last:mb-0">
                 <span className="text-[10px] text-slate-500 w-16 truncate flex-shrink-0">{spk.name}</span>
                 <div className="flex-1 h-3 bg-slate-900/50 rounded relative">
                   {spk.timeline.map((seg, i) => (
@@ -130,8 +130,8 @@ export default function AnalyticsPanel({ meetingId }: Props) {
       <div>
         <div className="text-xs text-slate-500 mb-2">Segments</div>
         <div className="space-y-1">
-          {speakers.map((spk) => (
-            <div key={spk.name} className="flex items-center justify-between text-xs">
+          {speakers.map((spk, i) => (
+            <div key={i} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: spk.color }} />
                 <span className="text-slate-400">{spk.name}</span>

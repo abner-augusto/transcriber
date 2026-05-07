@@ -44,6 +44,7 @@ export interface Segment {
   original_text: string | null;
   order: number;
   is_edited: boolean;
+  confidence: number | null;
 }
 
 export interface Job {

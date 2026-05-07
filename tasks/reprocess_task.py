@@ -236,6 +236,7 @@ def _rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_i
             original_text=seg["text"],
             order=i,
             is_edited=is_edited,
+            confidence=seg.get("confidence"),
         )
         db.add(segment)
 
