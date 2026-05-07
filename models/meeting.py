@@ -49,6 +49,7 @@ class Meeting(Base):
     recording_status: Mapped[str] = mapped_column(String, nullable=True)
     polish_history: Mapped[dict] = mapped_column(JSON, nullable=True)
     vocabulary: Mapped[str] = mapped_column(Text, nullable=True)  # Domain terms for Whisper prompt
+    protocol_text: Mapped[str] = mapped_column(Text, nullable=True)
     is_encrypted: Mapped[bool] = mapped_column(Boolean, default=False)
     encryption_salt: Mapped[str] = mapped_column(Text, nullable=True)
     encryption_verify: Mapped[str] = mapped_column(Text, nullable=True)

@@ -91,7 +91,32 @@ def generate_protocol(meeting_id: str, db: Session = Depends(get_db)):
     ]
 
     protocol_text = llm._call(messages, max_tokens=4000)
+
+    meeting.protocol_text = protocol_text
+    db.commit()
+
     return {"protocol_text": protocol_text}
+
+
+@router.get("/meetings/{meeting_id}/protocol")
+def get_protocol(meeting_id: str, db: Session = Depends(get_db)):
+    """Return the saved protocol text for a meeting."""
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    return {"protocol_text": meeting.protocol_text or ""}
+
+
+@router.put("/meetings/{meeting_id}/protocol")
+def save_protocol(meeting_id: str, body: dict, db: Session = Depends(get_db)):
+    """Save edited protocol text for a meeting."""
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    meeting.protocol_text = body.get("protocol_text", "")
+    db.commit()
+    return {"protocol_text": meeting.protocol_text}
+
 
 
 def _add_inline_runs(paragraph, text, base_color=None):

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Markdown from "react-markdown";
-import { generateProtocol, exportProtocolDocx } from "../api";
+import { generateProtocol, getProtocol, saveProtocol, exportProtocolDocx } from "../api";
 
 interface Props {
   meetingId: string;
@@ -11,20 +11,46 @@ interface Props {
 export default function ProtocolDialog({ meetingId, meetingTitle, onClose }: Props) {
   const [protocolText, setProtocolText] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getProtocol(meetingId)
+      .then((r) => { if (r.protocol_text) setProtocolText(r.protocol_text); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [meetingId]);
 
   async function handleGenerate() {
     setGenerating(true);
     setError("");
+    setSaved(false);
     try {
       const result = await generateProtocol(meetingId);
       setProtocolText(result.protocol_text);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Could not generate protocol");
     }
     setGenerating(false);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await saveProtocol(meetingId, protocolText);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError("Could not save protocol");
+    }
+    setSaving(false);
   }
 
   async function handleExportDocx() {
@@ -37,7 +63,7 @@ export default function ProtocolDialog({ meetingId, meetingTitle, onClose }: Pro
       a.download = `Protocol - ${meetingTitle}.docx`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
+    } catch {
       setError("Could not export DOCX");
     }
     setExporting(false);
@@ -58,7 +84,13 @@ export default function ProtocolDialog({ meetingId, meetingTitle, onClose }: Pro
           </button>
         </div>
 
-        {!protocolText && !generating && (
+        {loading && (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+          </div>
+        )}
+
+        {!loading && !protocolText && !generating && (
           <div className="text-center py-12">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center">
               <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -86,9 +118,8 @@ export default function ProtocolDialog({ meetingId, meetingTitle, onClose }: Pro
           </div>
         )}
 
-        {protocolText && (
+        {!loading && protocolText && !generating && (
           <>
-            {/* Preview / Edit toggle */}
             <div className="flex bg-slate-800 rounded-lg p-0.5 mb-3 self-start">
               <button
                 onClick={() => setEditing(false)}
@@ -121,6 +152,7 @@ export default function ProtocolDialog({ meetingId, meetingTitle, onClose }: Pro
                 </div>
               )}
             </div>
+
             <div className="flex items-center justify-between">
               <button
                 onClick={handleGenerate}
@@ -129,14 +161,26 @@ export default function ProtocolDialog({ meetingId, meetingTitle, onClose }: Pro
               >
                 Regenerate
               </button>
-              <div className="flex gap-3">
+              <div className="flex items-center gap-3">
+                {saved && (
+                  <span className="text-xs text-emerald-400">Saved</span>
+                )}
                 <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(protocolText);
-                  }}
+                  onClick={() => navigator.clipboard.writeText(protocolText)}
                   className="px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition text-sm"
                 >
                   Copy
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition text-sm flex items-center gap-1.5"
+                >
+                  {saving ? (
+                    <div className="w-3.5 h-3.5 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
+                  ) : (
+                    "Save"
+                  )}
                 </button>
                 <button
                   onClick={handleExportDocx}

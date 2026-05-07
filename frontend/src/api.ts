@@ -331,6 +331,15 @@ export async function generateProtocol(meetingId: string): Promise<{ protocol_te
   return data;
 }
 
+export async function getProtocol(meetingId: string): Promise<{ protocol_text: string }> {
+  const { data } = await api.get(`/meetings/${meetingId}/protocol`);
+  return data;
+}
+
+export async function saveProtocol(meetingId: string, protocolText: string): Promise<void> {
+  await api.put(`/meetings/${meetingId}/protocol`, { protocol_text: protocolText });
+}
+
 export async function exportProtocolDocx(meetingId: string, protocolText: string): Promise<Blob> {
   const { data } = await api.post(
     `/meetings/${meetingId}/export-protocol`,
