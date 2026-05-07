@@ -42,7 +42,7 @@ class EmbeddingService:
             save_dir = cls._ensure_model_files()
             from speechbrain.inference.speaker import EncoderClassifier
 
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
             cls._model = EncoderClassifier.from_hparams(
                 source=str(save_dir),
                 savedir=str(save_dir),

@@ -58,6 +58,7 @@ class SpeakerIdService:
         aligned_segments: list[dict],
         audio_path: str,
         diarization_segments: list[dict],
+        known_names: list[str] | None = None,
     ) -> dict[str, dict]:
         """
         Model 2: Use LLM to identify speakers from intro.
@@ -75,7 +76,7 @@ class SpeakerIdService:
             intro_text += f"[{label}]: {seg['text']}\n"
 
         # Ask LLM to identify speakers
-        mappings = self.llm_service.identify_speakers_from_intro(intro_text)
+        mappings = self.llm_service.identify_speakers_from_intro(intro_text, known_names=known_names)
         if not mappings:
             return {}
 

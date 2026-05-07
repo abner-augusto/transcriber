@@ -66,6 +66,7 @@ def align_segments(whisper_segments: list[dict], diarization_segments: list[dict
             "end": ws_end,
             "text": ws["text"],
             "speaker": best_speaker or "UNKNOWN",
+            "confidence": ws.get("confidence"),
         })
 
     return aligned

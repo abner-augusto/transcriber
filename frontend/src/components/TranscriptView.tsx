@@ -178,6 +178,11 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
                         </svg>
                       )}
                       {formatTime(seg.start_time)}
+                      {seg.confidence != null && (
+                        <span className={`text-[9px] font-mono ${seg.confidence < 0.6 ? "text-amber-500/80" : "text-slate-600"}`}>
+                          {Math.round(seg.confidence * 100)}%
+                        </span>
+                      )}
                     </button>
 
                     {editingId === seg.id ? (

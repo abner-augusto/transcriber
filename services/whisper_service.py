@@ -23,7 +23,7 @@ class WhisperService:
             "-m", self.model_path,
             "-f", audio_path,
             "-l", "pt",
-            "-oj",  # output JSON
+            "-ojf",  # output full JSON (includes token probabilities)
             "-of", audio_path,  # output file prefix (creates audio.wav.json)
         ]
         if vocabulary:
@@ -52,7 +52,8 @@ class WhisperService:
             start = self._parse_timestamp(item["timestamps"]["from"])
             end = self._parse_timestamp(item["timestamps"]["to"])
             tokens = item.get("tokens", [])
-            probs = [t["p"] for t in tokens if "p" in t and t.get("p", 0) > 0]
+            # Exclude special tokens (id >= 50257) and zero-probability tokens
+            probs = [t["p"] for t in tokens if t.get("id", 0) < 50257 and t.get("p", 0) > 0]
             confidence = sum(probs) / len(probs) if probs else None
             segments.append({
                 "start": start,
@@ -78,7 +79,7 @@ class WhisperService:
             "-m", model,
             "-f", audio_path,
             "-l", "pt",
-            "-oj",
+            "-ojf",  # full JSON includes token probabilities
             "-of", audio_path,
             "--no-speech-thold", "0.5",  # Skip segments with high no-speech probability
         ]
@@ -113,7 +114,8 @@ class WhisperService:
             start = self._parse_timestamp(item["timestamps"]["from"])
             end = self._parse_timestamp(item["timestamps"]["to"])
             tokens = item.get("tokens", [])
-            probs = [t["p"] for t in tokens if "p" in t and t.get("p", 0) > 0]
+            # Exclude special tokens (id >= 50257) and zero-probability tokens
+            probs = [t["p"] for t in tokens if t.get("id", 0) < 50257 and t.get("p", 0) > 0]
             confidence = sum(probs) / len(probs) if probs else None
             segments.append({
                 "start": start,

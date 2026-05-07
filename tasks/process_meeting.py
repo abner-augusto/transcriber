@@ -67,6 +67,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         # Step 3: Iterative intro analysis - LLM reads chunks until intro is over
         min_speakers = meeting.min_speakers
         max_speakers = meeting.max_speakers
+        intro_result = {"speaker_count": 0, "names": [], "intro_end_time": 0}
 
         if not min_speakers:
             update_progress(db, job, meeting, 37, "Analyzing introduction phase with AI...")
@@ -112,10 +113,11 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
         speaker_info = {}
 
-        if speaker_id_service.has_intro(aligned):
-            update_progress(db, job, meeting, 80, "Analyzing introductions with AI...")
+        known_names = intro_result.get("names", [])
+        if known_names or meeting.intro_end_time:
+            update_progress(db, job, meeting, 80, "Mapping speaker names with AI...")
             speaker_info = speaker_id_service.identify_speakers_model2(
-                aligned, audio_path, diarization_segments
+                aligned, audio_path, diarization_segments, known_names=known_names
             )
 
         # Fill in any speakers not identified by Model 2

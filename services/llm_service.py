@@ -204,14 +204,18 @@ class LLMService:
 
         return chunks
 
-    def identify_speakers_from_intro(self, intro_text: str) -> list[dict]:
+    def identify_speakers_from_intro(self, intro_text: str, known_names: list[str] | None = None) -> list[dict]:
         """
         Send intro transcript (with speaker labels) to LLM to map names.
         Returns list of {speaker_label, name}.
         """
-        prompt = f"""Analyze this transcription from the beginning of a meeting.
-Identify which people are introducing themselves and link their names to their speaker labels.
+        names_hint = ""
+        if known_names:
+            names_hint = f"\nKnown participants mentioned in the intro: {', '.join(known_names)}. Use these names when assigning speakers.\n"
 
+        prompt = f"""Analyze this transcription from the beginning of a meeting.
+Identify which speaker label corresponds to which person based on who is speaking and what is said.
+{names_hint}
 Transcription:
 {intro_text}
 
