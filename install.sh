@@ -129,21 +129,30 @@ fi
 echo ""
 mkdir -p models
 
-if [ -f "models/kb_whisper_ggml_medium.bin" ]; then
+if [ -f "models/ggml-large-v3-turbo.bin" ]; then
+  ok "Large-v3-Turbo model already downloaded"
+else
+  info "Downloading Whisper Large-v3-Turbo model (~800 MB)..."
+  curl -L --progress-bar -o models/ggml-large-v3-turbo.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+  ok "Large-v3-Turbo model downloaded"
+fi
+
+if [ -f "models/ggml-medium.bin" ]; then
   ok "Medium model already downloaded"
 else
-  info "Downloading KB-LAB Swedish medium model (~1.5 GB)..."
-  curl -L --progress-bar -o models/kb_whisper_ggml_medium.bin \
-    https://huggingface.co/KBLab/kb-whisper-medium/resolve/main/ggml-model.bin
+  info "Downloading Whisper medium model (~1.5 GB)..."
+  curl -L --progress-bar -o models/ggml-medium.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin
   ok "Medium model downloaded"
 fi
 
-if [ -f "models/kb_whisper_ggml_small.bin" ]; then
+if [ -f "models/ggml-small.bin" ]; then
   ok "Small model already downloaded"
 else
-  info "Downloading KB-LAB Swedish small model (~500 MB)..."
-  curl -L --progress-bar -o models/kb_whisper_ggml_small.bin \
-    https://huggingface.co/KBLab/kb-whisper-small/resolve/main/ggml-model.bin
+  info "Downloading Whisper small model (~500 MB)..."
+  curl -L --progress-bar -o models/ggml-small.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
   ok "Small model downloaded"
 fi
 
@@ -214,8 +223,8 @@ OLLAMA_MODEL=qwen3:8b
 # OPENROUTER_MODEL=anthropic/claude-sonnet-4
 
 WHISPER_CLI_PATH=$WHISPER_DIR/build/bin/whisper-cli
-WHISPER_MODEL_PATH=./models/kb_whisper_ggml_medium.bin
-WHISPER_SMALL_MODEL_PATH=./models/kb_whisper_ggml_small.bin
+WHISPER_MODEL_PATH=./models/ggml-large-v3-turbo.bin
+WHISPER_SMALL_MODEL_PATH=./models/ggml-small.bin
 
 STORAGE_PATH=./storage
 
