@@ -1,25 +1,6 @@
 import numpy as np
 import torch
-import torchaudio
-
-# Patch for torchaudio 2.10+ where list_audio_backends was removed
-if not hasattr(torchaudio, "list_audio_backends"):
-    torchaudio.list_audio_backends = lambda: ["default"]
-
-# torchaudio 2.10+ removed AudioMetaData; pyannote/speechbrain still reference it
-if not hasattr(torchaudio, "AudioMetaData"):
-    from dataclasses import dataclass
-
-    @dataclass
-    class _AudioMetaData:
-        sample_rate: int = 0
-        num_frames: int = 0
-        num_channels: int = 0
-        bits_per_sample: int = 0
-        encoding: str = ""
-
-    torchaudio.AudioMetaData = _AudioMetaData
-
+import soundfile as sf
 from pathlib import Path
 import huggingface_hub
 
@@ -61,10 +42,11 @@ class EmbeddingService:
             save_dir = cls._ensure_model_files()
             from speechbrain.inference.speaker import EncoderClassifier
 
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             cls._model = EncoderClassifier.from_hparams(
                 source=str(save_dir),
                 savedir=str(save_dir),
-                run_opts={"device": "cpu"},
+                run_opts={"device": device},
             )
             print("[Embedding] ECAPA-TDNN model loaded")
         return cls._model
@@ -72,14 +54,15 @@ class EmbeddingService:
     def extract_embedding(self, audio_path: str) -> np.ndarray:
         """Extract speaker embedding from audio file."""
         model = self.get_model()
-        signal, sr = torchaudio.load(audio_path)
 
-        # Resample to 16kHz if needed
+        data, sr = sf.read(audio_path, dtype="float32", always_2d=True)
+        # soundfile returns (samples, channels) — transpose to (channels, samples)
+        signal = torch.from_numpy(data.T)
+
         if sr != 16000:
-            resampler = torchaudio.transforms.Resample(sr, 16000)
-            signal = resampler(signal)
+            import torchaudio.functional as F
+            signal = F.resample(signal, sr, 16000)
 
-        # Mono
         if signal.shape[0] > 1:
             signal = signal.mean(dim=0, keepdim=True)
 
