@@ -100,13 +100,13 @@ export interface ActionResult {
 export interface ModelPreset {
   id: string;
   name: string;
-  type: "llm" | "whisper";
-  provider: string;
-  model?: string;
-  model_path?: string;
+  type: "llm";
+  model: string;
+  base_url: string;
 }
 
 export interface ModelSettings {
   presets: ModelPreset[];
   assignments: Record<string, string>;
+  whisper: { model: string; small_model: string };
 }

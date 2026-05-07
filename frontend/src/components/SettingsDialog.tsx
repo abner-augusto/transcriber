@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import type { ModelPreset, ModelSettings } from "../types";
-import { getModelSettings, updateModelSettings, getPreferences, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile, listVocabulary, deleteVocabularyEntry } from "../api";
+import {
+  getModelSettings, updateModelSettings, createModelPreset, deleteModelPreset,
+  getPreferences, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile,
+  listVocabulary, deleteVocabularyEntry,
+} from "../api";
 import type { Preferences, SpeakerProfile, VocabularyEntry } from "../api";
 
 interface Props {
   onClose: () => void;
 }
 
-const TASK_LABELS: Record<string, { label: string; desc: string; type: "llm" | "whisper" }> = {
-  actions: { label: "Actions", desc: "Custom actions on transcripts", type: "llm" },
-  analysis: { label: "Analysis", desc: "Intro detection, speaker ID, finalization", type: "llm" },
-  live: { label: "Live polish", desc: "Speaker naming during live sessions", type: "llm" },
-  transcription: { label: "Transcription", desc: "Whisper model for batch processing", type: "whisper" },
-  live_transcription: { label: "Live transcription", desc: "Whisper model for live sessions", type: "whisper" },
+const LLM_TASKS: Record<string, { label: string; desc: string }> = {
+  analysis: { label: "Analysis", desc: "Intro detection & speaker identification" },
+  actions:  { label: "Actions",  desc: "Action item extraction" },
+  live:     { label: "Live polish", desc: "Speaker naming during live sessions" },
 };
 
 export default function SettingsDialog({ onClose }: Props) {
@@ -22,12 +24,17 @@ export default function SettingsDialog({ onClose }: Props) {
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<"models" | "preferences">("models");
 
-  // Preferences state
-  const [prefs, setPrefs] = useState<Preferences | null>(null);
+  // Add-preset form
+  const [showAddPreset, setShowAddPreset] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newModel, setNewModel] = useState("");
+  const [newBaseUrl, setNewBaseUrl] = useState("https://openrouter.ai/api/v1");
+  const [addError, setAddError] = useState("");
+
+  // Preferences
   const [defaultVocab, setDefaultVocab] = useState("");
   const [profilesEnabled, setProfilesEnabled] = useState(true);
   const [hfToken, setHfToken] = useState("");
-  const [llmKey, setLlmKey] = useState("");
   const [profiles, setProfiles] = useState<SpeakerProfile[]>([]);
   const [learnedVocab, setLearnedVocab] = useState<VocabularyEntry[]>([]);
 
@@ -44,15 +51,11 @@ export default function SettingsDialog({ onClose }: Props) {
 
   async function loadPreferences() {
     const p = await getPreferences();
-    setPrefs(p);
     setDefaultVocab(p.default_vocabulary || "");
     setProfilesEnabled(p.speaker_profiles_enabled);
     setHfToken(p.hf_auth_token || "");
-    setLlmKey(p.llm_api_key || "");
-    const profileList = await listSpeakerProfiles();
-    setProfiles(profileList);
-    const vocab = await listVocabulary();
-    setLearnedVocab(vocab);
+    setProfiles(await listSpeakerProfiles());
+    setLearnedVocab(await listVocabulary());
   }
 
   async function handleSave() {
@@ -66,7 +69,6 @@ export default function SettingsDialog({ onClose }: Props) {
         default_vocabulary: defaultVocab,
         speaker_profiles_enabled: profilesEnabled,
         hf_auth_token: hfToken,
-        llm_api_key: llmKey,
       });
     }
     setSaving(false);
@@ -74,16 +76,32 @@ export default function SettingsDialog({ onClose }: Props) {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  async function handleDeleteProfile(id: string) {
-    const profile = profiles.find((p) => p.id === id);
-    if (!confirm(`Delete voice profile "${profile?.name}"? This cannot be undone.`)) return;
-    await deleteSpeakerProfile(id);
-    setProfiles(profiles.filter((p) => p.id !== id));
+  async function handleAddPreset() {
+    if (!newName.trim() || !newModel.trim() || !newBaseUrl.trim()) {
+      setAddError("All fields are required.");
+      return;
+    }
+    setAddError("");
+    await createModelPreset({ name: newName.trim(), model: newModel.trim(), base_url: newBaseUrl.trim() });
+    setNewName(""); setNewModel(""); setNewBaseUrl("https://openrouter.ai/api/v1");
+    setShowAddPreset(false);
+    const data = await getModelSettings();
+    setSettings(data);
   }
 
-  function presetsForType(type: "llm" | "whisper"): ModelPreset[] {
-    if (!settings) return [];
-    return settings.presets.filter((p) => p.type === type);
+  async function handleDeletePreset(preset: ModelPreset) {
+    if (!confirm(`Delete preset "${preset.name}"? Any tasks using it will revert to default.`)) return;
+    await deleteModelPreset(preset.id);
+    const data = await getModelSettings();
+    setSettings(data);
+    setAssignments(data.assignments);
+  }
+
+  async function handleDeleteProfile(id: string) {
+    const profile = profiles.find((p) => p.id === id);
+    if (!confirm(`Delete voice profile "${profile?.name}"?`)) return;
+    await deleteSpeakerProfile(id);
+    setProfiles(profiles.filter((p) => p.id !== id));
   }
 
   if (!settings) {
@@ -103,135 +121,149 @@ export default function SettingsDialog({ onClose }: Props) {
       <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-xl font-bold text-white mb-4">Settings</h2>
 
-        {/* Tab toggle */}
         <div className="flex bg-slate-800 rounded-xl p-1 mb-5">
-          <button
-            onClick={() => setTab("models")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-              tab === "models" ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Models
-          </button>
-          <button
-            onClick={() => setTab("preferences")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-              tab === "preferences" ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Preferences
-          </button>
+          {(["models", "preferences"] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all capitalize ${tab === t ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white"}`}>
+              {t}
+            </button>
+          ))}
         </div>
 
         {tab === "models" ? (
-          <div className="space-y-4">
-            {Object.entries(TASK_LABELS).map(([task, info]) => {
-              const options = presetsForType(info.type);
-              return (
-                <div key={task}>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    {info.label}
-                  </label>
-                  <p className="text-xs text-slate-500 mb-1.5">{info.desc}</p>
-                  <select
-                    value={assignments[task] || ""}
-                    onChange={(e) => setAssignments({ ...assignments, [task]: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 appearance-none cursor-pointer"
-                  >
-                    {options.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.provider})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
           <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
-            {/* API Keys */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Hugging Face token
-              </label>
-              <p className="text-xs text-slate-500 mb-1.5">
-                Required for speaker diarization. Get one at{" "}
-                <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300">
-                  huggingface.co/settings/tokens
-                </a>
-              </p>
-              <input
-                type="password"
-                value={hfToken}
-                onChange={(e) => setHfToken(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                placeholder="hf_..."
-                autoComplete="off"
-              />
-            </div>
 
+            {/* LLM presets list */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                LLM API Key
-              </label>
-              <p className="text-xs text-slate-500 mb-1.5">
-                API key for your chosen LLM provider (OpenRouter, OpenAI, etc.).
-              </p>
-              <input
-                type="password"
-                value={llmKey}
-                onChange={(e) => setLlmKey(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                placeholder="sk-..."
-                autoComplete="off"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">LLM Presets</p>
+                <button onClick={() => setShowAddPreset(!showAddPreset)}
+                  className="text-xs text-violet-400 hover:text-violet-300 transition flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                {settings.presets.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+                    <div>
+                      <span className="text-sm text-slate-200">{p.name}</span>
+                      <span className="text-[10px] text-slate-500 ml-2">{p.model}</span>
+                    </div>
+                    <button onClick={() => handleDeletePreset(p)}
+                      className="text-slate-600 hover:text-red-400 transition p-1" title="Delete preset">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {showAddPreset && (
+                <div className="mt-3 bg-slate-800/50 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-medium text-slate-300">New preset</p>
+                  <input value={newName} onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Name (e.g. GPT-4o Mini)"
+                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+                  <input value={newModel} onChange={(e) => setNewModel(e.target.value)}
+                    placeholder="Model ID (e.g. openai/gpt-4o-mini)"
+                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+                  <input value={newBaseUrl} onChange={(e) => setNewBaseUrl(e.target.value)}
+                    placeholder="Base URL"
+                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+                  {addError && <p className="text-xs text-red-400">{addError}</p>}
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => { setShowAddPreset(false); setAddError(""); }}
+                      className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition">Cancel</button>
+                    <button onClick={handleAddPreset}
+                      className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition">Add</button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-slate-800" />
 
-            {/* Default vocabulary */}
+            {/* Task assignments */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Default vocabulary
-              </label>
-              <p className="text-xs text-slate-500 mb-1.5">
-                Domain-specific terms applied to all new transcriptions unless overridden.
-              </p>
-              <textarea
-                value={defaultVocab}
-                onChange={(e) => setDefaultVocab(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
-                rows={3}
-                maxLength={2000}
-                placeholder="Names, technical terms, abbreviations..."
-              />
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Task assignments</p>
+              <div className="space-y-3">
+                {Object.entries(LLM_TASKS).map(([task, info]) => (
+                  <div key={task}>
+                    <label className="block text-sm font-medium text-slate-300 mb-0.5">{info.label}</label>
+                    <p className="text-xs text-slate-500 mb-1">{info.desc}</p>
+                    <select value={assignments[task] || ""}
+                      onChange={(e) => setAssignments({ ...assignments, [task]: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 appearance-none cursor-pointer">
+                      {settings.presets.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Learned vocabulary */}
+            <div className="border-t border-slate-800" />
+
+            {/* Whisper — read-only */}
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Whisper models</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between bg-slate-800/30 rounded-lg px-3 py-2">
+                  <span className="text-xs text-slate-400">Transcription</span>
+                  <span className="text-xs text-slate-300 font-mono">{settings.whisper.model}</span>
+                </div>
+                <div className="flex items-center justify-between bg-slate-800/30 rounded-lg px-3 py-2">
+                  <span className="text-xs text-slate-400">Live</span>
+                  <span className="text-xs text-slate-300 font-mono">{settings.whisper.small_model}</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-600 mt-1.5">Change via WHISPER_MODEL_PATH in .env</p>
+            </div>
+
+          </div>
+        ) : (
+          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Hugging Face token</label>
+              <p className="text-xs text-slate-500 mb-1.5">
+                Required for speaker diarization.{" "}
+                <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer"
+                  className="text-violet-400 hover:text-violet-300">huggingface.co/settings/tokens</a>
+              </p>
+              <input type="password" value={hfToken} onChange={(e) => setHfToken(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                placeholder="hf_..." autoComplete="off" />
+            </div>
+
+            <div className="border-t border-slate-800" />
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Default vocabulary</label>
+              <p className="text-xs text-slate-500 mb-1.5">Domain-specific terms applied to all new transcriptions.</p>
+              <textarea value={defaultVocab} onChange={(e) => setDefaultVocab(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
+                rows={3} maxLength={2000} placeholder="Names, technical terms, abbreviations..." />
+            </div>
+
             {learnedVocab.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Learned vocabulary
-                </label>
-                <p className="text-xs text-slate-500 mb-1.5">
-                  Terms automatically learned from your transcript corrections.
-                </p>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Learned vocabulary</label>
+                <p className="text-xs text-slate-500 mb-1.5">Terms automatically learned from transcript corrections.</p>
                 <div className="flex flex-wrap gap-1.5">
                   {learnedVocab.map((v) => (
-                    <span
-                      key={v.id}
-                      className="inline-flex items-center gap-1 bg-slate-800/50 rounded-md px-2 py-1 text-xs text-slate-300 group"
-                    >
+                    <span key={v.id}
+                      className="inline-flex items-center gap-1 bg-slate-800/50 rounded-md px-2 py-1 text-xs text-slate-300 group">
                       {v.term}
                       <span className="text-[9px] text-slate-600">{v.frequency}x</span>
-                      <button
-                        onClick={async () => {
-                          await deleteVocabularyEntry(v.id);
-                          setLearnedVocab(learnedVocab.filter((e) => e.id !== v.id));
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition ml-0.5"
-                      >
+                      <button onClick={async () => { await deleteVocabularyEntry(v.id); setLearnedVocab(learnedVocab.filter((e) => e.id !== v.id)); }}
+                        className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition ml-0.5">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -242,32 +274,17 @@ export default function SettingsDialog({ onClose }: Props) {
               </div>
             )}
 
-            {/* Speaker profiles toggle */}
             <div>
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300">
-                    Speaker voice profiles
-                  </label>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Save and match voice profiles across meetings.
-                  </p>
+                  <label className="block text-sm font-medium text-slate-300">Speaker voice profiles</label>
+                  <p className="text-xs text-slate-500 mt-0.5">Save and match voice profiles across meetings.</p>
                 </div>
-                <button
-                  onClick={() => setProfilesEnabled(!profilesEnabled)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    profilesEnabled ? "bg-violet-600" : "bg-slate-700"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      profilesEnabled ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
+                <button onClick={() => setProfilesEnabled(!profilesEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${profilesEnabled ? "bg-violet-600" : "bg-slate-700"}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${profilesEnabled ? "translate-x-6" : "translate-x-1"}`} />
                 </button>
               </div>
-
-              {/* Saved profiles list — always visible so profiles can be deleted even when disabled */}
               {profiles.length > 0 && (
                 <div className="mt-3 space-y-1.5">
                   <p className="text-xs text-slate-500">{profiles.length} saved voice profile(s)</p>
@@ -277,11 +294,8 @@ export default function SettingsDialog({ onClose }: Props) {
                         <span className="text-sm text-slate-300">{p.name}</span>
                         <span className="text-[10px] text-slate-600 ml-2">{p.sample_count} sample(s)</span>
                       </div>
-                      <button
-                        onClick={() => handleDeleteProfile(p.id)}
-                        className="text-slate-600 hover:text-red-400 transition p-1"
-                        title="Delete profile"
-                      >
+                      <button onClick={() => handleDeleteProfile(p.id)}
+                        className="text-slate-600 hover:text-red-400 transition p-1">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
@@ -291,37 +305,19 @@ export default function SettingsDialog({ onClose }: Props) {
                 </div>
               )}
             </div>
+
           </div>
         )}
 
-        <div className="flex items-center justify-between mt-6">
-          <p className="text-xs text-slate-600">
-            {tab === "models" ? "Add models by dropping .json files in model_presets/" : ""}
-          </p>
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition text-sm"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-5 py-2 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-500 disabled:opacity-50 transition text-sm flex items-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Saving...
-                </>
-              ) : saved ? (
-                "Saved!"
-              ) : (
-                "Save"
-              )}
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-3 mt-6">
+          <button onClick={onClose}
+            className="px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition text-sm">
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="px-5 py-2 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-500 disabled:opacity-50 transition text-sm flex items-center gap-2">
+            {saving ? (<><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Saving...</>) : saved ? "Saved!" : "Save"}
+          </button>
         </div>
       </div>
     </div>

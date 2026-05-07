@@ -127,6 +127,19 @@ export async function deleteActionResult(id: string): Promise<void> {
   await api.delete(`/actions/results/${id}`);
 }
 
+// --- App Settings ---
+
+export interface AppSettings {
+  llm_base_url: string;
+  llm_model: string;
+  llm_enabled: boolean;
+}
+
+export async function getAppSettings(): Promise<AppSettings> {
+  const { data } = await api.get("/settings");
+  return data;
+}
+
 // --- Model Settings ---
 
 export async function getModelSettings(): Promise<ModelSettings> {
@@ -137,6 +150,15 @@ export async function getModelSettings(): Promise<ModelSettings> {
 export async function updateModelSettings(assignments: Record<string, string>): Promise<ModelSettings> {
   const { data } = await api.put("/model-settings", { assignments });
   return data;
+}
+
+export async function createModelPreset(preset: { name: string; model: string; base_url: string }) {
+  const { data } = await api.post("/model-settings/presets", preset);
+  return data;
+}
+
+export async function deleteModelPreset(presetId: string) {
+  await api.delete(`/model-settings/presets/${presetId}`);
 }
 
 // --- Search ---
@@ -223,7 +245,6 @@ export interface Preferences {
   default_vocabulary: string;
   speaker_profiles_enabled: boolean;
   hf_auth_token: string;
-  llm_api_key: string;
 }
 
 export async function getPreferences(): Promise<Preferences> {

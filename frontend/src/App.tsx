@@ -3,7 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import MeetingPage from "./pages/MeetingPage";
 import SettingsDialog from "./components/SettingsDialog";
-import { getModelSettings } from "./api";
+import { getAppSettings } from "./api";
 import { useStore } from "./store";
 
 export default function App() {
@@ -13,12 +13,8 @@ export default function App() {
   useEffect(() => {
     async function init() {
       try {
-        const settings = await getModelSettings();
-        // @ts-ignore - llm_enabled is returned from /api/settings which getModelSettings calls
-        if (settings && typeof settings.llm_enabled !== 'undefined') {
-          // @ts-ignore
-          setLlmEnabled(settings.llm_enabled);
-        }
+        const settings = await getAppSettings();
+        setLlmEnabled(settings.llm_enabled);
       } catch (err) {
         console.error("Failed to fetch settings:", err);
       }
