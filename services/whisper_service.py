@@ -33,6 +33,7 @@ class WhisperService:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=1800,  # 30 min max
         )
 
@@ -90,6 +91,7 @@ class WhisperService:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=120,  # 2 min max for chunks
         )
 

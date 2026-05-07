@@ -13,7 +13,7 @@ celery_app = Celery(
     "transcriber",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["tasks.process_meeting", "tasks.polish_task", "tasks.finalize_task", "tasks.action_task"],
+    include=["tasks.process_meeting", "tasks.polish_task", "tasks.finalize_task", "tasks.action_task", "tasks.insights_task"],
 )
 
 celery_app.conf.update(
