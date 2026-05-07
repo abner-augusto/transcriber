@@ -16,11 +16,11 @@ log = logging.getLogger(__name__)
 PRESETS_DIR = Path(__file__).parent / "model_presets"
 
 TASK_DEFAULTS = {
-    "actions": "ollama-qwen3-8b",
-    "analysis": "ollama-qwen3-8b",
-    "live": "ollama-qwen3-8b",
-    "transcription": "whisper-medium-sv",
-    "live_transcription": "whisper-small-sv",
+    "actions": "gemini-flash-lite",
+    "analysis": "gemini-flash-lite",
+    "live": "gemini-flash-lite",
+    "transcription": "whisper-large-v3-turbo",
+    "live_transcription": "whisper-small",
 }
 
 
@@ -86,6 +86,30 @@ class ModelConfigManager:
         for task, preset_id in assignments.items():
             if task in TASK_DEFAULTS:
                 self._settings[task] = preset_id
+        self._save_settings()
+
+    def create_preset(self, preset: dict) -> dict:
+        """Write a new preset JSON file and register it."""
+        import re
+        preset_id = re.sub(r"[^a-z0-9-]", "-", preset["name"].lower()).strip("-")
+        preset["id"] = preset_id
+        preset["type"] = "llm"
+        path = PRESETS_DIR / f"{preset_id}.json"
+        path.write_text(json.dumps(preset, indent=2, ensure_ascii=False), encoding="utf-8")
+        self._presets[preset_id] = preset
+        return preset
+
+    def delete_preset(self, preset_id: str):
+        """Delete a preset JSON file and remove it from memory."""
+        path = PRESETS_DIR / f"{preset_id}.json"
+        if not path.exists():
+            raise FileNotFoundError(f"Preset not found: {preset_id}")
+        path.unlink()
+        self._presets.pop(preset_id, None)
+        # Reset any tasks that were using this preset to default
+        for task, pid in list(self._settings.items()):
+            if pid == preset_id:
+                del self._settings[task]
         self._save_settings()
 
     def get_preset_for_task(self, task: str) -> Optional[dict]:

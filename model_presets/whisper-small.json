@@ -1,0 +1,7 @@
+{
+  "id": "whisper-small",
+  "name": "Whisper Small",
+  "type": "whisper",
+  "provider": "local",
+  "model_path": null
+}
