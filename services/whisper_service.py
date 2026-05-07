@@ -1,8 +1,11 @@
 import json
+import logging
 import subprocess
 from pathlib import Path
 
 from config import settings
+
+log = logging.getLogger(__name__)
 
 
 class WhisperService:
@@ -44,6 +47,8 @@ class WhisperService:
             data = json.load(f)
 
         segments = []
+        first_item = data.get("transcription", [{}])[0] if data.get("transcription") else {}
+        log.info(f"[whisper] JSON keys in first item: {list(first_item.keys())}, tokens present: {'tokens' in first_item}")
         for item in data.get("transcription", []):
             text = item.get("text", "").strip()
             if not text:
@@ -62,6 +67,7 @@ class WhisperService:
                 "confidence": confidence,
             })
 
+        log.info(f"[whisper] transcribe() returning {len(segments)} segments, first confidence={segments[0]['confidence'] if segments else 'N/A'}")
         return segments
 
     def transcribe_chunk(self, audio_path: str, model_path: str | None = None, prompt: str | None = None, vocabulary: str | None = None) -> list[dict]:

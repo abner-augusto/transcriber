@@ -27,8 +27,8 @@ export async function deleteMeeting(id: string): Promise<void> {
   await api.delete(`/meetings/${id}`);
 }
 
-export async function startProcessing(id: string): Promise<Job> {
-  const { data } = await api.post(`/meetings/${id}/process`);
+export async function startProcessing(id: string, skipLlm = false): Promise<Job> {
+  const { data } = await api.post(`/meetings/${id}/process`, { skip_llm: skipLlm });
   return data;
 }
 

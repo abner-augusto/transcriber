@@ -151,8 +151,12 @@ def delete_meeting(meeting_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+class ProcessRequest(BaseModel):
+    skip_llm: bool = False
+
+
 @router.post("/{meeting_id}/process")
-def start_processing(meeting_id: str, db: Session = Depends(get_db)):
+def start_processing(meeting_id: str, body: ProcessRequest = ProcessRequest(), db: Session = Depends(get_db)):
     from sqlalchemy import update
 
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -183,7 +187,7 @@ def start_processing(meeting_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     # Queue task
-    result = process_meeting_task.delay(meeting.id, job.id)
+    result = process_meeting_task.delay(meeting.id, job.id, body.skip_llm)
     job.celery_task_id = result.id
     db.commit()
 

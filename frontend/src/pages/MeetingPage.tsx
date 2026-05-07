@@ -33,6 +33,7 @@ export default function MeetingPage() {
   const [showDecrypt, setShowDecrypt] = useState(false);
   const [showReprocess, setShowReprocess] = useState(false);
   const [showProtocol, setShowProtocol] = useState(false);
+  const [skipLlm, setSkipLlm] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"speakers" | "actions" | "insights" | "analytics">("speakers");
   const [actionEvent, setActionEvent] = useState<ProgressUpdate | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -134,7 +135,7 @@ export default function MeetingPage() {
 
   async function handleProcess() {
     if (!id) return;
-    await startProcessing(id);
+    await startProcessing(id, skipLlm);
     setProgress({ type: "progress", progress: 0, step: "Starting...", status: "processing" });
     loadMeeting();
   }
@@ -522,6 +523,21 @@ export default function MeetingPage() {
           </div>
           <h3 className="text-xl font-semibold text-slate-300">Ready to transcribe</h3>
           <p className="text-slate-500 mt-2">Click "Start transcription" to begin processing</p>
+          <label className="mt-5 inline-flex items-center gap-2.5 cursor-pointer select-none group">
+            <div className="relative">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={!skipLlm}
+                onChange={(e) => setSkipLlm(!e.target.checked)}
+              />
+              <div className="w-9 h-5 bg-slate-700 peer-checked:bg-violet-600 rounded-full transition-colors" />
+              <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+            </div>
+            <span className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">
+              AI analysis (speaker identification &amp; intro detection)
+            </span>
+          </label>
         </div>
       )}
 

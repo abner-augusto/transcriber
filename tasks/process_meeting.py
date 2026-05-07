@@ -20,7 +20,7 @@ from preferences import load_preferences
 
 
 @celery_app.task(bind=True)
-def process_meeting_task(self, meeting_id: str, job_id: str):
+def process_meeting_task(self, meeting_id: str, job_id: str, skip_llm: bool = False):
     """Main pipeline: audio extraction -> diarization -> transcription -> alignment -> speaker ID."""
     db = SessionLocal()
 
@@ -69,7 +69,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         max_speakers = meeting.max_speakers
         intro_result = {"speaker_count": 0, "names": [], "intro_end_time": 0}
 
-        if not min_speakers:
+        if not min_speakers and not skip_llm:
             update_progress(db, job, meeting, 37, "Analyzing introduction phase with AI...")
             from services.llm_service import LLMService
             llm = LLMService(preset=analysis_preset)
