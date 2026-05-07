@@ -1,63 +1,56 @@
-"""Simple JSON-file preferences for global settings."""
 import json
 from pathlib import Path
+from config import settings
 
-PREFS_PATH = Path("preferences.json")
+_PREFS_FILE = Path("preferences.json")
 
-DEFAULTS = {
+# Default values for non-sensitive public preferences
+_DEFAULTS = {
     "default_vocabulary": "",
-    "speaker_profiles_enabled": True,
+    "speaker_profiles_enabled": False,
     "hf_auth_token": "",
-    "openrouter_api_key": "",
+    "llm_api_key": "",
 }
 
-# Keys that should never be sent to the frontend in full
-_SECRET_KEYS = {"hf_auth_token", "openrouter_api_key"}
+# Values that should be masked when sending to frontend
+_SECRET_KEYS = {"hf_auth_token", "llm_api_key"}
 
 
 def load_preferences() -> dict:
-    if PREFS_PATH.exists():
-        try:
-            with open(PREFS_PATH, encoding="utf-8") as f:
-                data = json.load(f)
-            # Merge with defaults for any missing keys
-            return {**DEFAULTS, **data}
-        except (json.JSONDecodeError, OSError):
-            pass
-    return dict(DEFAULTS)
+    if not _PREFS_FILE.exists():
+        return _DEFAULTS.copy()
+    try:
+        with open(_PREFS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            # Merge defaults to handle new keys
+            return {**_DEFAULTS, **data}
+    except Exception:
+        return _DEFAULTS.copy()
 
 
 def save_preferences(prefs: dict):
-    with open(PREFS_PATH, "w", encoding="utf-8") as f:
+    with open(_PREFS_FILE, "w", encoding="utf-8") as f:
         json.dump(prefs, f, indent=2, ensure_ascii=False)
 
 
 def get_public_preferences() -> dict:
     """Return preferences with secrets masked for the frontend."""
     prefs = load_preferences()
-    result = {}
+    public = {}
     for k, v in prefs.items():
-        if k in _SECRET_KEYS:
-            result[k] = _mask(v) if v else ""
+        if k in _SECRET_KEYS and v:
+            # Mask secret
+            public[k] = v[:3] + "*" * 10 + v[-3:] if len(v) > 6 else "*" * 10
         else:
-            result[k] = v
-    return result
-
-
-def _mask(value: str) -> str:
-    """Show first 4 and last 4 chars of a secret."""
-    if len(value) <= 10:
-        return "*" * len(value)
-    return value[:4] + "*" * (len(value) - 8) + value[-4:]
+            public[k] = v
+    return public
 
 
 def get_secret(key: str) -> str:
-    """Get a secret value, checking preferences then env vars."""
-    import os
-    # Environment variable takes precedence
-    env_val = os.environ.get(key.upper(), "")
-    if env_val and env_val != f"hf_your_token_here":
-        return env_val
-    # Fall back to preferences
+    """Get secret from preferences or fall back to env/settings."""
     prefs = load_preferences()
-    return prefs.get(key, "")
+    if prefs.get(key):
+        return prefs[key]
+
+    # Fallback to settings (which reads from env)
+    return getattr(settings, key, "")

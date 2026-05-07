@@ -1,69 +1,60 @@
 import json
 import logging
 import re
-
 import requests
-
 from config import settings
-from preferences import get_secret
 
 log = logging.getLogger(__name__)
 
 CHUNK_SECONDS = 30
 MAX_CHUNKS = 20  # Safety limit: 10 minutes max
 
-
 class LLMService:
     def __init__(self, preset: dict | None = None):
-        if preset and preset.get("provider"):
-            self.provider = preset["provider"]
-            self.model = preset.get("model")
+        if preset:
+            self.base_url = preset.get("base_url") or settings.llm_base_url
+            self.api_key = preset.get("api_key") or settings.llm_api_key
+            self.model = preset.get("model") or settings.llm_model
         else:
-            self.provider = settings.llm_provider  # "openrouter" or "ollama"
-            self.model = None  # use defaults from config
+            self.base_url = settings.llm_base_url
+            self.api_key = settings.llm_api_key
+            self.model = settings.llm_model
+
+    def is_configured(self) -> bool:
+        """Check if the LLM service has a base URL configured."""
+        return bool(self.base_url and self.base_url.strip())
 
     def _call(self, messages: list[dict], max_tokens: int = 1000) -> str:
-        """Route to the configured LLM provider."""
-        if self.provider == "ollama":
-            return self._call_ollama(messages, max_tokens)
-        return self._call_openrouter(messages, max_tokens)
+        """Call the OpenAI-compatible LLM endpoint."""
+        if not self.is_configured():
+            raise RuntimeError("LLM service is not configured (missing LLM_BASE_URL)")
 
-    def _call_openrouter(self, messages: list[dict], max_tokens: int) -> str:
         headers = {
-            "Authorization": f"Bearer {get_secret('openrouter_api_key')}",
             "Content-Type": "application/json",
         }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            
         payload = {
-            "model": self.model or settings.openrouter_model,
+            "model": self.model,
             "messages": messages,
             "temperature": 0.1,
             "max_tokens": max_tokens,
         }
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers, json=payload, timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"].strip()
-
-    def _call_ollama(self, messages: list[dict], max_tokens: int) -> str:
-        payload = {
-            "model": self.model or settings.ollama_model,
-            "messages": messages,
-            "stream": False,
-            "think": False,  # Disable qwen3 thinking mode for speed
-            "keep_alive": "30m",  # Keep model loaded during recording sessions
-            "options": {
-                "temperature": 0.1,
-                "num_predict": max_tokens,
-            },
-        }
-        response = requests.post(
-            f"{settings.ollama_base_url}/api/chat",
-            json=payload, timeout=120,
-        )
-        response.raise_for_status()
-        return response.json()["message"]["content"].strip()
+        
+        # OpenRouter-specific optimizations
+        if "openrouter.ai" in self.base_url:
+            payload["transforms"] = [] # Example optimization
+        
+        url = f"{self.base_url.rstrip('/')}/chat/completions"
+        
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            log.error(f"LLM call failed at {url}: {e}")
+            raise
 
     def _parse_json(self, content: str):
         """Extract JSON from LLM response, handling markdown code blocks and think tags."""
@@ -79,14 +70,15 @@ class LLMService:
         # Extract from markdown code blocks
         if "```" in content:
             parts = content.split("```")
-            if len(parts) >= 3:
-                block = parts[1]
-                if block.startswith("json"):
-                    block = block[4:]
-                try:
-                    return json.loads(block.strip())
-                except json.JSONDecodeError:
-                    pass
+            for part in parts:
+                if part.strip().startswith("{") or part.strip().startswith("["):
+                    block = part.strip()
+                    if block.startswith("json"):
+                        block = block[4:]
+                    try:
+                        return json.loads(block.strip())
+                    except json.JSONDecodeError:
+                        continue
 
         # Last resort: find first JSON object or array in the string
         decoder = json.JSONDecoder()
@@ -99,10 +91,6 @@ class LLMService:
 
         raise ValueError(f"No valid JSON found in LLM response: {content[:200]}")
 
-    # ------------------------------------------------------------------
-    # Iterative intro detection
-    # ------------------------------------------------------------------
-
     def analyze_intro_iteratively(
         self,
         whisper_segments: list[dict],
@@ -111,13 +99,6 @@ class LLMService:
         """
         Send transcript to LLM in ~30s chunks. After each chunk, ask if the
         introduction phase is still ongoing. Stop when the LLM says it's done.
-
-        Returns:
-            {
-                "speaker_count": int,
-                "names": ["Anders", "Claude", ...],
-                "intro_end_time": float,
-            }
         """
         chunks = self._build_chunks(whisper_segments, CHUNK_SECONDS)
 
@@ -222,10 +203,6 @@ class LLMService:
             })
 
         return chunks
-
-    # ------------------------------------------------------------------
-    # Speaker identification from labeled intro segments
-    # ------------------------------------------------------------------
 
     def identify_speakers_from_intro(self, intro_text: str) -> list[dict]:
         """

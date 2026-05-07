@@ -113,16 +113,17 @@ def health():
     )
     return {"status": "ok" if all_ok else "degraded", **checks}
 
-
 @app.get("/api/settings")
 def get_settings():
+    from config import settings as _settings
     from preferences import get_public_preferences
+    from services.llm_service import LLMService
     prefs = get_public_preferences()
+    llm_enabled = LLMService().is_configured()
     return {
-        "llm_provider": _settings.llm_provider,
-        "openrouter_model": _settings.openrouter_model,
-        "ollama_model": _settings.ollama_model,
-        "ollama_base_url": _settings.ollama_base_url,
+        "llm_base_url": _settings.llm_base_url,
+        "llm_model": _settings.llm_model,
+        "llm_enabled": llm_enabled,
         "preferences": prefs,
     }
 
@@ -141,9 +142,10 @@ def update_preferences(body: dict):
         # Don't overwrite with the masked value
         if val and "*" not in val:
             current["hf_auth_token"] = val
-    if "openrouter_api_key" in body:
-        val = (body["openrouter_api_key"] or "").strip()
+    if "llm_api_key" in body:
+        val = (body["llm_api_key"] or "").strip()
         if val and "*" not in val:
-            current["openrouter_api_key"] = val
+            current["llm_api_key"] = val
     save_preferences(current)
     return get_public_preferences()
+

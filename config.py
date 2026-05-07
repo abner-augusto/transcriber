@@ -5,14 +5,15 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "postgresql://transcriber:transcriber@localhost:5433/transcriber"
     redis_url: str = "redis://localhost:6380/0"
-    llm_provider: str = "openrouter"  # "openrouter" or "ollama"
-    openrouter_api_key: str = ""
-    openrouter_model: str = "anthropic/claude-sonnet-4"
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "gemma3:1b"
-    whisper_cli_path: str = "../whisper.cpp/build/bin/whisper-cli"
-    whisper_model_path: str = "./models/kb_whisper_ggml_medium.bin"
-    whisper_small_model_path: str = "./models/kb_whisper_ggml_small.bin"
+    
+    # LLM Settings (OpenAI-compatible API)
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+    llm_api_key: str = ""
+    llm_model: str = "anthropic/claude-3.5-sonnet"
+    
+    whisper_cli_path: str = "../whisper.cpp/build/bin/Release/whisper-cli.exe"
+    whisper_model_path: str = "./models/ggml-large-v3-turbo.bin"
+    whisper_small_model_path: str = "./models/ggml-small.bin"
     storage_path: str = "./storage"
     hf_auth_token: str = ""
     cors_origins: str = ""  # Comma-separated, e.g. "http://localhost:3000,http://myapp.com"
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8-sig"
+        extra = "ignore"  # Be permissive with extra env vars
 
 
 settings = Settings()
@@ -34,8 +36,8 @@ import logging as _logging
 _config_log = _logging.getLogger(__name__)
 if not settings.hf_auth_token:
     _config_log.warning("HF_AUTH_TOKEN is not set — speaker diarization will not work")
-if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
-    _config_log.warning("OPENROUTER_API_KEY is not set — LLM features will fail")
+if not settings.llm_api_key and "openrouter" in settings.llm_base_url:
+    _config_log.warning("LLM_API_KEY is not set — LLM features will fail for this provider")
 
 
 def get_storage_path() -> Path:
