@@ -110,8 +110,8 @@ OLLAMA_MODEL=qwen3:8b
 
 # Paths to whisper.cpp (adjust to your setup, use forward slashes)
 WHISPER_CLI_PATH=../whisper.cpp/build/bin/Release/whisper-cli.exe
-WHISPER_MODEL_PATH=./models/kb_whisper_ggml_medium.bin
-WHISPER_SMALL_MODEL_PATH=./models/kb_whisper_ggml_small.bin
+WHISPER_MODEL_PATH=./models/ggml-large-v3-turbo.bin
+WHISPER_SMALL_MODEL_PATH=./models/ggml-small.bin
 
 STORAGE_PATH=./storage
 
@@ -192,6 +192,10 @@ Check that the path in your `.env` file points to the correct location. On Windo
 
 ### Docker containers won't start
 Make sure Docker Desktop is running and WSL 2 is enabled. Check with `docker ps`.
+
+### Slow first run
+The first transcription downloads pyannote and SpeechBrain model files (several GB). Subsequent runs use cached models.
+ enabled. Check with `docker ps`.
 
 ### Slow first run
 The first transcription downloads pyannote and SpeechBrain model files (several GB). Subsequent runs use cached models.
