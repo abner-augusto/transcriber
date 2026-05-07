@@ -86,10 +86,12 @@ if (Test-Path $whisperBin) {
     $hasNvidia = Get-Command nvidia-smi -ErrorAction SilentlyContinue
     if ($hasNvidia) {
         Info "NVIDIA GPU detected, building with CUDA"
-        cmake -B build -DWHISPER_CUDA=ON
+        # Force VS 2022 generator — avoids picking up VS 2026 Preview if installed.
+        # GGML_CUDA=ON is the current flag (WHISPER_CUDA was deprecated).
+        cmake -B build -G "Visual Studio 17 2022" -DGGML_CUDA=ON
     } else {
         Info "No NVIDIA GPU detected, building CPU-only"
-        cmake -B build
+        cmake -B build -G "Visual Studio 17 2022"
     }
 
     cmake --build build --config Release
@@ -108,22 +110,31 @@ if (Test-Path $whisperBin) {
 Write-Host ""
 if (-not (Test-Path "models")) { New-Item -ItemType Directory -Path "models" | Out-Null }
 
-if (Test-Path "models\kb_whisper_ggml_medium.bin") {
+if (Test-Path "models\ggml-medium.bin") {
     Ok "Medium model already downloaded"
 } else {
-    Info "Downloading KB-LAB Swedish medium model (~1.5 GB)..."
-    curl.exe -L --progress-bar -o "models\kb_whisper_ggml_medium.bin" `
-        "https://huggingface.co/KBLab/kb-whisper-medium/resolve/main/ggml-model.bin"
+    Info "Downloading Whisper medium model (~1.5 GB)..."
+    curl.exe -L --progress-bar -o "models\ggml-medium.bin" `
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin"
     Ok "Medium model downloaded"
 }
 
-if (Test-Path "models\kb_whisper_ggml_small.bin") {
+if (Test-Path "models\ggml-small.bin") {
     Ok "Small model already downloaded"
 } else {
-    Info "Downloading KB-LAB Swedish small model (~500 MB)..."
-    curl.exe -L --progress-bar -o "models\kb_whisper_ggml_small.bin" `
-        "https://huggingface.co/KBLab/kb-whisper-small/resolve/main/ggml-model.bin"
+    Info "Downloading Whisper small model (~500 MB)..."
+    curl.exe -L --progress-bar -o "models\ggml-small.bin" `
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
     Ok "Small model downloaded"
+}
+
+if (Test-Path "models\ggml-large-v3-turbo.bin") {
+    Ok "Large-v3-Turbo model already downloaded"
+} else {
+    Info "Downloading Whisper Large-v3-Turbo model (~800 MB)..."
+    curl.exe -L --progress-bar -o "models\ggml-large-v3-turbo.bin" `
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
+    Ok "Large-v3-Turbo model downloaded"
 }
 
 # -------------------------------------------
@@ -158,6 +169,33 @@ pip install -r requirements.txt -q
 Ok "Python dependencies installed"
 
 # -------------------------------------------
+# Fix: speechbrain LazyModule path check fails on Windows
+# The guard that suppresses lazy k2 imports during inspect.stack() uses a
+# Unix-style path ("/inspect.py") so it never matches on Windows ("\\inspect.py"),
+# causing a crash when pyannote loads its models.
+# -------------------------------------------
+$sbImportUtils = "venv\Lib\site-packages\speechbrain\utils\importutils.py"
+if (Test-Path $sbImportUtils) {
+    $content = Get-Content $sbImportUtils -Raw
+    $patched = '        if importer_frame is not None and (
+            importer_frame.filename.endswith("/inspect.py")
+            or importer_frame.filename.endswith("\\inspect.py")
+        ):'
+    $original = '        if importer_frame is not None and importer_frame.filename.endswith(
+            "/inspect.py"
+        ):'
+    if ($content -notmatch [regex]::Escape('endswith("\\inspect.py")')) {
+        $content = $content.Replace($original, $patched)
+        Set-Content $sbImportUtils $content -Encoding UTF8 -NoNewline
+        Ok "Applied speechbrain Windows path fix"
+    } else {
+        Ok "speechbrain Windows path fix already applied"
+    }
+} else {
+    Warn "speechbrain importutils.py not found — skipping patch"
+}
+
+# -------------------------------------------
 # Step 6: Frontend
 # -------------------------------------------
 Write-Host ""
@@ -184,19 +222,17 @@ if (Test-Path ".env") {
 DATABASE_URL=postgresql://transcriber:transcriber@localhost:5433/transcriber
 REDIS_URL=redis://localhost:6380/0
 
-# LLM provider: "ollama" or "openrouter"
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3:8b
-
-# Alternative: OpenRouter (uncomment and fill in)
-# LLM_PROVIDER=openrouter
-# OPENROUTER_API_KEY=your_key_here
-# OPENROUTER_MODEL=anthropic/claude-sonnet-4
+# LLM Settings (OpenAI-compatible API)
+# For local Ollama: http://localhost:11434/v1
+# For OpenRouter: https://openrouter.ai/api/v1
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=
+LLM_MODEL=anthropic/claude-3.5-sonnet
 
 WHISPER_CLI_PATH=$whisperCliPath
-WHISPER_MODEL_PATH=./models/kb_whisper_ggml_medium.bin
-WHISPER_SMALL_MODEL_PATH=./models/kb_whisper_ggml_small.bin
+WHISPER_MODEL_PATH=./models/ggml-large-v3-turbo.bin
+WHISPER_SMALL_MODEL_PATH=./models/ggml-small.bin
+
 
 STORAGE_PATH=./storage
 

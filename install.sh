@@ -101,12 +101,12 @@ else
   cd "$WHISPER_DIR"
 
   if [ "$PLATFORM" = "macos" ]; then
-    cmake -B build -DWHISPER_METAL=ON
+    cmake -B build -DGGML_METAL=ON
   else
     # Check for NVIDIA GPU
     if command -v nvidia-smi >/dev/null 2>&1; then
       info "NVIDIA GPU detected, building with CUDA"
-      cmake -B build -DWHISPER_CUDA=ON
+      cmake -B build -DGGML_CUDA=ON
     else
       info "No NVIDIA GPU detected, building CPU-only"
       cmake -B build
