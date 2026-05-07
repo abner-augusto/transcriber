@@ -165,6 +165,16 @@ if (Test-Path "venv") {
 Info "Installing Python dependencies (this may take a while)..."
 & "venv\Scripts\activate.ps1"
 pip install --upgrade pip -q
+
+# Install torch with CUDA support if an NVIDIA GPU is present
+if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+    Info "Installing PyTorch with CUDA 12.8 support..."
+    pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128 -q
+} else {
+    Info "Installing PyTorch (CPU-only)..."
+    pip install torch torchaudio -q
+}
+
 pip install -r requirements.txt -q
 Ok "Python dependencies installed"
 

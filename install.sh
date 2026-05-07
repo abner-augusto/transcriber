@@ -183,6 +183,16 @@ fi
 info "Installing Python dependencies (this may take a while)..."
 source venv/bin/activate
 pip install --upgrade pip -q
+
+# Install torch with CUDA support if an NVIDIA GPU is present (Linux only)
+if [ "$PLATFORM" = "linux" ] && command -v nvidia-smi >/dev/null 2>&1; then
+  info "Installing PyTorch with CUDA 12.8 support..."
+  pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128 -q
+else
+  info "Installing PyTorch (CPU/Metal)..."
+  pip install torch torchaudio -q
+fi
+
 pip install -r requirements.txt -q
 ok "Python dependencies installed"
 
