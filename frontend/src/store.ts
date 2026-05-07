@@ -32,6 +32,9 @@ interface AppState {
 
   selectedAudioDevice: string;
   setSelectedAudioDevice: (d: string) => void;
+
+  llmEnabled: boolean;
+  setLlmEnabled: (enabled: boolean) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -77,4 +80,7 @@ export const useStore = create<AppState>((set) => ({
 
   selectedAudioDevice: "default",
   setSelectedAudioDevice: (selectedAudioDevice) => set({ selectedAudioDevice }),
+
+  llmEnabled: true, // Default to true until checked
+  setLlmEnabled: (llmEnabled) => set({ llmEnabled }),
 }));

@@ -472,7 +472,9 @@ export default function MeetingPage() {
             <div className="w-72 flex-shrink-0">
               {/* Sidebar tab toggle */}
               <div className="flex rounded-lg bg-slate-800/50 p-0.5 mb-3">
-                {(["speakers", "actions", "insights", "analytics"] as const).map((tab) => (
+                {(["speakers", "actions", "insights", "analytics"] as const)
+                  .filter((tab) => llmEnabled || (tab === "speakers" || tab === "analytics"))
+                  .map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setSidebarTab(tab)}

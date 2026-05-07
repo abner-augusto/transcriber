@@ -27,7 +27,7 @@ export default function SettingsDialog({ onClose }: Props) {
   const [defaultVocab, setDefaultVocab] = useState("");
   const [profilesEnabled, setProfilesEnabled] = useState(true);
   const [hfToken, setHfToken] = useState("");
-  const [openrouterKey, setOpenrouterKey] = useState("");
+  const [llmKey, setLlmKey] = useState("");
   const [profiles, setProfiles] = useState<SpeakerProfile[]>([]);
   const [learnedVocab, setLearnedVocab] = useState<VocabularyEntry[]>([]);
 
@@ -48,7 +48,7 @@ export default function SettingsDialog({ onClose }: Props) {
     setDefaultVocab(p.default_vocabulary || "");
     setProfilesEnabled(p.speaker_profiles_enabled);
     setHfToken(p.hf_auth_token || "");
-    setOpenrouterKey(p.openrouter_api_key || "");
+    setLlmKey(p.llm_api_key || "");
     const profileList = await listSpeakerProfiles();
     setProfiles(profileList);
     const vocab = await listVocabulary();
@@ -66,7 +66,7 @@ export default function SettingsDialog({ onClose }: Props) {
         default_vocabulary: defaultVocab,
         speaker_profiles_enabled: profilesEnabled,
         hf_auth_token: hfToken,
-        openrouter_api_key: openrouterKey,
+        llm_api_key: llmKey,
       });
     }
     setSaving(false);
@@ -173,20 +173,17 @@ export default function SettingsDialog({ onClose }: Props) {
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                OpenRouter API key
+                LLM API Key
               </label>
               <p className="text-xs text-slate-500 mb-1.5">
-                Only needed if using OpenRouter as LLM provider.{" "}
-                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300">
-                  openrouter.ai/keys
-                </a>
+                API key for your chosen LLM provider (OpenRouter, OpenAI, etc.).
               </p>
               <input
                 type="password"
-                value={openrouterKey}
-                onChange={(e) => setOpenrouterKey(e.target.value)}
+                value={llmKey}
+                onChange={(e) => setLlmKey(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                placeholder="sk-or-..."
+                placeholder="sk-..."
                 autoComplete="off"
               />
             </div>
