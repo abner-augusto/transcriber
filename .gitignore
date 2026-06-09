@@ -15,6 +15,9 @@ venv/
 models/*.bin
 models/*.gguf
 models/*.pt
+models/**/*.bin
+models/**/*.gguf
+models/**/*.pt
 
 # Build artifacts
 build/
