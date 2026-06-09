@@ -71,12 +71,13 @@ class LLMService:
         if "```" in content:
             parts = content.split("```")
             for part in parts:
-                if part.strip().startswith("{") or part.strip().startswith("["):
-                    block = part.strip()
-                    if block.startswith("json"):
-                        block = block[4:]
+                block = part.strip()
+                # Strip a leading language tag (e.g. "json") left by the fence
+                if block.startswith("json"):
+                    block = block[4:].strip()
+                if block.startswith("{") or block.startswith("["):
                     try:
-                        return json.loads(block.strip())
+                        return json.loads(block)
                     except json.JSONDecodeError:
                         continue
 

@@ -32,7 +32,9 @@ Respond ONLY with JSON in this format:
   ]
 }
 
-Timestamps should be in seconds from start, matching the nearest timestamp in the transcription.
+Each line in the transcription is prefixed with its start time in seconds, e.g. "[326.5s]".
+The "timestamp" field MUST be a plain number of seconds (e.g. 326.5), NOT a "M:SS" string.
+Match it to the nearest timestamp in the transcription.
 If you find none for a category, return an empty list.
 Write in English. Respond ONLY with JSON."""
 
@@ -68,7 +70,7 @@ def extract_insights_task(self, meeting_id: str, job_id: str):
         lines = []
         for seg in segments:
             speaker = speaker_map.get(seg.speaker_id, "Unknown") if seg.speaker_id else "Unknown"
-            ts = f"{int(seg.start_time // 60)}:{int(seg.start_time % 60):02d}"
+            ts = f"{seg.start_time:.1f}s"
             lines.append(f"[{ts}] [{speaker}]: {seg.text}")
 
         transcript_text = "\n".join(lines)
