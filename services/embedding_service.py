@@ -18,6 +18,7 @@ MODEL_FILES = ["hyperparams.yaml", "embedding_model.ckpt", "mean_var_norm_emb.ck
 
 class EmbeddingService:
     _model = None
+    _cpu_model = None
 
     @classmethod
     def _ensure_model_files(cls) -> Path:
@@ -37,23 +38,42 @@ class EmbeddingService:
         return cache_dir
 
     @classmethod
+    def _build_model(cls, device: str):
+        from speechbrain.inference.speaker import EncoderClassifier
+        save_dir = cls._ensure_model_files()
+        model = EncoderClassifier.from_hparams(
+            source=str(save_dir),
+            savedir=str(save_dir),
+            run_opts={"device": device},
+        )
+        model.mods.eval()
+        for p in model.mods.parameters():
+            p.requires_grad_(False)
+        return model
+
+    @classmethod
     def get_model(cls):
         if cls._model is None:
-            save_dir = cls._ensure_model_files()
-            from speechbrain.inference.speaker import EncoderClassifier
-
             device = "cuda:0" if torch.cuda.is_available() else "cpu"
-            cls._model = EncoderClassifier.from_hparams(
-                source=str(save_dir),
-                savedir=str(save_dir),
-                run_opts={"device": device},
-            )
-            print("[Embedding] ECAPA-TDNN model loaded")
+            cls._model = cls._build_model(device)
+            print(f"[Embedding] ECAPA-TDNN model loaded on {device}")
         return cls._model
 
-    def extract_embedding(self, audio_path: str) -> np.ndarray:
-        """Extract speaker embedding from audio file."""
-        model = self.get_model()
+    @classmethod
+    def get_cpu_model(cls):
+        if cls._cpu_model is None:
+            cls._cpu_model = cls._build_model("cpu")
+            print("[Embedding] ECAPA-TDNN CPU model loaded")
+        return cls._cpu_model
+
+    def extract_embedding(self, audio_path: str, force_cpu: bool = False) -> np.ndarray:
+        """Extract speaker embedding from audio file.
+
+        force_cpu=True bypasses GPU entirely — use for rare, latency-tolerant
+        operations (e.g. saving a speaker profile) so they can't be killed by
+        GPU pressure from concurrent transcription/diarization work.
+        """
+        model = self.get_cpu_model() if force_cpu else self.get_model()
 
         data, sr = sf.read(audio_path, dtype="float32", always_2d=True)
         # soundfile returns (samples, channels) — transpose to (channels, samples)
@@ -66,7 +86,9 @@ class EmbeddingService:
         if signal.shape[0] > 1:
             signal = signal.mean(dim=0, keepdim=True)
 
-        embedding = model.encode_batch(signal)
+        with torch.no_grad():
+            embedding = model.encode_batch(signal)
+
         return embedding.squeeze().detach().cpu().numpy()
 
     def cosine_similarity(self, emb1: np.ndarray, emb2: np.ndarray) -> float:

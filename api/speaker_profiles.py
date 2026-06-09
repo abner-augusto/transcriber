@@ -132,7 +132,7 @@ def save_profile_from_speaker(req: SaveFromSpeakerRequest, db: Session = Depends
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg failed: {result.stderr[:200]}")
 
-        embedding = embedding_service.extract_embedding(temp_path)
+        embedding = embedding_service.extract_embedding(temp_path, force_cpu=True)
     finally:
         Path(temp_path).unlink(missing_ok=True)
 

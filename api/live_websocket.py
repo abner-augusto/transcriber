@@ -65,6 +65,16 @@ class LiveTranscriptionSession:
             Path(self.pcm_path).unlink(missing_ok=True)
         except Exception:
             pass
+        self.speaker_centroids.clear()
+        self._all_pcm = bytearray()
+        import gc
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     async def process_chunk(self, webm_bytes: bytes, loop: asyncio.AbstractEventLoop) -> list[dict]:
         """Process a WebM/Opus chunk: convert, transcribe, identify speaker.
