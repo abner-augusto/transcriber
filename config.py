@@ -6,9 +6,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://transcriber:transcriber@localhost:5433/transcriber"
     redis_url: str = "redis://localhost:6380/0"
 
+    # Engine binaries. The models they run are named by a Preset, not here — see presets.py.
     whisper_cli_path: str = "../whisper.cpp/build/bin/Release/whisper-cli.exe"
-    whisper_model_path: str = "./models/ggml-large-v3-turbo.bin"
-    whisper_small_model_path: str = "./models/ggml-small.bin"
+    parakeet_cli_path: str = "../parakeet.cpp/build/examples/cli/Release/parakeet-cli.exe"
+
     storage_path: str = "./storage"
     hf_auth_token: str = ""
     cors_origins: str = ""  # Comma-separated, e.g. "http://localhost:3000,http://myapp.com"

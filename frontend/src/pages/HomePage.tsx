@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { listMeetings, createMeeting, deleteMeeting, searchSegments } from "../api";
+import { listMeetings, createMeeting, deleteMeeting, searchSegments, getModelSettings } from "../api";
 import type { SearchResult } from "../api";
+import type { ModelSettings } from "../types";
 import { useStore } from "../store";
 
 const STATUS_LABELS: Record<string, { text: string; color: string; dot: string }> = {
@@ -34,6 +35,8 @@ export default function HomePage() {
   const [minSpeakers, setMinSpeakers] = useState("");
   const [maxSpeakers, setMaxSpeakers] = useState("");
   const [vocabulary, setVocabulary] = useState("");
+  const [presetId, setPresetId] = useState("");
+  const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -69,11 +72,21 @@ export default function HomePage() {
 
   useEffect(() => {
     loadMeetings();
+    loadModelSettings();
   }, []);
 
   async function loadMeetings() {
     const data = await listMeetings();
     setMeetings(data);
+  }
+
+  async function loadModelSettings() {
+    try {
+      const data = await getModelSettings();
+      setModelSettings(data);
+    } catch {
+      setModelSettings(null);
+    }
   }
 
   async function handleUpload() {
@@ -88,6 +101,7 @@ export default function HomePage() {
       if (minSpeakers) form.append("min_speakers", minSpeakers);
       if (maxSpeakers) form.append("max_speakers", maxSpeakers);
       if (vocabulary.trim()) form.append("vocabulary", vocabulary.trim());
+      if (presetId) form.append("preset_id", presetId);
 
       const meeting = await createMeeting(form);
       setError(null);
@@ -108,6 +122,7 @@ export default function HomePage() {
     setMinSpeakers("");
     setMaxSpeakers("");
     setVocabulary("");
+    setPresetId("");
     setError(null);
   }
 
@@ -220,6 +235,31 @@ export default function HomePage() {
               onChange={(e) => setTitle(e.target.value)}
               className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 mb-4"
             />
+
+            {/* Preset */}
+            <div className="mb-4">
+              <label className="block text-xs text-slate-500 mb-1.5">
+                Preset
+              </label>
+              <select
+                value={presetId}
+                onChange={(e) => setPresetId(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              >
+                <option value="">
+                  Default{modelSettings ? ` (${modelSettings.presets.find((p) => p.id === modelSettings.default_preset)?.name || modelSettings.default_preset})` : ""}
+                </option>
+                {modelSettings?.presets.map((p) => (
+                  <option key={p.id} value={p.id} disabled={!p.available} title={p.available ? undefined : p.reason || undefined}>
+                    {p.name} — {p.engine}
+                    {!p.available ? ` (unavailable)` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-600 mt-1.5">
+                Choose which Engine transcribes this file. Useful for comparing results across Presets.
+              </p>
+            </div>
 
             {/* Advanced settings */}
             <details className="mb-5 group">

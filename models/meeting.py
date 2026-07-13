@@ -25,7 +25,9 @@ class Meeting(Base):
     original_filename: Mapped[str] = mapped_column(String, nullable=True)
     audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     duration: Mapped[float] = mapped_column(Float, nullable=True)
-    whisper_model: Mapped[str] = mapped_column(String, default="medium")
+    # Which Preset to transcribe with. NULL means "whatever the default is" — only an
+    # A/B run against a specific Engine needs to pin one.
+    preset_id: Mapped[str] = mapped_column(String, nullable=True)
     min_speakers: Mapped[int] = mapped_column(Integer, nullable=True)
     max_speakers: Mapped[int] = mapped_column(Integer, nullable=True)
     raw_diarization: Mapped[dict] = mapped_column(JSON, nullable=True)
@@ -45,7 +47,7 @@ class Meeting(Base):
             "status": self.status.value,
             "original_filename": self.original_filename,
             "duration": self.duration,
-            "whisper_model": self.whisper_model,
+            "preset_id": self.preset_id,
             "min_speakers": self.min_speakers,
             "max_speakers": self.max_speakers,
             "created_at": self.created_at.isoformat() if self.created_at else None,

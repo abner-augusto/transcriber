@@ -9,15 +9,46 @@ AI-powered local meeting transcription with automatic speaker identification. Up
 
 ## How it works
 
-1. **Upload, record, or go live** through the web UI
-2. **Audio extraction** - FFmpeg converts to 16kHz mono WAV
-3. **Transcription** - whisper.cpp with KB-LAB Swedish models (Metal GPU accelerated)
-4. **Speaker diarization** - pyannote.audio 3.1 separates speakers
-5. **Intro analysis** - LLM iteratively reads the transcript to detect introductions and count speakers
-6. **Speaker identification** - Names matched to voices using LLM reasoning + SpeechBrain voice embeddings
-7. **Results** - Color-coded transcript synced with audio playback, editable segments, AI-powered actions, export to 7 formats
+1. **Upload** a recording through the web UI, optionally pinning the Preset to transcribe it with
+2. **Audio extraction** — FFmpeg converts to 16 kHz mono WAV
+3. **Transcription** — a **Transcriber** (whisper.cpp or parakeet.cpp) turns the audio into **Words**
+4. **Diarization** — a **Diarizer** (pyannote 3.1, on the local GPU) turns the same audio into **Turns**
+5. **Segments** — Words and Turns are combined into the paragraphs you read. Because the currency is
+   the Word, a speaker who cuts in mid-sentence lands on their own line
+6. **Speaker naming** — every Speaker starts as "Participant N"; a saved **Voice Profile** whose
+   SpeechBrain embedding matches overrides that with a real name
+7. **Results** — colour-coded transcript synced to audio playback, editable segments, export
 
-See [FEATURES.md](FEATURES.md) for a complete feature list.
+Everything runs on this machine. No audio, transcript or voice embedding is ever sent anywhere —
+see [ADR-0001](docs/adr/0001-no-data-leaves-the-machine.md). Terms in bold are defined in
+[CONTEXT.md](CONTEXT.md).
+
+## Swapping the transcription engine
+
+The pipeline talks to two ports — `Transcriber` and `Diarizer` (`engines/ports.py`) — so a new model
+is an adapter, not a rewrite. Nothing in `tasks/` changes.
+
+```bash
+# Compare the engines you have on the audio you actually care about
+python bench/compare_engines.py test.mp3
+```
+
+To add an Engine: write an adapter in `engines/` that returns `list[Word]`, register it in
+`engines/__init__.py`, and drop a Preset JSON in `model_presets/`:
+
+```json
+{
+  "id": "parakeet-tdt-0.6b-v3",
+  "name": "Parakeet TDT 0.6B v3",
+  "engine": "parakeet.cpp",
+  "model_path": "./models/parakeet/tdt-0.6b-v3-q4_k.gguf",
+  "decoder": "tdt"
+}
+```
+
+Pick the default in Settings → Presets, or pin one per Meeting at upload to A/B two Engines on the
+same audio. A Preset whose binary or model file is missing is shown as unavailable rather than
+failing a Job in the worker.
 
 ## Architecture
 
@@ -207,42 +238,43 @@ Open **http://localhost:5174** in your browser.
 
 ```
 transcriber/
+├── CONTEXT.md                 # Domain glossary — read this first
+├── docs/adr/                  # Why things are the way they are
 ├── main.py                    # FastAPI app entry point
-├── config.py                  # Pydantic settings
+├── config.py                  # Pydantic settings (engine binaries, paths)
 ├── database.py                # SQLAlchemy + migrations
-├── model_config.py            # Model preset manager
-├── docker-compose.yml         # PostgreSQL + Redis
-├── model_presets/             # AI model configurations
+├── presets.py                 # Presets: which Engine + model to transcribe with
+├── model_presets/             # One JSON file per Preset
+├── migrations/                # Hand-run SQL, newest last
+├── engines/                   # ← the swappable half
+│   ├── ports.py               # Word, Turn, Transcriber, Diarizer
+│   ├── whisper_cpp.py         # Transcriber: whisper-cli
+│   ├── parakeet_cpp.py        # Transcriber: parakeet-cli
+│   ├── pyannote.py            # Diarizer: pyannote (local GPU)
+│   └── __init__.py            # Engine name -> adapter
 ├── api/
 │   ├── meetings.py            # Upload, CRUD, process
-│   ├── live_websocket.py      # Live transcription WebSocket
 │   ├── speakers.py            # Rename, merge speakers
 │   ├── segments.py            # Edit transcript text
-│   ├── export.py              # 7-format export
-│   ├── actions.py             # Custom LLM actions
-│   ├── encryption.py          # Encrypt/decrypt meetings
-│   └── model_settings.py      # Model preset API
+│   ├── export.py              # Multi-format export
+│   └── model_settings.py      # Preset API
 ├── services/
 │   ├── audio_service.py       # FFmpeg extraction
-│   ├── whisper_service.py     # whisper-cli wrapper
-│   ├── diarization_service.py # pyannote pipeline
 │   ├── embedding_service.py   # SpeechBrain ECAPA-TDNN
-│   ├── speaker_id_service.py  # Name matching logic
-│   ├── llm_service.py         # Ollama / OpenRouter
-│   └── encryption_service.py  # Fernet encryption
+│   └── speaker_id_service.py  # Speaker Namer: Participant N + Voice Profiles
 ├── tasks/
 │   ├── celery_app.py          # Celery config
-│   ├── process_meeting.py     # Main transcription pipeline
-│   ├── action_task.py         # LLM action execution
-│   ├── polish_task.py         # Live speaker refinement
-│   ├── finalize_task.py       # Live post-processing
-│   └── shared.py              # Shared task utilities
+│   ├── process_meeting.py     # Main pipeline
+│   ├── reprocess_task.py      # Re-diarize / re-identify
+│   └── shared.py              # build_segments: Words + Turns -> Segments
 ├── models/                    # SQLAlchemy models
 │   ├── meeting.py
 │   ├── speaker.py
 │   ├── segment.py
-│   ├── job.py
-│   └── action.py
+│   └── job.py
+├── tests/                     # pytest; fake Engines, no GPU needed
+├── bench/
+│   └── compare_engines.py     # Run every Preset over the same audio
 └── frontend/                  # React + TypeScript
     └── src/
         ├── App.tsx

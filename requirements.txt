@@ -16,3 +16,4 @@ numpy
 scipy
 python-docx
 reportlab
+pytest==8.3.4

@@ -1,7 +1,7 @@
 {
   "id": "whisper-large-v3-turbo",
   "name": "Whisper Large v3 Turbo",
-  "type": "whisper",
-  "provider": "local",
-  "model_path": null
+  "engine": "whisper.cpp",
+  "model_path": "./models/ggml-large-v3-turbo.bin",
+  "language": "pt"
 }

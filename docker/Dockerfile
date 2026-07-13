@@ -53,8 +53,9 @@ COPY --from=whisper-builder /whisper.cpp/build/bin/whisper-cli /usr/local/bin/wh
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # Copy application code
-COPY main.py config.py database.py model_config.py preferences.py ws_manager.py ./
+COPY main.py config.py database.py presets.py preferences.py ./
 COPY api/ ./api/
+COPY engines/ ./engines/
 COPY services/ ./services/
 COPY tasks/ ./tasks/
 COPY models/ ./models/

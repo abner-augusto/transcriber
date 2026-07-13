@@ -1,20 +1,26 @@
 from datetime import datetime
 
 from .celery_app import celery_app
-from .shared import update_progress, align_segments, publish_event
+from .shared import (
+    build_segments,
+    publish_event,
+    turns_from_stored,
+    update_progress,
+    words_from_stored,
+)
 from database import SessionLocal
+from engines import DIARIZER_ENGINE, make_diarizer
 from models import Meeting, Speaker, Segment, Job, MeetingStatus
 from models.job import JobStatus
-from services.diarization_service import DiarizationService
 from services.speaker_id_service import SpeakerIdService
 
 
 @celery_app.task(bind=True)
 def rediarize_task(self, meeting_id: str, job_id: str):
-    """Re-run diarization and speaker alignment without re-transcribing.
+    """Re-run diarization without re-transcribing.
 
-    Uses existing raw_transcription from the meeting, runs fresh diarization,
-    and re-aligns. Preserves manually edited segment text.
+    Keeps the Meeting's existing Words, runs the Diarizer again for fresh Turns, and
+    rebuilds the Segments from both. Preserves manually edited segment text.
     """
     db = SessionLocal()
     try:
@@ -28,37 +34,40 @@ def rediarize_task(self, meeting_id: str, job_id: str):
         meeting.status = MeetingStatus.PROCESSING
         db.commit()
 
-        whisper_segments = meeting.raw_transcription
-        if not whisper_segments:
+        words = words_from_stored(meeting.raw_transcription)
+        if not words:
             raise RuntimeError("No existing transcription found. Run full processing first.")
 
         audio_path = meeting.audio_filepath
         if not audio_path:
             raise RuntimeError("No audio file found.")
 
-        diarization_service = DiarizationService()
+        diarizer = make_diarizer()
         speaker_id_service = SpeakerIdService()
 
         # Step 1: Fresh diarization
         update_progress(db, job, meeting, 10, "Running new speaker identification...")
-        diarization_segments = diarization_service.diarize(
+        turns = diarizer.diarize(
             audio_path,
             min_speakers=meeting.min_speakers,
             max_speakers=meeting.max_speakers,
         )
-        meeting.raw_diarization = diarization_segments
+        meeting.raw_diarization = {
+            "engine": DIARIZER_ENGINE,
+            "turns": [t.to_dict() for t in turns],
+        }
         db.commit()
         update_progress(db, job, meeting, 50, "Diarization complete")
 
-        # Step 2: Re-align
+        # Step 2: Rebuild the Segments from the old Words and the new Turns
         update_progress(db, job, meeting, 55, "Synchronizing speakers with text...")
-        aligned = align_segments(whisper_segments, diarization_segments)
+        aligned = build_segments(words, turns)
 
         # Step 3: Speaker naming (Participant N, overridden by voice profile matches)
         update_progress(db, job, meeting, 65, "Matching against saved voice profiles...")
-        speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
+        speaker_labels = sorted({t.speaker for t in turns})
         speaker_info = speaker_id_service.name_speakers(
-            db, speaker_labels, diarization_segments, audio_path
+            db, speaker_labels, turns, audio_path
         )
 
         # Step 4: Collect edits, recreate speakers + segments
@@ -86,9 +95,9 @@ def rediarize_task(self, meeting_id: str, job_id: str):
 def reidentify_task(self, meeting_id: str, job_id: str):
     """Re-run speaker naming without re-transcribing or re-diarizing.
 
-    Uses existing raw_transcription and raw_diarization, re-aligns, and re-names
-    speakers against the saved Voice Profiles. This is how a newly-saved Voice
-    Profile gets applied to an already-processed Meeting. Preserves edited text.
+    Reuses the Meeting's existing Words and Turns and only re-names the Speakers against
+    the saved Voice Profiles. This is how a newly-saved Voice Profile gets applied to an
+    already-processed Meeting. Preserves edited text.
     """
     db = SessionLocal()
     try:
@@ -102,9 +111,9 @@ def reidentify_task(self, meeting_id: str, job_id: str):
         meeting.status = MeetingStatus.PROCESSING
         db.commit()
 
-        whisper_segments = meeting.raw_transcription
-        diarization_segments = meeting.raw_diarization
-        if not whisper_segments or not diarization_segments:
+        words = words_from_stored(meeting.raw_transcription)
+        turns = turns_from_stored(meeting.raw_diarization)
+        if not words or not turns:
             raise RuntimeError("No existing transcription/diarization found. Run full processing first.")
 
         audio_path = meeting.audio_filepath
@@ -113,15 +122,15 @@ def reidentify_task(self, meeting_id: str, job_id: str):
 
         speaker_id_service = SpeakerIdService()
 
-        # Step 1: Re-align (uses existing data)
+        # Step 1: Rebuild the Segments from the stored Words and Turns
         update_progress(db, job, meeting, 20, "Synchronizing speakers with text...")
-        aligned = align_segments(whisper_segments, diarization_segments)
+        aligned = build_segments(words, turns)
 
         # Step 2: Re-name speakers against the saved Voice Profiles
         update_progress(db, job, meeting, 40, "Matching against saved voice profiles...")
-        speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
+        speaker_labels = sorted({t.speaker for t in turns})
         speaker_info = speaker_id_service.name_speakers(
-            db, speaker_labels, diarization_segments, audio_path
+            db, speaker_labels, turns, audio_path
         )
 
         # Step 3: Rebuild

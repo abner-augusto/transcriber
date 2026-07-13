@@ -6,19 +6,19 @@ log = logging.getLogger(__name__)
 from celery.exceptions import SoftTimeLimitExceeded
 
 from .celery_app import celery_app
-from .shared import update_progress, align_segments, publish_event
+from .shared import update_progress, build_segments, publish_event
 from database import SessionLocal
+from engines import DIARIZER_ENGINE, make_diarizer, make_transcriber
 from models import Meeting, Speaker, Segment, Job, MeetingStatus
 from models.job import JobStatus
+from presets import resolve_preset
 from services.audio_service import AudioService
-from services.whisper_service import WhisperService
-from services.diarization_service import DiarizationService
 from services.speaker_id_service import SpeakerIdService
 
 
 @celery_app.task(bind=True)
 def process_meeting_task(self, meeting_id: str, job_id: str):
-    """Main pipeline: audio extraction -> transcription -> diarization -> alignment -> speaker naming."""
+    """Main pipeline: audio extraction -> transcription -> diarization -> segments -> speaker naming."""
     db = SessionLocal()
 
     try:
@@ -38,9 +38,11 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         db.commit()
 
         audio_service = AudioService()
-        whisper_service = WhisperService()
-        diarization_service = DiarizationService()
         speaker_id_service = SpeakerIdService()
+
+        preset = resolve_preset(meeting.preset_id)
+        transcriber = make_transcriber(preset)
+        diarizer = make_diarizer()
 
         # Step 1: Extract audio
         update_progress(db, job, meeting, 2, "Extracting audio...")
@@ -54,33 +56,40 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         update_progress(db, job, meeting, 5, "Audio extracted")
 
         # Step 2: Transcription
-        update_progress(db, job, meeting, 10, "Transcribing with Whisper...")
-        whisper_segments = whisper_service.transcribe(audio_path, vocabulary=meeting.vocabulary)
-        meeting.raw_transcription = whisper_segments
+        update_progress(db, job, meeting, 10, f"Transcribing with {preset['name']}...")
+        words = transcriber.transcribe(audio_path, vocabulary=meeting.vocabulary)
+        meeting.raw_transcription = {
+            "engine": preset["engine"],
+            "preset": preset["id"],
+            "words": [w.to_dict() for w in words],
+        }
         db.commit()
         update_progress(db, job, meeting, 45, "Transcription complete")
 
         # Step 3: Diarization
         update_progress(db, job, meeting, 50, "Identifying speakers (diarization)...")
-        diarization_segments = diarization_service.diarize(
+        turns = diarizer.diarize(
             audio_path,
             min_speakers=meeting.min_speakers,
             max_speakers=meeting.max_speakers,
         )
-        meeting.raw_diarization = diarization_segments
+        meeting.raw_diarization = {
+            "engine": DIARIZER_ENGINE,
+            "turns": [t.to_dict() for t in turns],
+        }
         db.commit()
         update_progress(db, job, meeting, 70, "Diarization complete")
 
-        # Step 4: Alignment
+        # Step 4: Build the Segments a reader sees, from the Words and the Turns
         update_progress(db, job, meeting, 75, "Synchronizing speakers with text...")
-        aligned = align_segments(whisper_segments, diarization_segments)
+        aligned = build_segments(words, turns)
         update_progress(db, job, meeting, 80, "Synchronization complete")
 
         # Step 5: Speaker naming (Participant N, overridden by voice profile matches)
         update_progress(db, job, meeting, 85, "Matching against saved voice profiles...")
-        speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
+        speaker_labels = sorted({t.speaker for t in turns})
         speaker_info = speaker_id_service.name_speakers(
-            db, speaker_labels, diarization_segments, audio_path
+            db, speaker_labels, turns, audio_path
         )
 
         update_progress(db, job, meeting, 90, "Saving results...")

@@ -4,7 +4,7 @@ export interface Meeting {
   status: "uploading" | "uploaded" | "processing" | "recording" | "finalizing" | "completed" | "failed";
   original_filename: string | null;
   duration: number | null;
-  whisper_model: string;
+  preset_id: string | null;
   min_speakers: number | null;
   max_speakers: number | null;
   mode: "upload" | "live";
@@ -68,6 +68,19 @@ export interface ProgressUpdate {
   message?: string;
 }
 
+export interface Preset {
+  id: string;
+  name: string;
+  engine: string;
+  model_path: string;
+  language?: string | null;
+  decoder?: string | null;
+  available: boolean;
+  reason: string | null;
+}
+
 export interface ModelSettings {
-  whisper: { model: string; small_model: string };
+  presets: Preset[];
+  default_preset: string;
+  engines: string[];
 }

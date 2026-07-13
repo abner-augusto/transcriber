@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Meeting, Segment, Speaker, Job, ModelSettings } from "./types";
+import type { Meeting, Segment, Speaker, Job, ModelSettings, Preset } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -94,7 +94,18 @@ export async function getModelSettings(): Promise<ModelSettings> {
   return data;
 }
 
-export async function createModelPreset(preset: { name: string; model: string; base_url: string }) {
+export async function setDefaultPreset(presetId: string): Promise<{ default_preset: string }> {
+  const { data } = await api.put("/model-settings", { default_preset: presetId });
+  return data;
+}
+
+export async function createModelPreset(preset: {
+  name: string;
+  engine: string;
+  model_path: string;
+  language?: string;
+  decoder?: string;
+}): Promise<Preset> {
   const { data } = await api.post("/model-settings/presets", preset);
   return data;
 }

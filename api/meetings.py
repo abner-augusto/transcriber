@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from sqlalchemy import func
 
+import presets
 from database import get_db
 from models import Meeting, MeetingStatus, Speaker, Segment
 from models.job import Job, JobType, JobStatus
@@ -56,6 +57,7 @@ async def create_meeting(
     min_speakers: int = Form(None),
     max_speakers: int = Form(None),
     vocabulary: str = Form(None),
+    preset_id: str = Form(None),
     db: Session = Depends(get_db),
 ):
     # Validate title
@@ -83,6 +85,11 @@ async def create_meeting(
     if min_speakers and max_speakers and min_speakers > max_speakers:
         raise HTTPException(400, "min_speakers cannot exceed max_speakers")
 
+    # Pin the Preset only if one was chosen; NULL means "whatever the default is at
+    # the time the Job runs".
+    if preset_id and not presets.get_preset(preset_id):
+        raise HTTPException(400, f"Unknown preset '{preset_id}'")
+
     # Use global default vocabulary if none provided
     from preferences import load_preferences
     effective_vocab = vocabulary.strip()[:2000] if vocabulary else None
@@ -99,6 +106,7 @@ async def create_meeting(
         min_speakers=min_speakers,
         max_speakers=max_speakers,
         vocabulary=effective_vocab,
+        preset_id=preset_id or None,
     )
     db.add(meeting)
     db.flush()

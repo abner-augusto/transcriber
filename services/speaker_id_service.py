@@ -2,6 +2,8 @@ import logging
 import subprocess
 from pathlib import Path
 
+from engines import Turn
+
 log = logging.getLogger(__name__)
 
 # Speaker colors palette
@@ -34,7 +36,7 @@ class SpeakerIdService:
         self,
         db,
         speaker_labels: list[str],
-        diarization_segments: list[dict],
+        turns: list[Turn],
         audio_path: str,
     ) -> dict[str, dict]:
         """Return {speaker_label: {name, confidence, identified_by}} for every label."""
@@ -42,9 +44,7 @@ class SpeakerIdService:
 
         profiles = self._load_profiles(db)
         if profiles and audio_path:
-            self._apply_voice_profiles(
-                speaker_info, profiles, diarization_segments, audio_path
-            )
+            self._apply_voice_profiles(speaker_info, profiles, turns, audio_path)
 
         return speaker_info
 
@@ -68,7 +68,7 @@ class SpeakerIdService:
         self,
         speaker_info: dict[str, dict],
         profiles: list,
-        diarization_segments: list[dict],
+        turns: list[Turn],
         audio_path: str,
     ) -> None:
         from services.embedding_service import EmbeddingService
@@ -76,7 +76,7 @@ class SpeakerIdService:
         embedding_service = EmbeddingService()
 
         for label, info in speaker_info.items():
-            sample = self._longest_segment(diarization_segments, label)
+            sample = self._longest_turn(turns, label)
             if not sample:
                 continue
 
@@ -99,23 +99,23 @@ class SpeakerIdService:
                 info["identified_by"] = "voice_profile"
                 info["confidence"] = round(best_sim, 3)
 
-    def _longest_segment(self, diarization_segments: list[dict], label: str) -> dict | None:
-        """Longest turn by this speaker — the best sample to embed. None if too short."""
-        turns = [s for s in diarization_segments if s["speaker"] == label]
-        if not turns:
+    def _longest_turn(self, turns: list[Turn], label: str) -> Turn | None:
+        """Longest Turn by this Speaker — the best sample to embed. None if too short."""
+        mine = [t for t in turns if t.speaker == label]
+        if not mine:
             return None
-        longest = max(turns, key=lambda s: s["end"] - s["start"])
-        if longest["end"] - longest["start"] < MIN_PROFILE_SAMPLE_SECONDS:
+        longest = max(mine, key=lambda t: t.end - t.start)
+        if longest.end - longest.start < MIN_PROFILE_SAMPLE_SECONDS:
             return None
         return longest
 
-    def _embed_segment(self, embedding_service, audio_path: str, label: str, segment: dict):
+    def _embed_segment(self, embedding_service, audio_path: str, label: str, turn: Turn):
         temp_wav = str(Path(audio_path).parent / f"profile_match_{label}.wav")
-        duration = min(segment["end"] - segment["start"], MAX_PROFILE_SAMPLE_SECONDS)
+        duration = min(turn.end - turn.start, MAX_PROFILE_SAMPLE_SECONDS)
         subprocess.run(
             [
                 "ffmpeg", "-y",
-                "-ss", str(segment["start"]),
+                "-ss", str(turn.start),
                 "-t", str(duration),
                 "-i", audio_path,
                 "-ar", "16000", "-ac", "1",
