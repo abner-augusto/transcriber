@@ -1,10 +1,19 @@
 import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path so lazy imports (presets, engines, etc.) work
+# Ensure project root is on sys.path so lazy imports (presets, engines, etc.) work.
+#
+# Celery only lends us the cwd: it imports the app named by -A inside
+# celery.utils.imports.cwd_in_path(), which puts the cwd on sys.path and then
+# takes it back off. Boot-time imports therefore resolve, but anything a task
+# imports lazily — engines.pyannote, and preferences underneath it — would not.
+#
+# The insert must be unconditional. Celery's borrowed entry is still on sys.path
+# while this runs, so a "not in sys.path" guard would skip the insert and leave
+# nothing behind once celery removes it. Inserting a second copy is the point:
+# sys.path.remove() drops only one, and ours outlives the context.
 _project_root = str(Path(__file__).resolve().parent.parent)
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
+sys.path.insert(0, _project_root)
 
 from celery import Celery
 from config import settings
