@@ -8,10 +8,6 @@ from config import settings
 router = APIRouter(prefix="/api/model-settings", tags=["model-settings"])
 
 
-class UpdateAssignments(BaseModel):
-    assignments: dict[str, str]
-
-
 class CreatePreset(BaseModel):
     name: str
     model: str
@@ -30,19 +26,6 @@ def get_model_settings():
     mgr = get_model_config()
     mgr.reload()
     return {
-        "presets": mgr.get_presets(type_filter="llm"),
-        "assignments": {k: v for k, v in mgr.get_assignments().items() if k not in ("transcription", "live_transcription")},
-        "whisper": _whisper_info(),
-    }
-
-
-@router.put("")
-def update_model_settings(body: UpdateAssignments):
-    mgr = get_model_config()
-    mgr.update_assignments(body.assignments)
-    return {
-        "presets": mgr.get_presets(type_filter="llm"),
-        "assignments": {k: v for k, v in mgr.get_assignments().items() if k not in ("transcription", "live_transcription")},
         "whisper": _whisper_info(),
     }
 

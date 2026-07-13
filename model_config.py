@@ -16,11 +16,7 @@ log = logging.getLogger(__name__)
 PRESETS_DIR = Path(__file__).parent / "model_presets"
 
 TASK_DEFAULTS = {
-    "actions": "gemini-flash-lite",
-    "analysis": "gemini-flash-lite",
-    "live": "gemini-flash-lite",
     "transcription": "whisper-large-v3-turbo",
-    "live_transcription": "whisper-small",
 }
 
 

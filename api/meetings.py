@@ -11,7 +11,6 @@ from sqlalchemy import func
 
 from database import get_db
 from models import Meeting, MeetingStatus, Speaker, Segment
-from models.meeting import MeetingMode, RecordingStatus
 from models.job import Job, JobType, JobStatus
 from config import get_meeting_path
 from tasks.process_meeting import process_meeting_task
@@ -151,12 +150,8 @@ def delete_meeting(meeting_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-class ProcessRequest(BaseModel):
-    skip_llm: bool = False
-
-
 @router.post("/{meeting_id}/process")
-def start_processing(meeting_id: str, body: ProcessRequest = ProcessRequest(), db: Session = Depends(get_db)):
+def start_processing(meeting_id: str, db: Session = Depends(get_db)):
     from sqlalchemy import update
 
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -187,43 +182,11 @@ def start_processing(meeting_id: str, body: ProcessRequest = ProcessRequest(), d
     db.commit()
 
     # Queue task
-    result = process_meeting_task.delay(meeting.id, job.id, body.skip_llm)
+    result = process_meeting_task.delay(meeting.id, job.id)
     job.celery_task_id = result.id
     db.commit()
 
     return job.to_dict()
-
-
-class LiveMeetingRequest(BaseModel):
-    title: str
-    vocabulary: str | None = None
-
-
-@router.post("/live")
-def create_live_meeting(req: LiveMeetingRequest, db: Session = Depends(get_db)):
-    # Use global default vocabulary if none provided
-    from preferences import load_preferences
-    effective_vocab = req.vocabulary.strip()[:2000] if req.vocabulary else None
-    if not effective_vocab:
-        prefs = load_preferences()
-        default_vocab = prefs.get("default_vocabulary", "")
-        if default_vocab:
-            effective_vocab = default_vocab
-
-    meeting = Meeting(
-        title=req.title,
-        status=MeetingStatus.RECORDING,
-        mode=MeetingMode.LIVE.value,
-        recording_status=RecordingStatus.RECORDING.value,
-        vocabulary=effective_vocab,
-    )
-    db.add(meeting)
-    db.commit()
-
-    # Create meeting storage directory
-    get_meeting_path(meeting.id)
-
-    return meeting.to_dict()
 
 
 @router.post("/{meeting_id}/rediarize")

@@ -1,7 +1,0 @@
-{
-  "id": "claude-sonnet-4",
-  "name": "Claude Sonnet 4",
-  "type": "llm",
-  "model": "anthropic/claude-sonnet-4",
-  "base_url": "https://openrouter.ai/api/v1"
-}

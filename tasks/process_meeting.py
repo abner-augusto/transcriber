@@ -1,4 +1,3 @@
-import json
 import logging
 from datetime import datetime
 
@@ -10,18 +9,16 @@ from .celery_app import celery_app
 from .shared import update_progress, align_segments, publish_event
 from database import SessionLocal
 from models import Meeting, Speaker, Segment, Job, MeetingStatus
-from models.job import JobStatus, JobType
+from models.job import JobStatus
 from services.audio_service import AudioService
 from services.whisper_service import WhisperService
 from services.diarization_service import DiarizationService
 from services.speaker_id_service import SpeakerIdService
-from model_config import get_model_config
-from preferences import load_preferences
 
 
 @celery_app.task(bind=True)
-def process_meeting_task(self, meeting_id: str, job_id: str, skip_llm: bool = False):
-    """Main pipeline: audio extraction -> diarization -> transcription -> alignment -> speaker ID."""
+def process_meeting_task(self, meeting_id: str, job_id: str):
+    """Main pipeline: audio extraction -> transcription -> diarization -> alignment -> speaker naming."""
     db = SessionLocal()
 
     try:
@@ -43,8 +40,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str, skip_llm: bool = Fa
         audio_service = AudioService()
         whisper_service = WhisperService()
         diarization_service = DiarizationService()
-        analysis_preset = get_model_config().get_model_for_task("analysis")
-        speaker_id_service = SpeakerIdService(llm_preset=analysis_preset)
+        speaker_id_service = SpeakerIdService()
 
         # Step 1: Extract audio
         update_progress(db, job, meeting, 2, "Extracting audio...")
@@ -57,140 +53,35 @@ def process_meeting_task(self, meeting_id: str, job_id: str, skip_llm: bool = Fa
         db.commit()
         update_progress(db, job, meeting, 5, "Audio extracted")
 
-        # Step 2: Transcription (before diarization so LLM can count speakers)
-        update_progress(db, job, meeting, 7, "Transcribing with Whisper...")
+        # Step 2: Transcription
+        update_progress(db, job, meeting, 10, "Transcribing with Whisper...")
         whisper_segments = whisper_service.transcribe(audio_path, vocabulary=meeting.vocabulary)
         meeting.raw_transcription = whisper_segments
         db.commit()
-        update_progress(db, job, meeting, 35, "Transcription complete")
+        update_progress(db, job, meeting, 45, "Transcription complete")
 
-        # Step 3: Iterative intro analysis - LLM reads chunks until intro is over
-        min_speakers = meeting.min_speakers
-        max_speakers = meeting.max_speakers
-        intro_result = {"speaker_count": 0, "names": [], "intro_end_time": 0}
-
-        if not min_speakers and not skip_llm:
-            update_progress(db, job, meeting, 37, "Analyzing introduction phase with AI...")
-            from services.llm_service import LLMService
-            llm = LLMService(preset=analysis_preset)
-
-            def on_llm_progress(step_text):
-                update_progress(db, job, meeting, 38, step_text)
-
-            intro_result = llm.analyze_intro_iteratively(
-                whisper_segments,
-                on_progress=on_llm_progress,
-            )
-
-            if intro_result["speaker_count"] > 0:
-                min_speakers = intro_result["speaker_count"]
-                max_speakers = max_speakers or min_speakers + 1
-                meeting.intro_end_time = intro_result["intro_end_time"]
-                names_str = ", ".join(intro_result["names"])
-                update_progress(db, job, meeting, 40,
-                    f"Found {min_speakers} participants ({names_str}), "
-                    f"intro ended at {intro_result['intro_end_time']:.0f}s")
-
-        # Step 4: Diarization (with speaker count from LLM)
-        update_progress(db, job, meeting, 42, "Identifying speakers (diarization)...")
+        # Step 3: Diarization
+        update_progress(db, job, meeting, 50, "Identifying speakers (diarization)...")
         diarization_segments = diarization_service.diarize(
             audio_path,
-            min_speakers=min_speakers,
-            max_speakers=max_speakers,
+            min_speakers=meeting.min_speakers,
+            max_speakers=meeting.max_speakers,
         )
         meeting.raw_diarization = diarization_segments
         db.commit()
-        update_progress(db, job, meeting, 65, "Diarization complete")
+        update_progress(db, job, meeting, 70, "Diarization complete")
 
-        # Step 5: Alignment
-        update_progress(db, job, meeting, 67, "Synchronizing speakers with text...")
+        # Step 4: Alignment
+        update_progress(db, job, meeting, 75, "Synchronizing speakers with text...")
         aligned = align_segments(whisper_segments, diarization_segments)
-        update_progress(db, job, meeting, 75, "Synchronization complete")
+        update_progress(db, job, meeting, 80, "Synchronization complete")
 
-        # Step 6: Speaker identification
-        update_progress(db, job, meeting, 77, "Identifying speakers...")
-
+        # Step 5: Speaker naming (Participant N, overridden by voice profile matches)
+        update_progress(db, job, meeting, 85, "Matching against saved voice profiles...")
         speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
-        speaker_info = {}
-
-        known_names = intro_result.get("names", [])
-        if known_names or meeting.intro_end_time:
-            update_progress(db, job, meeting, 80, "Mapping speaker names with AI...")
-            speaker_info = speaker_id_service.identify_speakers_model2(
-                aligned, audio_path, diarization_segments, known_names=known_names
-            )
-
-        # Fill in any speakers not identified by Model 2
-        unidentified = [l for l in speaker_labels if l not in speaker_info]
-        if unidentified:
-            fallback = speaker_id_service.identify_speakers_model3(unidentified)
-            # Number fallback speakers starting after identified count
-            offset = len(speaker_info)
-            for i, (label, info) in enumerate(fallback.items()):
-                if offset > 0:
-                    info["name"] = f"Participant {offset + i + 1}"
-                speaker_info[label] = info
-
-        # Step 6b: Match against saved speaker profiles (if enabled)
-        prefs = load_preferences()
-        profiles = []
-        if prefs.get("speaker_profiles_enabled", True):
-            update_progress(db, job, meeting, 87, "Matching against saved voice profiles...")
-            from models.speaker_profile import SpeakerProfile
-            from services.embedding_service import EmbeddingService
-            profiles = db.query(SpeakerProfile).all()
-        if profiles:
-            embedding_service = EmbeddingService()
-            PROFILE_MATCH_THRESHOLD = 0.55
-
-            for label, info in speaker_info.items():
-                # Only try profile matching for speakers not already identified by intro/LLM
-                if info.get("identified_by") == "intro_llm" and info.get("confidence", 0) > 0.7:
-                    continue
-
-                # Extract embedding for this speaker from their segments
-                speaker_segs = [s for s in diarization_segments if s["speaker"] == label]
-                if not speaker_segs:
-                    continue
-
-                # Use the longest segment for best embedding quality
-                best_seg = max(speaker_segs, key=lambda s: s["end"] - s["start"])
-                if best_seg["end"] - best_seg["start"] < 2.0:
-                    continue
-
-                try:
-                    import subprocess, wave
-                    from pathlib import Path
-
-                    temp_spk = str(Path(audio_path).parent / f"profile_match_{label}.wav")
-                    subprocess.run([
-                        "ffmpeg", "-y",
-                        "-ss", str(best_seg["start"]),
-                        "-t", str(min(best_seg["end"] - best_seg["start"], 15)),
-                        "-i", audio_path,
-                        "-ar", "16000", "-ac", "1",
-                        temp_spk,
-                    ], capture_output=True, timeout=15)
-
-                    emb = embedding_service.extract_embedding(temp_spk)
-                    Path(temp_spk).unlink(missing_ok=True)
-
-                    # Compare against all profiles
-                    best_profile = None
-                    best_sim = 0.0
-                    for profile in profiles:
-                        profile_emb = profile.get_embedding()
-                        sim = embedding_service.cosine_similarity(emb, profile_emb)
-                        if sim > best_sim:
-                            best_sim = sim
-                            best_profile = profile
-
-                    if best_profile and best_sim >= PROFILE_MATCH_THRESHOLD:
-                        info["name"] = best_profile.name
-                        info["identified_by"] = "voice_profile"
-                        info["confidence"] = round(best_sim, 3)
-                except Exception as e:
-                    log.debug(f"Profile matching failed for {label}: {e}")
+        speaker_info = speaker_id_service.name_speakers(
+            db, speaker_labels, diarization_segments, audio_path
+        )
 
         update_progress(db, job, meeting, 90, "Saving results...")
 
@@ -251,21 +142,6 @@ def process_meeting_task(self, meeting_id: str, job_id: str, skip_llm: bool = Fa
         db.commit()
 
         update_progress(db, job, meeting, 100, "Done!")
-
-        # Auto-extract insights (decisions, action items, open questions)
-        try:
-            from .insights_task import extract_insights_task
-            insights_job = Job(
-                meeting_id=meeting_id,
-                job_type=JobType.EXTRACT_INSIGHTS,
-                status=JobStatus.PENDING,
-            )
-            db.add(insights_job)
-            db.commit()
-            extract_insights_task.delay(meeting_id, str(insights_job.id))
-            log.info(f"Queued automatic insights extraction for meeting {meeting_id}")
-        except Exception as e:
-            log.warning(f"Auto insights extraction failed to queue: {e}")
 
         return {"status": "completed", "meeting_id": meeting_id}
 

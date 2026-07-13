@@ -12,7 +12,6 @@ export interface Meeting {
   recording_status: "recording" | "stopped" | "finalizing" | "complete" | null;
   created_at: string;
   updated_at: string;
-  is_encrypted: boolean;
   speaker_count: number;
   segment_count: number;
   speakers?: Speaker[];
@@ -61,53 +60,14 @@ export interface Job {
 }
 
 export interface ProgressUpdate {
-  type: "progress" | "error" | "ping" | "live_segment" | "polish_started" | "polish_complete" | "finalize_started" | "finalize_complete" | "speaker_reassignment" | "action_running" | "action_completed" | "action_failed";
+  type: "progress" | "error" | "ping";
   progress?: number;
   step?: string;
   status?: string;
   error?: string;
   message?: string;
-  segment?: Segment;
-  segments?: Segment[];
-  speakers?: Speaker[];
-  pass_number?: number;
-  action_result_id?: string;
-  action_id?: string;
-  action_name?: string;
-}
-
-export interface Action {
-  id: string;
-  name: string;
-  prompt: string;
-  is_default: boolean;
-  created_at: string;
-}
-
-export interface ActionResult {
-  id: string;
-  action_id: string;
-  meeting_id: string;
-  action_name: string;
-  status: "pending" | "running" | "completed" | "failed";
-  result_text: string | null;
-  error: string | null;
-  celery_task_id: string | null;
-  is_encrypted: boolean;
-  created_at: string;
-  completed_at: string | null;
-}
-
-export interface ModelPreset {
-  id: string;
-  name: string;
-  type: "llm";
-  model: string;
-  base_url: string;
 }
 
 export interface ModelSettings {
-  presets: ModelPreset[];
-  assignments: Record<string, string>;
   whisper: { model: string; small_model: string };
 }

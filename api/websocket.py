@@ -7,7 +7,6 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from config import settings
 from database import SessionLocal
 from models import Meeting
-from ws_manager import manager
 
 router = APIRouter()
 
@@ -24,7 +23,7 @@ async def meeting_websocket(websocket: WebSocket, meeting_id: str):
     finally:
         db.close()
 
-    await manager.connect(meeting_id, websocket)
+    await websocket.accept()
 
     # Subscribe to Redis pub/sub for this meeting
     r = aioredis.from_url(settings.redis_url)
@@ -64,4 +63,3 @@ async def meeting_websocket(websocket: WebSocket, meeting_id: str):
             await r.aclose()
         except Exception:
             pass
-        manager.disconnect(meeting_id, websocket)

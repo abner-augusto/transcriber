@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Meeting, Segment, Speaker, Job, Action, ActionResult, ModelSettings } from "./types";
+import type { Meeting, Segment, Speaker, Job, ModelSettings } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -10,11 +10,6 @@ export async function listMeetings(): Promise<Meeting[]> {
 
 export async function createMeeting(form: FormData): Promise<Meeting> {
   const { data } = await api.post("/meetings", form);
-  return data;
-}
-
-export async function createLiveMeeting(title: string, vocabulary?: string): Promise<Meeting> {
-  const { data } = await api.post("/meetings/live", { title, vocabulary: vocabulary || null });
   return data;
 }
 
@@ -92,63 +87,10 @@ export function getExportUrl(meetingId: string, format: string): string {
   return `/api/meetings/${meetingId}/export?format=${format}`;
 }
 
-// --- Actions ---
-
-export async function listActions(): Promise<Action[]> {
-  const { data } = await api.get("/actions");
-  return data;
-}
-
-export async function createAction(name: string, prompt: string): Promise<Action> {
-  const { data } = await api.post("/actions", { name, prompt });
-  return data;
-}
-
-export async function updateAction(id: string, updates: { name?: string; prompt?: string }): Promise<Action> {
-  const { data } = await api.put(`/actions/${id}`, updates);
-  return data;
-}
-
-export async function deleteAction(id: string): Promise<void> {
-  await api.delete(`/actions/${id}`);
-}
-
-export async function runAction(actionId: string, meetingId: string): Promise<ActionResult> {
-  const { data } = await api.post(`/actions/${actionId}/run/${meetingId}`);
-  return data;
-}
-
-export async function listActionResults(meetingId: string): Promise<ActionResult[]> {
-  const { data } = await api.get(`/actions/results/${meetingId}`);
-  return data;
-}
-
-export async function deleteActionResult(id: string): Promise<void> {
-  await api.delete(`/actions/results/${id}`);
-}
-
-// --- App Settings ---
-
-export interface AppSettings {
-  llm_base_url: string;
-  llm_model: string;
-  llm_enabled: boolean;
-}
-
-export async function getAppSettings(): Promise<AppSettings> {
-  const { data } = await api.get("/settings");
-  return data;
-}
-
 // --- Model Settings ---
 
 export async function getModelSettings(): Promise<ModelSettings> {
   const { data } = await api.get("/model-settings");
-  return data;
-}
-
-export async function updateModelSettings(assignments: Record<string, string>): Promise<ModelSettings> {
-  const { data } = await api.put("/model-settings", { assignments });
   return data;
 }
 
@@ -215,30 +157,6 @@ export async function saveProfileFromSpeaker(
   return data;
 }
 
-// --- Encryption ---
-
-export async function encryptMeeting(
-  meetingId: string,
-  password: string,
-  includeVersions: boolean
-): Promise<Meeting> {
-  const { data } = await api.post(`/meetings/${meetingId}/encrypt`, {
-    password,
-    include_versions: includeVersions,
-  });
-  return data;
-}
-
-export async function decryptMeeting(
-  meetingId: string,
-  password: string
-): Promise<Meeting> {
-  const { data } = await api.post(`/meetings/${meetingId}/decrypt`, {
-    password,
-  });
-  return data;
-}
-
 // --- Preferences ---
 
 export interface Preferences {
@@ -255,12 +173,6 @@ export async function getPreferences(): Promise<Preferences> {
 export async function updatePreferences(prefs: Partial<Preferences>): Promise<Preferences> {
   const { data } = await api.put("/settings/preferences", prefs);
   return data;
-}
-
-// --- Action Result Export ---
-
-export function getActionResultExportUrl(resultId: string, format: string): string {
-  return `/api/actions/results/${resultId}/export?format=${format}`;
 }
 
 // --- Vocabulary Learning ---
@@ -284,68 +196,6 @@ export async function deleteVocabularyEntry(id: string): Promise<void> {
 
 export async function suggestVocabulary(): Promise<{ terms: string[]; text: string }> {
   const { data } = await api.get("/vocabulary/suggest");
-  return data;
-}
-
-// --- Meeting Insights ---
-
-export interface MeetingInsight {
-  id: string;
-  meeting_id: string;
-  insight_type: "decision" | "action_item" | "open_question";
-  status: "open" | "completed" | "dismissed";
-  content: string;
-  assignee: string | null;
-  source_start_time: number | null;
-  source_end_time: number | null;
-  order: number;
-  created_at: string;
-}
-
-export async function listInsights(meetingId: string): Promise<MeetingInsight[]> {
-  const { data } = await api.get(`/meetings/${meetingId}/insights`);
-  return data;
-}
-
-export async function extractInsights(meetingId: string): Promise<Job> {
-  const { data } = await api.post(`/meetings/${meetingId}/extract-insights`);
-  return data;
-}
-
-export async function updateInsight(
-  id: string,
-  updates: { status?: string; content?: string; assignee?: string }
-): Promise<MeetingInsight> {
-  const { data } = await api.put(`/insights/${id}`, updates);
-  return data;
-}
-
-export async function deleteInsight(id: string): Promise<void> {
-  await api.delete(`/insights/${id}`);
-}
-
-// --- Protocol ---
-
-export async function generateProtocol(meetingId: string): Promise<{ protocol_text: string }> {
-  const { data } = await api.post(`/meetings/${meetingId}/generate-protocol`);
-  return data;
-}
-
-export async function getProtocol(meetingId: string): Promise<{ protocol_text: string }> {
-  const { data } = await api.get(`/meetings/${meetingId}/protocol`);
-  return data;
-}
-
-export async function saveProtocol(meetingId: string, protocolText: string): Promise<void> {
-  await api.put(`/meetings/${meetingId}/protocol`, { protocol_text: protocolText });
-}
-
-export async function exportProtocolDocx(meetingId: string, protocolText: string): Promise<Blob> {
-  const { data } = await api.post(
-    `/meetings/${meetingId}/export-protocol`,
-    { protocol_text: protocolText },
-    { responseType: "blob" }
-  );
   return data;
 }
 

@@ -1,26 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import MeetingPage from "./pages/MeetingPage";
 import SettingsDialog from "./components/SettingsDialog";
-import { getAppSettings } from "./api";
-import { useStore } from "./store";
 
 export default function App() {
   const [showSettings, setShowSettings] = useState(false);
-  const setLlmEnabled = useStore((state) => state.setLlmEnabled);
-
-  useEffect(() => {
-    async function init() {
-      try {
-        const settings = await getAppSettings();
-        setLlmEnabled(settings.llm_enabled);
-      } catch (err) {
-        console.error("Failed to fetch settings:", err);
-      }
-    }
-    init();
-  }, [setLlmEnabled]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">

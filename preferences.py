@@ -9,11 +9,10 @@ _DEFAULTS = {
     "default_vocabulary": "",
     "speaker_profiles_enabled": False,
     "hf_auth_token": "",
-    "llm_api_key": "",
 }
 
 # Values that should be masked when sending to frontend
-_SECRET_KEYS = {"hf_auth_token", "llm_api_key"}
+_SECRET_KEYS = {"hf_auth_token"}
 
 
 def load_preferences() -> dict:

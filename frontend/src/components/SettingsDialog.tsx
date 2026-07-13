@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import type { ModelPreset, ModelSettings } from "../types";
+import type { ModelSettings } from "../types";
 import {
-  getModelSettings, updateModelSettings, createModelPreset, deleteModelPreset,
+  getModelSettings, createModelPreset,
   getPreferences, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile,
   listVocabulary, deleteVocabularyEntry,
 } from "../api";
@@ -11,15 +11,8 @@ interface Props {
   onClose: () => void;
 }
 
-const LLM_TASKS: Record<string, { label: string; desc: string }> = {
-  analysis: { label: "Analysis", desc: "Intro detection & speaker identification" },
-  actions:  { label: "Actions",  desc: "Action item extraction" },
-  live:     { label: "Live polish", desc: "Speaker naming during live sessions" },
-};
-
 export default function SettingsDialog({ onClose }: Props) {
   const [settings, setSettings] = useState<ModelSettings | null>(null);
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<"models" | "preferences">("models");
@@ -46,7 +39,6 @@ export default function SettingsDialog({ onClose }: Props) {
   async function loadSettings() {
     const data = await getModelSettings();
     setSettings(data);
-    setAssignments(data.assignments);
   }
 
   async function loadPreferences() {
@@ -60,11 +52,7 @@ export default function SettingsDialog({ onClose }: Props) {
 
   async function handleSave() {
     setSaving(true);
-    if (tab === "models") {
-      const data = await updateModelSettings(assignments);
-      setSettings(data);
-      setAssignments(data.assignments);
-    } else {
+    if (tab === "preferences") {
       await updatePreferences({
         default_vocabulary: defaultVocab,
         speaker_profiles_enabled: profilesEnabled,
@@ -87,14 +75,6 @@ export default function SettingsDialog({ onClose }: Props) {
     setShowAddPreset(false);
     const data = await getModelSettings();
     setSettings(data);
-  }
-
-  async function handleDeletePreset(preset: ModelPreset) {
-    if (!confirm(`Delete preset "${preset.name}"? Any tasks using it will revert to default.`)) return;
-    await deleteModelPreset(preset.id);
-    const data = await getModelSettings();
-    setSettings(data);
-    setAssignments(data.assignments);
   }
 
   async function handleDeleteProfile(id: string) {
@@ -146,23 +126,6 @@ export default function SettingsDialog({ onClose }: Props) {
                 </button>
               </div>
 
-              <div className="space-y-1.5">
-                {settings.presets.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
-                    <div>
-                      <span className="text-sm text-slate-200">{p.name}</span>
-                      <span className="text-[10px] text-slate-500 ml-2">{p.model}</span>
-                    </div>
-                    <button onClick={() => handleDeletePreset(p)}
-                      className="text-slate-600 hover:text-red-400 transition p-1" title="Delete preset">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-
               {showAddPreset && (
                 <div className="mt-3 bg-slate-800/50 rounded-xl p-3 space-y-2">
                   <p className="text-xs font-medium text-slate-300">New preset</p>
@@ -184,28 +147,6 @@ export default function SettingsDialog({ onClose }: Props) {
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="border-t border-slate-800" />
-
-            {/* Task assignments */}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Task assignments</p>
-              <div className="space-y-3">
-                {Object.entries(LLM_TASKS).map(([task, info]) => (
-                  <div key={task}>
-                    <label className="block text-sm font-medium text-slate-300 mb-0.5">{info.label}</label>
-                    <p className="text-xs text-slate-500 mb-1">{info.desc}</p>
-                    <select value={assignments[task] || ""}
-                      onChange={(e) => setAssignments({ ...assignments, [task]: e.target.value })}
-                      className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 appearance-none cursor-pointer">
-                      {settings.presets.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
             </div>
 
             <div className="border-t border-slate-800" />

@@ -7,7 +7,6 @@ from models import Meeting, Speaker, Segment, Job, MeetingStatus
 from models.job import JobStatus
 from services.diarization_service import DiarizationService
 from services.speaker_id_service import SpeakerIdService
-from model_config import get_model_config
 
 
 @celery_app.task(bind=True)
@@ -37,9 +36,8 @@ def rediarize_task(self, meeting_id: str, job_id: str):
         if not audio_path:
             raise RuntimeError("No audio file found.")
 
-        analysis_preset = get_model_config().get_model_for_task("analysis")
         diarization_service = DiarizationService()
-        speaker_id_service = SpeakerIdService(llm_preset=analysis_preset)
+        speaker_id_service = SpeakerIdService()
 
         # Step 1: Fresh diarization
         update_progress(db, job, meeting, 10, "Running new speaker identification...")
@@ -56,24 +54,12 @@ def rediarize_task(self, meeting_id: str, job_id: str):
         update_progress(db, job, meeting, 55, "Synchronizing speakers with text...")
         aligned = align_segments(whisper_segments, diarization_segments)
 
-        # Step 3: Speaker identification
-        update_progress(db, job, meeting, 65, "Identifying speakers...")
+        # Step 3: Speaker naming (Participant N, overridden by voice profile matches)
+        update_progress(db, job, meeting, 65, "Matching against saved voice profiles...")
         speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
-        speaker_info = {}
-
-        if speaker_id_service.has_intro(aligned):
-            speaker_info = speaker_id_service.identify_speakers_model2(
-                aligned, audio_path, diarization_segments
-            )
-
-        unidentified = [l for l in speaker_labels if l not in speaker_info]
-        if unidentified:
-            fallback = speaker_id_service.identify_speakers_model3(unidentified)
-            offset = len(speaker_info)
-            for i, (label, info) in enumerate(fallback.items()):
-                if offset > 0:
-                    info["name"] = f"Participant {offset + i + 1}"
-                speaker_info[label] = info
+        speaker_info = speaker_id_service.name_speakers(
+            db, speaker_labels, diarization_segments, audio_path
+        )
 
         # Step 4: Collect edits, recreate speakers + segments
         update_progress(db, job, meeting, 85, "Saving results...")
@@ -98,10 +84,11 @@ def rediarize_task(self, meeting_id: str, job_id: str):
 
 @celery_app.task(bind=True)
 def reidentify_task(self, meeting_id: str, job_id: str):
-    """Re-run speaker identification without re-transcribing or re-diarizing.
+    """Re-run speaker naming without re-transcribing or re-diarizing.
 
-    Uses existing raw_transcription and raw_diarization, re-aligns, and
-    re-identifies speakers via LLM. Preserves edited segment text.
+    Uses existing raw_transcription and raw_diarization, re-aligns, and re-names
+    speakers against the saved Voice Profiles. This is how a newly-saved Voice
+    Profile gets applied to an already-processed Meeting. Preserves edited text.
     """
     db = SessionLocal()
     try:
@@ -124,31 +111,18 @@ def reidentify_task(self, meeting_id: str, job_id: str):
         if not audio_path:
             raise RuntimeError("No audio file found.")
 
-        analysis_preset = get_model_config().get_model_for_task("analysis")
-        speaker_id_service = SpeakerIdService(llm_preset=analysis_preset)
+        speaker_id_service = SpeakerIdService()
 
         # Step 1: Re-align (uses existing data)
         update_progress(db, job, meeting, 20, "Synchronizing speakers with text...")
         aligned = align_segments(whisper_segments, diarization_segments)
 
-        # Step 2: Re-identify speakers via LLM
-        update_progress(db, job, meeting, 40, "Identifying speakers with AI...")
+        # Step 2: Re-name speakers against the saved Voice Profiles
+        update_progress(db, job, meeting, 40, "Matching against saved voice profiles...")
         speaker_labels = list(set(s["speaker"] for s in aligned if s["speaker"] != "UNKNOWN"))
-        speaker_info = {}
-
-        if speaker_id_service.has_intro(aligned):
-            speaker_info = speaker_id_service.identify_speakers_model2(
-                aligned, audio_path, diarization_segments
-            )
-
-        unidentified = [l for l in speaker_labels if l not in speaker_info]
-        if unidentified:
-            fallback = speaker_id_service.identify_speakers_model3(unidentified)
-            offset = len(speaker_info)
-            for i, (label, info) in enumerate(fallback.items()):
-                if offset > 0:
-                    info["name"] = f"Participant {offset + i + 1}"
-                speaker_info[label] = info
+        speaker_info = speaker_id_service.name_speakers(
+            db, speaker_labels, diarization_segments, audio_path
+        )
 
         # Step 3: Rebuild
         update_progress(db, job, meeting, 80, "Saving results...")

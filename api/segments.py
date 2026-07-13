@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import Meeting, Segment
+from models import Segment
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["segments"])
@@ -38,10 +38,6 @@ def update_segment_text(segment_id: str, req: UpdateSegmentTextRequest, db: Sess
     if not segment:
         raise HTTPException(404, "Segment not found")
 
-    meeting = db.query(Meeting).filter(Meeting.id == segment.meeting_id).first()
-    if meeting and meeting.is_encrypted:
-        raise HTTPException(400, "Cannot edit segments while meeting is encrypted. Decrypt first.")
-
     old_text = segment.original_text or segment.text
     segment.text = req.text
     segment.is_edited = True
@@ -58,10 +54,6 @@ def update_segment_speaker(segment_id: str, req: UpdateSegmentSpeakerRequest, db
     segment = db.query(Segment).filter(Segment.id == segment_id).first()
     if not segment:
         raise HTTPException(404, "Segment not found")
-
-    meeting = db.query(Meeting).filter(Meeting.id == segment.meeting_id).first()
-    if meeting and meeting.is_encrypted:
-        raise HTTPException(400, "Cannot edit segments while meeting is encrypted. Decrypt first.")
 
     segment.speaker_id = req.speaker_id
     db.commit()
