@@ -9,9 +9,9 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config import settings as _settings
-from database import init_db, seed_default_actions, recover_stale_jobs, cleanup_orphaned_storage, get_db, engine
+from database import init_db, recover_stale_jobs, cleanup_orphaned_storage, get_db, engine
 from models import Meeting
-from api import meetings, speakers, segments, export, websocket, live_websocket, actions, model_settings, encryption, search, speaker_profiles, vocabulary, insights, protocol, analytics
+from api import meetings, speakers, segments, export, websocket, model_settings, search, speaker_profiles, vocabulary, analytics
 
 app = FastAPI(title="Transcriber")
 
@@ -31,22 +31,16 @@ app.include_router(speakers.router)
 app.include_router(segments.router)
 app.include_router(export.router)
 app.include_router(websocket.router)
-app.include_router(live_websocket.router)
-app.include_router(actions.router)
 app.include_router(model_settings.router)
-app.include_router(encryption.router)
 app.include_router(search.router)
 app.include_router(speaker_profiles.router)
 app.include_router(vocabulary.router)
-app.include_router(insights.router)
-app.include_router(protocol.router)
 app.include_router(analytics.router)
 
 
 @app.on_event("startup")
 def startup():
     init_db()
-    seed_default_actions()
     recover_stale_jobs()
     cleanup_orphaned_storage()
     import logging
@@ -115,15 +109,9 @@ def health():
 
 @app.get("/api/settings")
 def get_settings():
-    from config import settings as _settings
     from preferences import get_public_preferences
-    from services.llm_service import LLMService
     prefs = get_public_preferences()
-    llm_enabled = LLMService().is_configured()
     return {
-        "llm_base_url": _settings.llm_base_url,
-        "llm_model": _settings.llm_model,
-        "llm_enabled": llm_enabled,
         "preferences": prefs,
     }
 
@@ -142,10 +130,6 @@ def update_preferences(body: dict):
         # Don't overwrite with the masked value
         if val and "*" not in val:
             current["hf_auth_token"] = val
-    if "llm_api_key" in body:
-        val = (body["llm_api_key"] or "").strip()
-        if val and "*" not in val:
-            current["llm_api_key"] = val
     save_preferences(current)
     return get_public_preferences()
 

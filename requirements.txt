@@ -12,9 +12,8 @@ speechbrain
 torch
 torchaudio
 soundfile
-requests
 numpy
 scipy
 python-docx
 reportlab
-cryptography
+pytest==8.3.4

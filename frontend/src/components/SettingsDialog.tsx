@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import type { ModelPreset, ModelSettings } from "../types";
+import type { ModelSettings } from "../types";
 import {
-  getModelSettings, updateModelSettings, createModelPreset, deleteModelPreset,
+  getModelSettings, createModelPreset, deleteModelPreset, setDefaultPreset,
   getPreferences, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile,
   listVocabulary, deleteVocabularyEntry,
 } from "../api";
@@ -11,25 +11,21 @@ interface Props {
   onClose: () => void;
 }
 
-const LLM_TASKS: Record<string, { label: string; desc: string }> = {
-  analysis: { label: "Analysis", desc: "Intro detection & speaker identification" },
-  actions:  { label: "Actions",  desc: "Action item extraction" },
-  live:     { label: "Live polish", desc: "Speaker naming during live sessions" },
-};
-
 export default function SettingsDialog({ onClose }: Props) {
   const [settings, setSettings] = useState<ModelSettings | null>(null);
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<"models" | "preferences">("models");
+  const [tab, setTab] = useState<"presets" | "preferences">("presets");
 
   // Add-preset form
   const [showAddPreset, setShowAddPreset] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newModel, setNewModel] = useState("");
-  const [newBaseUrl, setNewBaseUrl] = useState("https://openrouter.ai/api/v1");
+  const [newEngine, setNewEngine] = useState("whisper.cpp");
+  const [newModelPath, setNewModelPath] = useState("");
+  const [newLanguage, setNewLanguage] = useState("");
+  const [newDecoder, setNewDecoder] = useState("tdt");
   const [addError, setAddError] = useState("");
+  const [defaultSaving, setDefaultSaving] = useState<string | null>(null);
 
   // Preferences
   const [defaultVocab, setDefaultVocab] = useState("");
@@ -46,7 +42,7 @@ export default function SettingsDialog({ onClose }: Props) {
   async function loadSettings() {
     const data = await getModelSettings();
     setSettings(data);
-    setAssignments(data.assignments);
+    if (data.engines.length > 0) setNewEngine(data.engines[0]);
   }
 
   async function loadPreferences() {
@@ -60,11 +56,7 @@ export default function SettingsDialog({ onClose }: Props) {
 
   async function handleSave() {
     setSaving(true);
-    if (tab === "models") {
-      const data = await updateModelSettings(assignments);
-      setSettings(data);
-      setAssignments(data.assignments);
-    } else {
+    if (tab === "preferences") {
       await updatePreferences({
         default_vocabulary: defaultVocab,
         speaker_profiles_enabled: profilesEnabled,
@@ -77,24 +69,51 @@ export default function SettingsDialog({ onClose }: Props) {
   }
 
   async function handleAddPreset() {
-    if (!newName.trim() || !newModel.trim() || !newBaseUrl.trim()) {
-      setAddError("All fields are required.");
+    if (!newName.trim() || !newModelPath.trim()) {
+      setAddError("Name and model path are required.");
       return;
     }
     setAddError("");
-    await createModelPreset({ name: newName.trim(), model: newModel.trim(), base_url: newBaseUrl.trim() });
-    setNewName(""); setNewModel(""); setNewBaseUrl("https://openrouter.ai/api/v1");
-    setShowAddPreset(false);
-    const data = await getModelSettings();
-    setSettings(data);
+    try {
+      await createModelPreset({
+        name: newName.trim(),
+        engine: newEngine,
+        model_path: newModelPath.trim(),
+        language: newEngine === "whisper.cpp" && newLanguage.trim() ? newLanguage.trim() : undefined,
+        decoder: newEngine === "parakeet.cpp" ? newDecoder : undefined,
+      });
+      setNewName(""); setNewModelPath(""); setNewLanguage(""); setNewDecoder("tdt");
+      setShowAddPreset(false);
+      const data = await getModelSettings();
+      setSettings(data);
+    } catch (err: any) {
+      setAddError(err?.response?.data?.detail || "Failed to create preset");
+    }
   }
 
-  async function handleDeletePreset(preset: ModelPreset) {
-    if (!confirm(`Delete preset "${preset.name}"? Any tasks using it will revert to default.`)) return;
-    await deleteModelPreset(preset.id);
-    const data = await getModelSettings();
-    setSettings(data);
-    setAssignments(data.assignments);
+  async function handleDeletePreset(id: string) {
+    const preset = settings?.presets.find((p) => p.id === id);
+    if (!confirm(`Delete preset "${preset?.name}"?`)) return;
+    try {
+      await deleteModelPreset(id);
+      const data = await getModelSettings();
+      setSettings(data);
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || "Failed to delete preset");
+    }
+  }
+
+  async function handleSetDefault(id: string) {
+    if (!settings || settings.default_preset === id) return;
+    setDefaultSaving(id);
+    try {
+      const { default_preset } = await setDefaultPreset(id);
+      setSettings({ ...settings, default_preset });
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || "Failed to set default preset");
+    } finally {
+      setDefaultSaving(null);
+    }
   }
 
   async function handleDeleteProfile(id: string) {
@@ -122,7 +141,7 @@ export default function SettingsDialog({ onClose }: Props) {
         <h2 className="text-xl font-bold text-white mb-4">Settings</h2>
 
         <div className="flex bg-slate-800 rounded-xl p-1 mb-5">
-          {(["models", "preferences"] as const).map((t) => (
+          {(["presets", "preferences"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all capitalize ${tab === t ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white"}`}>
               {t}
@@ -130,13 +149,13 @@ export default function SettingsDialog({ onClose }: Props) {
           ))}
         </div>
 
-        {tab === "models" ? (
+        {tab === "presets" ? (
           <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
 
-            {/* LLM presets list */}
+            {/* Transcription presets list */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">LLM Presets</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Transcription Presets</p>
                 <button onClick={() => setShowAddPreset(!showAddPreset)}
                   className="text-xs text-violet-400 hover:text-violet-300 transition flex items-center gap-1">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,33 +167,74 @@ export default function SettingsDialog({ onClose }: Props) {
 
               <div className="space-y-1.5">
                 {settings.presets.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
-                    <div>
-                      <span className="text-sm text-slate-200">{p.name}</span>
-                      <span className="text-[10px] text-slate-500 ml-2">{p.model}</span>
-                    </div>
-                    <button onClick={() => handleDeletePreset(p)}
-                      className="text-slate-600 hover:text-red-400 transition p-1" title="Delete preset">
+                  <div key={p.id}
+                    className="flex items-center justify-between bg-slate-800/30 rounded-lg px-3 py-2 gap-3">
+                    <label className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer" title={p.available ? undefined : p.reason || "Unavailable"}>
+                      <input
+                        type="radio"
+                        name="default-preset"
+                        checked={settings.default_preset === p.id}
+                        disabled={!p.available || defaultSaving === p.id}
+                        onChange={() => handleSetDefault(p.id)}
+                        className="accent-violet-600"
+                      />
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${p.available ? "bg-emerald-400" : "bg-red-400"}`}
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm text-slate-200 truncate">{p.name}</span>
+                          <span className="text-[10px] text-slate-500 uppercase tracking-wide flex-shrink-0">{p.engine}</span>
+                          {settings.default_preset === p.id && (
+                            <span className="text-[10px] text-violet-400 flex-shrink-0">default</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-500 font-mono truncate block">{p.model_path}</span>
+                      </div>
+                    </label>
+                    <button onClick={() => handleDeletePreset(p.id)}
+                      className="text-slate-600 hover:text-red-400 transition p-1 flex-shrink-0">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
                   </div>
                 ))}
+                {settings.presets.length === 0 && (
+                  <p className="text-xs text-slate-600">No presets configured yet.</p>
+                )}
               </div>
+              <p className="text-[10px] text-slate-600 mt-1.5">
+                Select the radio to make a preset the default. Unavailable presets are missing their engine binary or model file.
+              </p>
 
               {showAddPreset && (
                 <div className="mt-3 bg-slate-800/50 rounded-xl p-3 space-y-2">
                   <p className="text-xs font-medium text-slate-300">New preset</p>
                   <input value={newName} onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Name (e.g. GPT-4o Mini)"
+                    placeholder="Name (e.g. Whisper Medium)"
                     className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
-                  <input value={newModel} onChange={(e) => setNewModel(e.target.value)}
-                    placeholder="Model ID (e.g. openai/gpt-4o-mini)"
-                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
-                  <input value={newBaseUrl} onChange={(e) => setNewBaseUrl(e.target.value)}
-                    placeholder="Base URL"
-                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+                  <select value={newEngine} onChange={(e) => setNewEngine(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50">
+                    {settings.engines.map((e) => (
+                      <option key={e} value={e}>{e}</option>
+                    ))}
+                  </select>
+                  <input value={newModelPath} onChange={(e) => setNewModelPath(e.target.value)}
+                    placeholder="Model path (e.g. ./models/ggml-medium.bin)"
+                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+                  {newEngine === "whisper.cpp" && (
+                    <input value={newLanguage} onChange={(e) => setNewLanguage(e.target.value)}
+                      placeholder="Language code (optional, e.g. pt)"
+                      className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+                  )}
+                  {newEngine === "parakeet.cpp" && (
+                    <select value={newDecoder} onChange={(e) => setNewDecoder(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50">
+                      <option value="tdt">tdt</option>
+                      <option value="ctc">ctc</option>
+                    </select>
+                  )}
                   {addError && <p className="text-xs text-red-400">{addError}</p>}
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => { setShowAddPreset(false); setAddError(""); }}
@@ -184,46 +244,6 @@ export default function SettingsDialog({ onClose }: Props) {
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="border-t border-slate-800" />
-
-            {/* Task assignments */}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Task assignments</p>
-              <div className="space-y-3">
-                {Object.entries(LLM_TASKS).map(([task, info]) => (
-                  <div key={task}>
-                    <label className="block text-sm font-medium text-slate-300 mb-0.5">{info.label}</label>
-                    <p className="text-xs text-slate-500 mb-1">{info.desc}</p>
-                    <select value={assignments[task] || ""}
-                      onChange={(e) => setAssignments({ ...assignments, [task]: e.target.value })}
-                      className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 appearance-none cursor-pointer">
-                      {settings.presets.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="border-t border-slate-800" />
-
-            {/* Whisper — read-only */}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Whisper models</p>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between bg-slate-800/30 rounded-lg px-3 py-2">
-                  <span className="text-xs text-slate-400">Transcription</span>
-                  <span className="text-xs text-slate-300 font-mono">{settings.whisper.model}</span>
-                </div>
-                <div className="flex items-center justify-between bg-slate-800/30 rounded-lg px-3 py-2">
-                  <span className="text-xs text-slate-400">Live</span>
-                  <span className="text-xs text-slate-300 font-mono">{settings.whisper.small_model}</span>
-                </div>
-              </div>
-              <p className="text-[10px] text-slate-600 mt-1.5">Change via WHISPER_MODEL_PATH in .env</p>
             </div>
 
           </div>

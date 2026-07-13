@@ -1,10 +1,10 @@
-import re
-import tempfile
+import logging
+import subprocess
 from pathlib import Path
 
-from .audio_service import AudioService
-from .embedding_service import EmbeddingService
-from .llm_service import LLMService
+from engines import Turn
+
+log = logging.getLogger(__name__)
 
 # Speaker colors palette
 SPEAKER_COLORS = [
@@ -20,91 +20,114 @@ SPEAKER_COLORS = [
     "#06b6d4",  # cyan
 ]
 
-INTRO_PATTERNS = [
-    r"jag heter\s+(\w+)",
-    r"mitt namn [aä]r\s+(\w+)",
-    r"jag [aä]r\s+(\w+)",
-    r"my name is\s+(\w+)",
-    r"i am\s+(\w+)",
-    r"this is\s+(\w+)",
-    r"hej.{0,20}jag heter",
-    r"hej.{0,20}mitt namn",
-    r"hi.{0,20}my name is",
-    r"hello.{0,20}i am",
-]
-
-INTRO_DURATION = 120.0  # First 2 minutes
+PROFILE_MATCH_THRESHOLD = 0.55
+MIN_PROFILE_SAMPLE_SECONDS = 2.0
+MAX_PROFILE_SAMPLE_SECONDS = 15
 
 
 class SpeakerIdService:
-    def __init__(self, llm_preset: dict | None = None):
-        self.audio_service = AudioService()
-        self.embedding_service = EmbeddingService()
-        self.llm_service = LLMService(preset=llm_preset)
+    """Names the Speakers found in a Meeting.
 
-    def has_intro(self, segments: list[dict]) -> bool:
-        """Check if the transcript contains speaker introductions in the first 120s."""
-        intro_text = " ".join(
-            s["text"] for s in segments if s.get("start", 0) < INTRO_DURATION
-        ).lower()
+    Every Speaker starts as "Participant N". A saved Voice Profile whose embedding
+    matches a Speaker's voice then overrides that name.
+    """
 
-        for pattern in INTRO_PATTERNS:
-            if re.search(pattern, intro_text):
-                return True
-        return False
-
-    def identify_speakers_model2(
+    def name_speakers(
         self,
-        aligned_segments: list[dict],
+        db,
+        speaker_labels: list[str],
+        turns: list[Turn],
         audio_path: str,
-        diarization_segments: list[dict],
-        known_names: list[str] | None = None,
     ) -> dict[str, dict]:
-        """
-        Model 2: Use LLM to identify speakers from intro.
-        Returns {speaker_label: {name, confidence, identified_by}}.
-        """
-        # Get intro segments
-        intro_segments = [s for s in aligned_segments if s.get("start", 0) < INTRO_DURATION]
-        if not intro_segments:
-            return {}
+        """Return {speaker_label: {name, confidence, identified_by}} for every label."""
+        speaker_info = self._participant_names(speaker_labels)
 
-        # Build intro text with speaker labels
-        intro_text = ""
-        for seg in intro_segments:
-            label = seg.get("speaker", "UNKNOWN")
-            intro_text += f"[{label}]: {seg['text']}\n"
+        profiles = self._load_profiles(db)
+        if profiles and audio_path:
+            self._apply_voice_profiles(speaker_info, profiles, turns, audio_path)
 
-        # Ask LLM to identify speakers
-        mappings = self.llm_service.identify_speakers_from_intro(intro_text, known_names=known_names)
-        if not mappings:
-            return {}
+        return speaker_info
 
-        result = {}
-        for m in mappings:
-            label = m.get("speaker_label", "")
-            name = m.get("name", "")
-            if label and name:
-                result[label] = {
-                    "name": name,
-                    "confidence": 0.8,
-                    "identified_by": "intro_llm",
-                }
+    def _participant_names(self, speaker_labels: list[str]) -> dict[str, dict]:
+        return {
+            label: {"name": f"Participant {i + 1}", "confidence": None, "identified_by": None}
+            for i, label in enumerate(sorted(set(speaker_labels)))
+        }
 
-        return result
+    def _load_profiles(self, db) -> list:
+        from preferences import load_preferences
 
-    def identify_speakers_model3(self, speaker_labels: list[str]) -> dict[str, dict]:
-        """
-        Model 3 (fallback): Label speakers as Participant 1, 2, etc.
-        """
-        result = {}
-        for i, label in enumerate(sorted(set(speaker_labels))):
-            result[label] = {
-                "name": f"Participant {i + 1}",
-                "confidence": None,
-                "identified_by": None,
-            }
-        return result
+        if not load_preferences().get("speaker_profiles_enabled", True):
+            return []
+
+        from models.speaker_profile import SpeakerProfile
+
+        return db.query(SpeakerProfile).all()
+
+    def _apply_voice_profiles(
+        self,
+        speaker_info: dict[str, dict],
+        profiles: list,
+        turns: list[Turn],
+        audio_path: str,
+    ) -> None:
+        from services.embedding_service import EmbeddingService
+
+        embedding_service = EmbeddingService()
+
+        for label, info in speaker_info.items():
+            sample = self._longest_turn(turns, label)
+            if not sample:
+                continue
+
+            try:
+                embedding = self._embed_segment(embedding_service, audio_path, label, sample)
+            except Exception as e:
+                log.debug(f"Profile matching failed for {label}: {e}")
+                continue
+
+            best_profile = None
+            best_sim = 0.0
+            for profile in profiles:
+                sim = embedding_service.cosine_similarity(embedding, profile.get_embedding())
+                if sim > best_sim:
+                    best_sim = sim
+                    best_profile = profile
+
+            if best_profile and best_sim >= PROFILE_MATCH_THRESHOLD:
+                info["name"] = best_profile.name
+                info["identified_by"] = "voice_profile"
+                info["confidence"] = round(best_sim, 3)
+
+    def _longest_turn(self, turns: list[Turn], label: str) -> Turn | None:
+        """Longest Turn by this Speaker — the best sample to embed. None if too short."""
+        mine = [t for t in turns if t.speaker == label]
+        if not mine:
+            return None
+        longest = max(mine, key=lambda t: t.end - t.start)
+        if longest.end - longest.start < MIN_PROFILE_SAMPLE_SECONDS:
+            return None
+        return longest
+
+    def _embed_segment(self, embedding_service, audio_path: str, label: str, turn: Turn):
+        temp_wav = str(Path(audio_path).parent / f"profile_match_{label}.wav")
+        duration = min(turn.end - turn.start, MAX_PROFILE_SAMPLE_SECONDS)
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-ss", str(turn.start),
+                "-t", str(duration),
+                "-i", audio_path,
+                "-ar", "16000", "-ac", "1",
+                temp_wav,
+            ],
+            capture_output=True,
+            timeout=15,
+        )
+        try:
+            return embedding_service.extract_embedding(temp_wav)
+        finally:
+            Path(temp_wav).unlink(missing_ok=True)
 
     def get_color(self, index: int) -> str:
         """Return a color from the palette, cycling if index exceeds palette size."""

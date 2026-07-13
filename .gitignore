@@ -63,3 +63,7 @@ desktop.ini
 *.swp
 *.swo
 preferences.json
+
+# Bench output (transcripts + converted wavs)
+bench/out/
+frontend/tsconfig.tsbuildinfo

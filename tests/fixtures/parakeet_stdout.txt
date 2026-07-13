@@ -1,0 +1,5 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 16302 MiB):
+  Device 0: NVIDIA GeForce RTX 5070 Ti, compute capability 12.0, VMM: yes, VRAM: 16302 MiB
+[parakeet] pk::Backend using GPU device: CUDA0
+ggml_backend_cuda_graph_compute: CUDA graph warmup complete
+{"text":"No ar, pela Rádio Universitária FM.","words":[{"w":"No","start":3.200,"end":3.520,"conf":0.9925},{"w":"ar,","start":3.520,"end":3.760,"conf":0.9136},{"w":"pela","start":4.000,"end":4.240,"conf":0.9999},{"w":"Rádio","start":4.240,"end":4.560,"conf":0.9818},{"w":"Universitária","start":4.560,"end":5.120,"conf":0.9999},{"w":"FM.","start":5.200,"end":5.760,"conf":0.9114}],"tokens":[{"id":1245,"t":3.200,"conf":0.9925}]}

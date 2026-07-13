@@ -7,7 +7,6 @@ from database import get_db
 from models import Speaker, Segment
 from models.speaker_profile import SpeakerProfile
 from services.embedding_service import EmbeddingService
-from services.diarization_service import DiarizationService
 
 router = APIRouter(prefix="/api/speaker-profiles", tags=["speaker_profiles"])
 

@@ -1,64 +1,59 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from pathlib import Path
 
-from model_config import get_model_config
-from config import settings
+import presets
+from engines import TRANSCRIBER_ENGINES, engine_status
 
 router = APIRouter(prefix="/api/model-settings", tags=["model-settings"])
 
 
-class UpdateAssignments(BaseModel):
-    assignments: dict[str, str]
-
-
 class CreatePreset(BaseModel):
     name: str
-    model: str
-    base_url: str
+    engine: str
+    model_path: str
+    language: str | None = None
+    decoder: str | None = None
 
 
-def _whisper_info() -> dict:
-    return {
-        "model": Path(settings.whisper_model_path).name,
-        "small_model": Path(settings.whisper_small_model_path).name,
-    }
+class SetDefault(BaseModel):
+    default_preset: str
 
 
 @router.get("")
 def get_model_settings():
-    mgr = get_model_config()
-    mgr.reload()
+    """Every Preset, whether it can actually run here, and which one is the default."""
     return {
-        "presets": mgr.get_presets(type_filter="llm"),
-        "assignments": {k: v for k, v in mgr.get_assignments().items() if k not in ("transcription", "live_transcription")},
-        "whisper": _whisper_info(),
+        "presets": [{**p, **engine_status(p)} for p in presets.list_presets()],
+        "default_preset": presets.default_preset_id(),
+        "engines": TRANSCRIBER_ENGINES,
     }
 
 
 @router.put("")
-def update_model_settings(body: UpdateAssignments):
-    mgr = get_model_config()
-    mgr.update_assignments(body.assignments)
-    return {
-        "presets": mgr.get_presets(type_filter="llm"),
-        "assignments": {k: v for k, v in mgr.get_assignments().items() if k not in ("transcription", "live_transcription")},
-        "whisper": _whisper_info(),
-    }
+def set_default(body: SetDefault):
+    try:
+        presets.set_default_preset(body.default_preset)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"default_preset": presets.default_preset_id()}
 
 
 @router.post("/presets")
 def create_preset(body: CreatePreset):
-    mgr = get_model_config()
-    preset = mgr.create_preset({"name": body.name, "model": body.model, "base_url": body.base_url})
-    return preset
+    if body.engine not in TRANSCRIBER_ENGINES:
+        raise HTTPException(400, f"Unknown engine '{body.engine}'. Known: {TRANSCRIBER_ENGINES}")
+
+    preset = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        return presets.create_preset(preset)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.delete("/presets/{preset_id}")
 def delete_preset(preset_id: str):
-    mgr = get_model_config()
     try:
-        mgr.delete_preset(preset_id)
+        presets.delete_preset(preset_id)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Preset not found")
+        raise HTTPException(404, "Preset not found")
     return {"ok": True}

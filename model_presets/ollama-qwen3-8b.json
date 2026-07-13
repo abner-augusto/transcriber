@@ -1,7 +1,0 @@
-{
-  "id": "ollama-qwen3-8b",
-  "name": "Qwen 3 8B (Ollama)",
-  "type": "llm",
-  "model": "qwen3:8b",
-  "base_url": "http://localhost:11434/v1"
-}

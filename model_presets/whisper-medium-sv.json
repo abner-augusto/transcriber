@@ -1,7 +1,0 @@
-{
-  "id": "whisper-medium-sv",
-  "name": "Whisper Medium (Swedish)",
-  "type": "whisper",
-  "provider": "local",
-  "model_path": null
-}

@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path so lazy imports (model_config, etc.) work
+# Ensure project root is on sys.path so lazy imports (presets, engines, etc.) work
 _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
@@ -13,7 +13,7 @@ celery_app = Celery(
     "transcriber",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["tasks.process_meeting", "tasks.polish_task", "tasks.finalize_task", "tasks.action_task", "tasks.insights_task", "tasks.reprocess_task"],
+    include=["tasks.process_meeting", "tasks.reprocess_task"],
 )
 
 celery_app.conf.update(
