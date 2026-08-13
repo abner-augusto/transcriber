@@ -23,21 +23,18 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import numpy as np
 import soundfile as sf
 
+from .chunking import chunk_bounds
 from .ports import Word
 
 log = logging.getLogger(__name__)
 
 TRANSCRIBE_TIMEOUT_SECONDS = 1800
 
-# Chunk length, and how far from a boundary we will wander to find a pause to cut in.
-# 300s peaks at ~5.4 GB of VRAM, which leaves room for both a smaller GPU and for
-# pyannote afterwards. Raising it buys little: the graph grows quadratically.
+# Chunk length. 300s peaks at ~5.4 GB of VRAM, which leaves room for both a smaller
+# GPU and for pyannote afterwards. Raising it buys little: the graph grows quadratically.
 CHUNK_SECONDS = 300
-SNAP_SECONDS = 15
-QUIET_WINDOW_SECONDS = 0.5
 
 # A tail shorter than this rides along with the chunk before it. Snapping to a pause
 # can land a cut all but at the end of the audio — trailing silence is the quietest
@@ -71,7 +68,7 @@ class ParakeetCppTranscriber:
             log.info(f"[parakeet.cpp] {len(words)} words from {Path(self.model_path).name}")
             return words
 
-        cuts = _chunk_bounds(audio, sample_rate, self.chunk_seconds)
+        cuts = chunk_bounds(audio, sample_rate, self.chunk_seconds, MIN_TAIL_SECONDS)
         log.info(
             f"[parakeet.cpp] {duration / 60:.1f} min of audio -> {len(cuts)} chunks "
             f"(the encoder graph will not fit in VRAM in one piece)"
@@ -130,41 +127,6 @@ class ParakeetCppTranscriber:
             raise RuntimeError(f"parakeet-cli failed: {result.stderr}")
 
         return parse_words(result.stdout)
-
-
-def _chunk_bounds(audio: np.ndarray, sample_rate: int, chunk_seconds: float) -> list[tuple[float, float]]:
-    """(start, end) pairs in seconds covering the audio, cut where it is quietest."""
-    duration = len(audio) / sample_rate
-    bounds = []
-    start = 0.0
-    while duration - start > chunk_seconds:
-        cut = _quietest_point(audio, sample_rate, start + chunk_seconds)
-        if duration - cut < MIN_TAIL_SECONDS:
-            break
-        bounds.append((start, cut))
-        start = cut
-    bounds.append((start, duration))
-    return bounds
-
-
-def _quietest_point(audio: np.ndarray, sample_rate: int, target: float) -> float:
-    """The centre of the quietest short window within SNAP_SECONDS of `target`.
-
-    A boundary in a pause costs nothing; a boundary through a word costs that word,
-    because neither chunk sees enough of it to recognise it.
-    """
-    lo = max(0, int((target - SNAP_SECONDS) * sample_rate))
-    hi = min(len(audio), int((target + SNAP_SECONDS) * sample_rate))
-    window = int(QUIET_WINDOW_SECONDS * sample_rate)
-    if hi - lo <= window:
-        return target
-
-    # Energy of every window in [lo, hi), via a rolling sum of squares.
-    squares = np.concatenate(([0.0], np.cumsum(np.square(audio[lo:hi], dtype=np.float64))))
-    energy = squares[window:] - squares[:-window]
-    quietest = int(np.argmin(energy))
-
-    return (lo + quietest + window / 2) / sample_rate
 
 
 def parse_words(stdout: str) -> list[Word]:

@@ -40,18 +40,7 @@ export default function App() {
       </Routes>
       <footer className="border-t border-slate-800/50 py-4 mt-10">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-center gap-1 text-xs text-slate-600">
-          <span>Built by</span>
-          <a href="https://anders.bjarby.com" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-violet-400 transition">
-            Anders Bjarby
-          </a>
-          <span className="mx-1">|</span>
-          <a href="mailto:anders@brattoo.com" className="text-slate-500 hover:text-violet-400 transition">
-            anders@brattoo.com
-          </a>
-          <span className="mx-1">|</span>
-          <a href="https://anders.bjarby.com" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-violet-400 transition">
-            anders.bjarby.com
-          </a>
+          <span>Made with Claude / abner-augusto, based on Anders Bjarby's version</span>
         </div>
       </footer>
     </div>

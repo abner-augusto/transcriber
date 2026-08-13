@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { listMeetings, createMeeting, deleteMeeting, searchSegments, getModelSettings } from "../api";
+import { listMeetings, createMeeting, deleteMeeting, updateMeetingTitle, searchSegments, getModelSettings } from "../api";
 import type { SearchResult } from "../api";
 import type { ModelSettings } from "../types";
 import { useStore } from "../store";
@@ -49,6 +49,11 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const searchTimerRef = useRef<number>(0);
+
+  // Inline rename
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   function handleSearchChange(value: string) {
     setSearchQuery(value);
@@ -124,6 +129,26 @@ export default function HomePage() {
     setVocabulary("");
     setPresetId("");
     setError(null);
+  }
+
+  function startRename(e: React.MouseEvent, id: string, currentTitle: string) {
+    e.stopPropagation();
+    setEditingId(id);
+    setEditValue(currentTitle);
+    setTimeout(() => renameInputRef.current?.select(), 0);
+  }
+
+  async function commitRename(id: string) {
+    const newTitle = editValue.trim();
+    setEditingId(null);
+    const original = meetings.find((m) => m.id === id)?.title;
+    if (!newTitle || newTitle === original) return;
+    try {
+      const updated = await updateMeetingTitle(id, newTitle);
+      setMeetings(meetings.map((m) => (m.id === id ? { ...m, title: updated.title } : m)));
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to rename meeting");
+    }
   }
 
   async function handleDelete(e: React.MouseEvent, id: string) {
@@ -450,9 +475,30 @@ export default function HomePage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-white group-hover:text-violet-300 transition truncate flex items-center gap-2">
-                        {m.title}
-                      </h3>
+                      {editingId === m.id ? (
+                        <input
+                          ref={renameInputRef}
+                          type="text"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={() => commitRename(m.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { e.preventDefault(); commitRename(m.id); }
+                            if (e.key === "Escape") { e.preventDefault(); setEditingId(null); }
+                          }}
+                          maxLength={500}
+                          className="w-full bg-slate-800 border border-violet-500/50 rounded-lg px-2 py-0.5 text-white font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        />
+                      ) : (
+                        <h3
+                          onDoubleClick={(e) => startRename(e, m.id, m.title)}
+                          title="Double-click to rename"
+                          className="font-semibold text-white group-hover:text-violet-300 transition truncate flex items-center gap-2"
+                        >
+                          {m.title}
+                        </h3>
+                      )}
                       <div className="flex items-center gap-3 mt-1.5 text-sm text-slate-500">
                         <span>{formatDate(m.created_at)}</span>
                         <span className="w-1 h-1 rounded-full bg-slate-700" />

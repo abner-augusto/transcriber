@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMeeting, startProcessing, getJobs, rediarizeMeeting, reidentifyMeeting } from "../api";
+import { getMeeting, startProcessing, getJobs, rediarizeMeeting, reidentifyMeeting, updateMeetingTitle } from "../api";
 import { useStore } from "../store";
 import type { ProgressUpdate } from "../types";
 import TranscriptView from "../components/TranscriptView";
@@ -21,8 +21,11 @@ export default function MeetingPage() {
   const [showReprocess, setShowReprocess] = useState(false);
   const [skipLlm, setSkipLlm] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"speakers" | "analytics">("speakers");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleValue, setTitleValue] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -102,6 +105,21 @@ export default function MeetingPage() {
     loadMeeting();
   }
 
+  function startTitleEdit() {
+    if (!currentMeeting) return;
+    setTitleValue(currentMeeting.title);
+    setEditingTitle(true);
+    setTimeout(() => titleInputRef.current?.select(), 0);
+  }
+
+  async function commitTitleEdit() {
+    setEditingTitle(false);
+    const newTitle = titleValue.trim();
+    if (!id || !currentMeeting || !newTitle || newTitle === currentMeeting.title) return;
+    const updated = await updateMeetingTitle(id, newTitle);
+    setCurrentMeeting({ ...currentMeeting, title: updated.title });
+  }
+
   async function handleReidentify() {
     if (!id) return;
     setShowReprocess(false);
@@ -138,7 +156,29 @@ export default function MeetingPage() {
             </svg>
           </button>
           <div>
-            <h1 className="text-xl font-bold text-white">{currentMeeting.title}</h1>
+            {editingTitle ? (
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={titleValue}
+                onChange={(e) => setTitleValue(e.target.value)}
+                onBlur={commitTitleEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitTitleEdit(); }
+                  if (e.key === "Escape") { e.preventDefault(); setEditingTitle(false); }
+                }}
+                maxLength={500}
+                className="text-xl font-bold text-white bg-slate-800 border border-violet-500/50 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              />
+            ) : (
+              <h1
+                onDoubleClick={startTitleEdit}
+                title="Double-click to rename"
+                className="text-xl font-bold text-white cursor-text"
+              >
+                {currentMeeting.title}
+              </h1>
+            )}
             <p className="text-sm text-slate-500 mt-0.5">
               {currentMeeting.duration ? (
                 <>

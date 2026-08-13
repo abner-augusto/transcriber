@@ -142,6 +142,25 @@ def get_meeting(meeting_id: str, db: Session = Depends(get_db)):
     return meeting.to_dict(include_segments=True)
 
 
+class UpdateMeetingRequest(BaseModel):
+    title: str
+
+
+@router.put("/{meeting_id}")
+def update_meeting(meeting_id: str, req: UpdateMeetingRequest, db: Session = Depends(get_db)):
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+
+    title = req.title.strip()[:MAX_TITLE_LENGTH]
+    if not title:
+        raise HTTPException(400, "Title is required")
+
+    meeting.title = title
+    db.commit()
+    return meeting.to_dict()
+
+
 @router.delete("/{meeting_id}")
 def delete_meeting(meeting_id: str, db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()

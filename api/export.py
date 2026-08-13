@@ -142,15 +142,32 @@ def _export_txt(meeting: Meeting, segments: list[Segment]) -> PlainTextResponse:
 def _export_json(meeting: Meeting, segments: list[Segment]) -> JSONResponse:
     data = {
         "meeting": {
+            "id": meeting.id,
             "title": meeting.title,
             "duration": meeting.duration,
+            "created_at": meeting.created_at.isoformat() if meeting.created_at else None,
+            "vocabulary": meeting.vocabulary,
         },
+        "speakers": [
+            {
+                "id": spk.id,
+                "display_name": spk.display_name,
+                "total_speaking_time": spk.total_speaking_time,
+                "segment_count": spk.segment_count,
+                "identified_by": spk.identified_by,
+            }
+            for spk in meeting.speakers
+        ],
         "segments": [
             {
                 "start": seg.start_time,
                 "end": seg.end_time,
                 "speaker": seg.speaker.display_name if seg.speaker else UNKNOWN_SPEAKER,
+                "speaker_id": seg.speaker_id,
                 "text": seg.text,
+                "original_text": seg.original_text,
+                "is_edited": seg.is_edited,
+                "confidence": seg.confidence,
             }
             for seg in segments
         ],

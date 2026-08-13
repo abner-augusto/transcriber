@@ -36,8 +36,10 @@ while polling `nvidia-smi --query-gpu=memory.used`.
   the Transcriber's whole output. If a future streaming model learns `--json`, this ADR is worth
   revisiting — it would delete all of the chunking code.
 - **Chunking in `tasks/process_meeting.py`** would push an Engine's private limitation into the
-  pipeline, where it would apply to whisper.cpp too. whisper.cpp already windows internally and needs
-  none of this. A limit that belongs to one Engine is handled in that Engine's adapter.
+  pipeline. whisper.cpp windows internally and has no VRAM ceiling to chunk around — but it turned
+  out to need chunking for a different reason; see ADR-0004. A limit that belongs to one Engine is
+  handled in that Engine's adapter either way, which is why `chunk_bounds` lives in a shared
+  `engines/chunking.py` rather than in the pipeline.
 - **Cutting on a fixed clock** loses a word at every boundary: a word sliced down the middle is
   recognised by neither chunk. Cuts snap instead to the quietest half-second within ±15s of the
   boundary, so they land in a pause.
