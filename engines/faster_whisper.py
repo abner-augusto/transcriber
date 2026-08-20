@@ -27,6 +27,8 @@ class FasterWhisperTranscriber:
         compute_type: str = "auto",
         vad_filter: bool = True,
         min_silence_duration_ms: int = 500,
+        condition_on_previous_text: bool = False,
+        repetition_penalty: float = 1.1,
     ):
         self.model_path = model_path
         self.language = language
@@ -34,6 +36,8 @@ class FasterWhisperTranscriber:
         self.compute_type = compute_type
         self.vad_filter = vad_filter
         self.min_silence_duration_ms = min_silence_duration_ms
+        self.condition_on_previous_text = condition_on_previous_text
+        self.repetition_penalty = repetition_penalty
 
     @classmethod
     def get_model(cls, model_path: str, device: str = "auto", compute_type: str = "auto"):
@@ -71,6 +75,8 @@ class FasterWhisperTranscriber:
             "initial_prompt": prompt,
             "word_timestamps": True,
             "vad_filter": self.vad_filter,
+            "condition_on_previous_text": self.condition_on_previous_text,
+            "repetition_penalty": self.repetition_penalty,
         }
         if self.vad_filter:
             kwargs["vad_parameters"] = dict(

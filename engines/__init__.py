@@ -41,6 +41,8 @@ def make_transcriber(preset: dict) -> Transcriber:
             device=preset.get("device", "auto"),
             compute_type=preset.get("compute_type", "auto"),
             vad_filter=preset.get("vad_filter", True),
+            condition_on_previous_text=preset.get("condition_on_previous_text", False),
+            repetition_penalty=preset.get("repetition_penalty", 1.1),
         )
 
     if engine == "whisper.cpp":
