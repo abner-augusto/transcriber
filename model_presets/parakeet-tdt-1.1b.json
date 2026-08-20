@@ -1,0 +1,7 @@
+{
+  "id": "parakeet-tdt-1.1b",
+  "name": "Parakeet TDT 1.1B (EN)",
+  "engine": "parakeet.cpp",
+  "model_path": "./models/parakeet/tdt_ctc-1.1b-q8_0.gguf",
+  "decoder": "tdt"
+}
