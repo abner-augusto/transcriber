@@ -60,7 +60,8 @@ def make_transcriber(preset: dict) -> Transcriber:
         return ParakeetCppTranscriber(
             cli_path=settings.parakeet_cli_path,
             model_path=model_path,
-            decoder=preset.get("decoder", "tdt"),
+            decoder=preset.get("decoder"),
+            language=preset.get("language", "auto"),
         )
 
     raise ValueError(f"Unknown transcription engine '{engine}'. Known: {TRANSCRIBER_ENGINES}")

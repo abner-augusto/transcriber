@@ -1,0 +1,7 @@
+{
+  "id": "nemotron-3.5-0.6b",
+  "name": "Nemotron 3.5 ASR 0.6B (Multilingual)",
+  "engine": "parakeet.cpp",
+  "model_path": "./models/parakeet/nemotron-3.5-asr-streaming-0.6b-q8_0.gguf",
+  "language": "pt"
+}

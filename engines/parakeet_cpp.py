@@ -47,13 +47,15 @@ class ParakeetCppTranscriber:
         self,
         cli_path: str,
         model_path: str,
-        decoder: str = "tdt",
+        decoder: str | None = "tdt",
+        language: str = "auto",
         timeout: int = TRANSCRIBE_TIMEOUT_SECONDS,
         chunk_seconds: float = CHUNK_SECONDS,
     ):
         self.cli_path = cli_path
         self.model_path = model_path
         self.decoder = decoder
+        self.language = language
         self.timeout = timeout
         self.chunk_seconds = chunk_seconds
 
@@ -111,10 +113,13 @@ class ParakeetCppTranscriber:
             "transcribe",
             "--model", self.model_path,
             "--input", audio_path,
-            "--decoder", self.decoder,
             "--timestamps",
             "--json",
         ]
+        if self.decoder:
+            cmd.extend(["--decoder", self.decoder])
+        if self.language and self.language != "auto":
+            cmd.extend(["--lang", self.language])
 
         result = subprocess.run(
             cmd,
@@ -140,13 +145,17 @@ def parse_words(stdout: str) -> list[Word]:
     if payload is None:
         raise RuntimeError("parakeet-cli produced no JSON on stdout")
 
-    return [
-        Word(
-            start=float(w["start"]),
-            end=float(w["end"]),
-            text=" " + w["w"],
-            confidence=w.get("conf"),
+    words: list[Word] = []
+    for w in payload.get("words", []):
+        raw_text = w.get("w", "")
+        if not raw_text or (raw_text.startswith("<") and raw_text.endswith(">")):
+            continue
+        words.append(
+            Word(
+                start=float(w["start"]),
+                end=float(w["end"]),
+                text=" " + raw_text,
+                confidence=w.get("conf"),
+            )
         )
-        for w in payload.get("words", [])
-        if w.get("w")
-    ]
+    return words
