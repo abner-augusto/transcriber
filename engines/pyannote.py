@@ -47,6 +47,8 @@ class PyannoteDiarizer:
                 log.info(f"[pyannote] Loaded fallback {FALLBACK_MODEL_ID}")
 
             if torch.cuda.is_available():
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
                 cls._pipeline.to(torch.device("cuda"))
             elif torch.backends.mps.is_available():
                 cls._pipeline.to(torch.device("mps"))

@@ -1,5 +1,9 @@
+import os
 from pathlib import Path
 from pydantic_settings import BaseSettings
+
+# Suppress noisy symlink warnings on Windows for huggingface_hub
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 
 class Settings(BaseSettings):
