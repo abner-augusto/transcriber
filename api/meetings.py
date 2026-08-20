@@ -177,6 +177,22 @@ def delete_meeting(meeting_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+def _queue_full_processing(db: Session, meeting: Meeting) -> Job:
+    """Create a PROCESS_MEETING job and hand it to Celery. Caller owns the status transition."""
+    job = Job(
+        meeting_id=meeting.id,
+        job_type=JobType.PROCESS_MEETING,
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    result = process_meeting_task.delay(meeting.id, job.id)
+    job.celery_task_id = result.id
+    db.commit()
+    return job
+
+
 @router.post("/{meeting_id}/process")
 def start_processing(meeting_id: str, db: Session = Depends(get_db)):
     from sqlalchemy import update
@@ -199,21 +215,51 @@ def start_processing(meeting_id: str, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(409, "Meeting is already being processed")
 
-    # Create job
-    job = Job(
-        meeting_id=meeting.id,
-        job_type=JobType.PROCESS_MEETING,
-        status=JobStatus.PENDING,
-    )
-    db.add(job)
-    db.commit()
-
-    # Queue task
-    result = process_meeting_task.delay(meeting.id, job.id)
-    job.celery_task_id = result.id
-    db.commit()
-
+    job = _queue_full_processing(db, meeting)
     return job.to_dict()
+
+
+class DuplicateMeetingRequest(BaseModel):
+    preset_id: str
+
+
+@router.post("/{meeting_id}/duplicate")
+def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session = Depends(get_db)):
+    """Copy a Meeting's audio into a new Meeting pinned to a different Preset, and process it.
+
+    Lets an A/B comparison run without touching the original — the source Meeting keeps
+    its own results untouched.
+    """
+    source = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not source:
+        raise HTTPException(404, "Meeting not found")
+    if not source.audio_filepath:
+        raise HTTPException(400, "Meeting has no audio to duplicate")
+
+    preset = presets.get_preset(req.preset_id)
+    if not preset:
+        raise HTTPException(400, f"Unknown preset '{req.preset_id}'")
+
+    copy = Meeting(
+        title=f"{source.title} (copy · {preset['name']})"[:MAX_TITLE_LENGTH],
+        status=MeetingStatus.UPLOADED,
+        min_speakers=source.min_speakers,
+        max_speakers=source.max_speakers,
+        vocabulary=source.vocabulary,
+        preset_id=preset["id"],
+    )
+    db.add(copy)
+    db.flush()
+
+    src_path = Path(source.audio_filepath)
+    dest_path = get_meeting_path(copy.id) / f"original{src_path.suffix}"
+    shutil.copyfile(src_path, dest_path)
+    copy.audio_filepath = str(dest_path)
+    copy.status = MeetingStatus.PROCESSING
+    db.commit()
+
+    _queue_full_processing(db, copy)
+    return copy.to_dict()
 
 
 @router.post("/{meeting_id}/rediarize")

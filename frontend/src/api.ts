@@ -42,6 +42,11 @@ export async function reidentifyMeeting(id: string): Promise<Job> {
   return data;
 }
 
+export async function duplicateMeeting(id: string, presetId: string): Promise<Meeting> {
+  const { data } = await api.post(`/meetings/${id}/duplicate`, { preset_id: presetId });
+  return data;
+}
+
 export async function getJobs(meetingId: string): Promise<Job[]> {
   const { data } = await api.get(`/meetings/${meetingId}/jobs`);
   return data;

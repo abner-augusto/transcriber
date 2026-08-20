@@ -9,6 +9,7 @@ import AnalyticsPanel from "../components/AnalyticsPanel";
 import AudioPlayer from "../components/AudioPlayer";
 import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
+import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +20,7 @@ export default function MeetingPage() {
   } = useStore();
   const [showExport, setShowExport] = useState(false);
   const [showReprocess, setShowReprocess] = useState(false);
+  const [showDuplicate, setShowDuplicate] = useState(false);
   const [skipLlm, setSkipLlm] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"speakers" | "analytics">("speakers");
   const [editingTitle, setEditingTitle] = useState(false);
@@ -254,6 +256,13 @@ export default function MeetingPage() {
                       <div className="text-sm text-white font-medium">Full reprocess</div>
                       <div className="text-xs text-slate-500 mt-0.5">Re-transcribe and re-diarize everything</div>
                     </button>
+                    <button
+                      onClick={() => { setShowReprocess(false); setShowDuplicate(true); }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition"
+                    >
+                      <div className="text-sm text-white font-medium">Duplicate &amp; reprocess…</div>
+                      <div className="text-xs text-slate-500 mt-0.5">Copy this meeting and try another backend</div>
+                    </button>
                   </div>
                   </>
                 )}
@@ -372,6 +381,15 @@ export default function MeetingPage() {
 
       {showExport && (
         <ExportDialog meetingId={currentMeeting.id} onClose={() => setShowExport(false)} />
+      )}
+
+      {showDuplicate && (
+        <DuplicateReprocessDialog
+          meetingId={currentMeeting.id}
+          currentPresetId={currentMeeting.preset_id}
+          onClose={() => setShowDuplicate(false)}
+          onCreated={(newId) => { setShowDuplicate(false); navigate(`/meetings/${newId}`); }}
+        />
       )}
     </main>
   );
