@@ -18,7 +18,8 @@ from .ports import Turn
 
 log = logging.getLogger(__name__)
 
-MODEL_ID = "pyannote/speaker-diarization-3.1"
+COMMUNITY_MODEL_ID = "pyannote/speaker-diarization-community-1"
+FALLBACK_MODEL_ID = "pyannote/speaker-diarization-3.1"
 TARGET_SAMPLE_RATE = 16000
 
 
@@ -35,7 +36,16 @@ class PyannoteDiarizer:
             if token:
                 kwargs["token"] = token
 
-            cls._pipeline = Pipeline.from_pretrained(MODEL_ID, **kwargs)
+            try:
+                cls._pipeline = Pipeline.from_pretrained(COMMUNITY_MODEL_ID, **kwargs)
+                log.info(f"[pyannote] Loaded {COMMUNITY_MODEL_ID}")
+            except Exception as e:
+                log.warning(
+                    f"[pyannote] Could not load {COMMUNITY_MODEL_ID} ({e}); falling back to {FALLBACK_MODEL_ID}"
+                )
+                cls._pipeline = Pipeline.from_pretrained(FALLBACK_MODEL_ID, **kwargs)
+                log.info(f"[pyannote] Loaded fallback {FALLBACK_MODEL_ID}")
+
             if torch.cuda.is_available():
                 cls._pipeline.to(torch.device("cuda"))
             elif torch.backends.mps.is_available():
@@ -61,10 +71,17 @@ class PyannoteDiarizer:
 
         result = pipeline(audio_input, **kwargs)
 
-        # pyannote v4 returns DiarizeOutput; v3 returns an Annotation.
-        if hasattr(result, "serialize"):
+        # pyannote v4 returns DiarizeOutput with .speaker_diarization Annotation or .serialize()
+        if hasattr(result, "speaker_diarization"):
+            annotation = result.speaker_diarization
+            turns = [
+                Turn(start=round(turn.start, 3), end=round(turn.end, 3), speaker=speaker)
+                for turn, _, speaker in annotation.itertracks(yield_label=True)
+            ]
+        elif hasattr(result, "serialize"):
             turns = [Turn.from_dict(t) for t in result.serialize().get("diarization", [])]
         else:
+            # pyannote v3 returns an Annotation
             turns = [
                 Turn(start=round(turn.start, 3), end=round(turn.end, 3), speaker=speaker)
                 for turn, _, speaker in result.itertracks(yield_label=True)

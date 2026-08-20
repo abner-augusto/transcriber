@@ -1,6 +1,8 @@
 import logging
-import subprocess
 from pathlib import Path
+
+import numpy as np
+import soundfile as sf
 
 from engines import Turn
 
@@ -76,12 +78,14 @@ class SpeakerIdService:
         embedding_service = EmbeddingService()
 
         for label, info in speaker_info.items():
-            sample = self._longest_turn(turns, label)
-            if not sample:
+            sample_turns = self._best_turns_for_speaker(turns, label)
+            if not sample_turns:
                 continue
 
             try:
-                embedding = self._embed_segment(embedding_service, audio_path, label, sample)
+                embedding = self._embed_speaker_turns(
+                    embedding_service, audio_path, label, sample_turns
+                )
             except Exception as e:
                 log.debug(f"Profile matching failed for {label}: {e}")
                 continue
@@ -99,32 +103,68 @@ class SpeakerIdService:
                 info["identified_by"] = "voice_profile"
                 info["confidence"] = round(best_sim, 3)
 
-    def _longest_turn(self, turns: list[Turn], label: str) -> Turn | None:
-        """Longest Turn by this Speaker — the best sample to embed. None if too short."""
-        mine = [t for t in turns if t.speaker == label]
+    def _best_turns_for_speaker(
+        self,
+        turns: list[Turn],
+        label: str,
+        max_total_seconds: float = MAX_PROFILE_SAMPLE_SECONDS,
+    ) -> list[Turn]:
+        """Select best (longest) turns for a speaker up to max_total_seconds."""
+        mine = [
+            t
+            for t in turns
+            if t.speaker == label and (t.end - t.start) >= MIN_PROFILE_SAMPLE_SECONDS
+        ]
         if not mine:
-            return None
-        longest = max(mine, key=lambda t: t.end - t.start)
-        if longest.end - longest.start < MIN_PROFILE_SAMPLE_SECONDS:
-            return None
-        return longest
+            # Fallback to shorter turns if no single turn >= 2s
+            mine = [
+                t for t in turns if t.speaker == label and (t.end - t.start) >= 1.0
+            ]
+            if not mine:
+                return []
 
-    def _embed_segment(self, embedding_service, audio_path: str, label: str, turn: Turn):
+        mine.sort(key=lambda t: t.end - t.start, reverse=True)
+        selected = []
+        total = 0.0
+        for t in mine:
+            selected.append(t)
+            total += t.end - t.start
+            if total >= max_total_seconds:
+                break
+        return selected
+
+    def _longest_turn(self, turns: list[Turn], label: str) -> Turn | None:
+        """Longest Turn by this Speaker — kept for backward compatibility."""
+        turns_list = self._best_turns_for_speaker(turns, label)
+        return turns_list[0] if turns_list else None
+
+    def _embed_speaker_turns(
+        self, embedding_service, audio_path: str, label: str, turns: list[Turn]
+    ) -> np.ndarray:
+        """Extract speaker embedding from concatenated audio slices of the speaker's turns."""
         temp_wav = str(Path(audio_path).parent / f"profile_match_{label}.wav")
-        duration = min(turn.end - turn.start, MAX_PROFILE_SAMPLE_SECONDS)
-        subprocess.run(
-            [
-                "ffmpeg", "-y",
-                "-ss", str(turn.start),
-                "-t", str(duration),
-                "-i", audio_path,
-                "-ar", "16000", "-ac", "1",
-                temp_wav,
-            ],
-            capture_output=True,
-            timeout=15,
-        )
         try:
+            data, sr = sf.read(audio_path, dtype="float32", always_2d=True)
+            waveform = data[:, 0]
+            slices = []
+            total_samples = 0
+            max_samples = int(MAX_PROFILE_SAMPLE_SECONDS * sr)
+
+            for turn in turns:
+                start_sample = max(0, int(turn.start * sr))
+                end_sample = min(len(waveform), int(turn.end * sr))
+                if end_sample > start_sample:
+                    slice_data = waveform[start_sample:end_sample]
+                    slices.append(slice_data)
+                    total_samples += len(slice_data)
+                    if total_samples >= max_samples:
+                        break
+
+            if not slices:
+                raise ValueError(f"No audio samples found for speaker {label}")
+
+            combined = np.concatenate(slices)[:max_samples]
+            sf.write(temp_wav, combined, sr)
             return embedding_service.extract_embedding(temp_wav)
         finally:
             Path(temp_wav).unlink(missing_ok=True)

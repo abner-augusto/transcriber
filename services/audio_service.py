@@ -19,6 +19,7 @@ class AudioService:
             "ffmpeg", "-y",
             "-i", input_path,
             "-vn",
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
             "-acodec", "pcm_s16le",
             "-ar", "16000",
             "-ac", "1",
