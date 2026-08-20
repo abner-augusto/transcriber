@@ -79,7 +79,7 @@ export default function SettingsDialog({ onClose }: Props) {
         name: newName.trim(),
         engine: newEngine,
         model_path: newModelPath.trim(),
-        language: newEngine === "whisper.cpp" && newLanguage.trim() ? newLanguage.trim() : undefined,
+        language: (newEngine === "whisper.cpp" || newEngine === "faster-whisper") && newLanguage.trim() ? newLanguage.trim() : undefined,
         decoder: newEngine === "parakeet.cpp" ? newDecoder : undefined,
       });
       setNewName(""); setNewModelPath(""); setNewLanguage(""); setNewDecoder("tdt");
@@ -221,9 +221,9 @@ export default function SettingsDialog({ onClose }: Props) {
                     ))}
                   </select>
                   <input value={newModelPath} onChange={(e) => setNewModelPath(e.target.value)}
-                    placeholder="Model path (e.g. ./models/ggml-medium.bin)"
+                    placeholder={newEngine === "faster-whisper" ? "Model (e.g. large-v3-turbo, inesc-id/WhisperLv3-X-PT-All)" : "Model path (e.g. ./models/ggml-medium.bin)"}
                     className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
-                  {newEngine === "whisper.cpp" && (
+                  {(newEngine === "whisper.cpp" || newEngine === "faster-whisper") && (
                     <input value={newLanguage} onChange={(e) => setNewLanguage(e.target.value)}
                       placeholder="Language code (optional, e.g. pt)"
                       className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />

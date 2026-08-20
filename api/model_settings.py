@@ -13,6 +13,9 @@ class CreatePreset(BaseModel):
     model_path: str
     language: str | None = None
     decoder: str | None = None
+    device: str | None = None
+    compute_type: str | None = None
+    vad_filter: bool | None = None
 
 
 class SetDefault(BaseModel):

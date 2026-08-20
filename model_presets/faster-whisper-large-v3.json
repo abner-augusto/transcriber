@@ -1,0 +1,10 @@
+{
+  "id": "faster-whisper-large-v3",
+  "name": "Faster-Whisper Large v3 (Full)",
+  "engine": "faster-whisper",
+  "model_path": "large-v3",
+  "language": "pt",
+  "device": "auto",
+  "compute_type": "auto",
+  "vad_filter": true
+}

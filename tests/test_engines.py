@@ -188,6 +188,45 @@ def test_a_preset_names_the_engine_it_runs_on():
     assert transcriber.language == "pt"
 
 
+def test_faster_whisper_preset_creation():
+    transcriber = make_transcriber({
+        "id": "faster-whisper-large-v3-turbo",
+        "engine": "faster-whisper",
+        "model_path": "large-v3-turbo",
+        "language": "pt",
+        "vad_filter": True,
+    })
+
+    assert isinstance(transcriber, Transcriber)
+    assert transcriber.language == "pt"
+    assert transcriber.model_path == "large-v3-turbo"
+
+
+def test_faster_whisper_words_parsing():
+    from engines.faster_whisper import parse_words_from_segments
+    from types import SimpleNamespace
+
+    mock_segments = [
+        SimpleNamespace(
+            words=[
+                SimpleNamespace(start=0.0, end=0.4, word="Olá", probability=0.98),
+                SimpleNamespace(start=0.4, end=0.5, word=",", probability=0.99),
+                SimpleNamespace(start=0.5, end=1.0, word=" mundo", probability=0.95),
+                SimpleNamespace(start=1.0, end=1.1, word="!", probability=0.99),
+            ]
+        )
+    ]
+
+    words = parse_words_from_segments(mock_segments)
+
+    assert len(words) == 4
+    assert words[0] == Word(start=0.0, end=0.4, text=" Olá", confidence=0.98)
+    assert words[1] == Word(start=0.4, end=0.5, text=",", confidence=0.99)
+    assert words[2] == Word(start=0.5, end=1.0, text=" mundo", confidence=0.95)
+    assert words[3] == Word(start=1.0, end=1.1, text="!", confidence=0.99)
+    assert "".join(w.text for w in words).strip() == "Olá, mundo!"
+
+
 def test_an_unknown_engine_fails_loudly():
     with pytest.raises(ValueError, match="Unknown transcription engine"):
         make_transcriber({"id": "x", "engine": "deepgram", "model_path": "x"})

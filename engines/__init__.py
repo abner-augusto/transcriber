@@ -20,7 +20,7 @@ __all__ = [
     "TRANSCRIBER_ENGINES", "engine_status",
 ]
 
-TRANSCRIBER_ENGINES = ["whisper.cpp", "parakeet.cpp"]
+TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp"]
 
 DIARIZER_ENGINE = "pyannote"
 
@@ -31,6 +31,17 @@ def make_transcriber(preset: dict) -> Transcriber:
     model_path = preset.get("model_path")
     if not model_path:
         raise ValueError(f"Preset '{preset.get('id')}' has no model_path")
+
+    if engine == "faster-whisper":
+        from .faster_whisper import FasterWhisperTranscriber
+
+        return FasterWhisperTranscriber(
+            model_path=model_path,
+            language=preset.get("language", "auto"),
+            device=preset.get("device", "auto"),
+            compute_type=preset.get("compute_type", "auto"),
+            vad_filter=preset.get("vad_filter", True),
+        )
 
     if engine == "whisper.cpp":
         from .whisper_cpp import WhisperCppTranscriber
@@ -67,6 +78,29 @@ def engine_status(preset: dict) -> dict:
     is going to die in the worker.
     """
     engine = preset.get("engine")
+
+    if engine == "faster-whisper":
+        try:
+            import faster_whisper  # noqa: F401
+        except ImportError:
+            return {"available": False, "reason": "faster-whisper is not installed"}
+
+        model_path = preset.get("model_path") or ""
+        if not model_path:
+            return {"available": False, "reason": "Missing model_path"}
+
+        # If it is a local relative or absolute path, verify existence
+        if (
+            model_path.startswith(".")
+            or model_path.startswith("/")
+            or model_path.startswith("\\")
+            or (len(model_path) > 1 and model_path[1] == ":")
+        ):
+            if not Path(model_path).exists():
+                return {"available": False, "reason": f"Model not found at {model_path}"}
+
+        return {"available": True, "reason": None}
+
     cli = {
         "whisper.cpp": settings.whisper_cli_path,
         "parakeet.cpp": settings.parakeet_cli_path,

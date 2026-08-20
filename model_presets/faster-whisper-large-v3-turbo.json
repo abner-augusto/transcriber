@@ -1,0 +1,10 @@
+{
+  "id": "faster-whisper-large-v3-turbo",
+  "name": "Faster-Whisper Large v3 Turbo",
+  "engine": "faster-whisper",
+  "model_path": "large-v3-turbo",
+  "language": "pt",
+  "device": "auto",
+  "compute_type": "auto",
+  "vad_filter": true
+}

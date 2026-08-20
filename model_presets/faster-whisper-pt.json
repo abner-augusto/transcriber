@@ -1,0 +1,10 @@
+{
+  "id": "faster-whisper-pt",
+  "name": "Faster-Whisper Portuguese (Fine-tuned)",
+  "engine": "faster-whisper",
+  "model_path": "inesc-id/WhisperLv3-X-PT-All",
+  "language": "pt",
+  "device": "auto",
+  "compute_type": "auto",
+  "vad_filter": true
+}
