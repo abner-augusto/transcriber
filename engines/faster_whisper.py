@@ -16,6 +16,13 @@ log = logging.getLogger(__name__)
 MAX_PROMPT_CHARS = 500
 
 
+STYLE_PROMPTS = {
+    "pt": "Transcrição em português com pontuação adequada, letras maiúsculas, pontos e vírgulas.",
+    "en": "Transcription with proper punctuation, capitalization, periods, and commas.",
+    "es": "Transcripción en español con puntuación adecuada, mayúsculas, puntos y comas.",
+}
+
+
 class FasterWhisperTranscriber:
     _models: dict = {}
 
@@ -68,7 +75,14 @@ class FasterWhisperTranscriber:
         model = self.get_model(self.model_path, self.device, self.compute_type)
 
         lang = None if (not self.language or self.language == "auto") else self.language
-        prompt = vocabulary[:MAX_PROMPT_CHARS] if vocabulary else None
+
+        prompt_parts = []
+        style = STYLE_PROMPTS.get(self.language)
+        if style:
+            prompt_parts.append(style)
+        if vocabulary:
+            prompt_parts.append(vocabulary)
+        prompt = " ".join(prompt_parts)[:MAX_PROMPT_CHARS] if prompt_parts else None
 
         kwargs = {
             "language": lang,
