@@ -23,6 +23,12 @@ FALLBACK_MODEL_ID = "pyannote/speaker-diarization-3.1"
 TARGET_SAMPLE_RATE = 16000
 
 
+# Calibrated VBx clustering parameters to strictly separate distinct speakers without over-merging
+DEFAULT_CLUSTERING_THRESHOLD = 0.52
+DEFAULT_FA = 0.10
+DEFAULT_FB = 0.65
+
+
 class PyannoteDiarizer:
     _pipeline = None
 
@@ -45,6 +51,20 @@ class PyannoteDiarizer:
                 )
                 cls._pipeline = Pipeline.from_pretrained(FALLBACK_MODEL_ID, **kwargs)
                 log.info(f"[pyannote] Loaded fallback {FALLBACK_MODEL_ID}")
+
+            try:
+                cls._pipeline.instantiate({
+                    "clustering": {
+                        "threshold": DEFAULT_CLUSTERING_THRESHOLD,
+                        "Fa": DEFAULT_FA,
+                        "Fb": DEFAULT_FB,
+                    }
+                })
+                log.info(
+                    f"[pyannote] Configured strict clustering (threshold={DEFAULT_CLUSTERING_THRESHOLD}, Fa={DEFAULT_FA}, Fb={DEFAULT_FB})"
+                )
+            except Exception as e:
+                log.warning(f"[pyannote] Could not set custom clustering parameters: {e}")
 
             if torch.cuda.is_available():
                 torch.backends.cuda.matmul.allow_tf32 = True
