@@ -7,6 +7,7 @@ data-sharing one. Do not remove it.
 The pipeline is expensive to construct, so it is built once per process.
 """
 
+import copy
 import logging
 
 import torch
@@ -33,9 +34,18 @@ _CLUSTERING_PREF_TO_PARAM = {
     "Fb": "Fb",
 }
 
+# Distinct from None: "_sync_clustering_overrides has never run", vs. "ran, no overrides".
+_UNSET = object()
+
 
 class PyannoteDiarizer:
     _pipeline = None
+    # The pretrained hyperparameters, captured once, so unsetting an override in the
+    # UI restores the shipped values instead of stacking on the last override.
+    _default_params = None
+    # The override dict last handed to instantiate(). _UNSET means "never synced
+    # yet"; {} is a real state meaning "running on defaults".
+    _applied_overrides = _UNSET
 
     @classmethod
     def get_pipeline(cls):
@@ -57,7 +67,12 @@ class PyannoteDiarizer:
                 cls._pipeline = Pipeline.from_pretrained(FALLBACK_MODEL_ID, **kwargs)
                 log.info(f"[pyannote] Loaded fallback {FALLBACK_MODEL_ID}")
 
-            cls._apply_clustering_overrides()
+            try:
+                cls._default_params = copy.deepcopy(
+                    dict(cls._pipeline.parameters(instantiated=True))
+                )
+            except Exception as e:
+                log.warning(f"[pyannote] Could not read pipeline defaults ({e})")
 
             if torch.cuda.is_available():
                 torch.backends.cuda.matmul.allow_tf32 = True
@@ -65,34 +80,48 @@ class PyannoteDiarizer:
                 cls._pipeline.to(torch.device("cuda"))
             elif torch.backends.mps.is_available():
                 cls._pipeline.to(torch.device("mps"))
+
+        cls._sync_clustering_overrides()
         return cls._pipeline
 
     @classmethod
-    def _apply_clustering_overrides(cls):
-        """Merge any preferences.json clustering overrides onto the pretrained params.
+    def _sync_clustering_overrides(cls):
+        """Re-read preferences.json and re-instantiate if the clustering knobs changed.
 
-        A missing / empty "diarization" block is the common case and a no-op, so the
-        pipeline runs with pyannote's shipped defaults. Any failure here is logged and
-        swallowed — a bad override must not stop diarization, it just falls back.
+        Runs on every get_pipeline() call, not just at build time — the Celery worker
+        is a long-lived process, so a slider change in the UI has to reach the already
+        cached pipeline. instantiate() only sets hyperparameters (no model reload), so
+        calling it again is cheap; the equality check keeps it to actual changes.
+
+        A missing / empty "diarization" block restores the shipped defaults. Any
+        failure is logged and swallowed — a bad override must not stop diarization.
         """
+        if cls._default_params is None:
+            return
+
         cfg = load_preferences().get("diarization") or {}
         overrides = {
             param: float(cfg[pref])
             for pref, param in _CLUSTERING_PREF_TO_PARAM.items()
             if cfg.get(pref) is not None
         }
-        if not overrides:
+        if overrides == cls._applied_overrides:
             return
+        had_overrides = bool(cls._applied_overrides) and cls._applied_overrides is not _UNSET
 
         try:
-            current = dict(cls._pipeline.parameters(instantiated=True))
-            clustering = {**dict(current.get("clustering", {})), **overrides}
-            cls._pipeline.instantiate({**current, "clustering": clustering})
-            log.info(f"[pyannote] Applied clustering overrides {overrides}")
+            params = copy.deepcopy(cls._default_params)
+            params.setdefault("clustering", {}).update(overrides)
+            cls._pipeline.instantiate(params)
+            cls._applied_overrides = overrides
+            if overrides:
+                log.info(f"[pyannote] Applied clustering overrides {overrides}")
+            elif had_overrides:
+                log.info("[pyannote] Cleared clustering overrides; using pipeline defaults")
         except Exception as e:
             log.warning(
                 f"[pyannote] Could not apply clustering overrides {overrides} ({e}); "
-                "using pipeline defaults"
+                "keeping current params"
             )
 
     def diarize(
