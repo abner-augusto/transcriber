@@ -132,6 +132,17 @@ class PyannoteDiarizer:
     ) -> list[Turn]:
         pipeline = self.get_pipeline()
 
+        try:
+            clustering = dict(pipeline.parameters(instantiated=True).get("clustering", {}))
+            has_override = bool(self._applied_overrides) and self._applied_overrides is not _UNSET
+            source = "override" if has_override else "default"
+            log.info(
+                f"[pyannote] diarizing with clustering={clustering} ({source}), "
+                f"min_speakers={min_speakers}, max_speakers={max_speakers}"
+            )
+        except Exception:
+            pass
+
         waveform, sample_rate = _load_audio_tensor(audio_path)
         audio_input = {"waveform": waveform, "sample_rate": sample_rate}
 
