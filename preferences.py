@@ -9,6 +9,9 @@ _DEFAULTS = {
     "default_vocabulary": "",
     "speaker_profiles_enabled": False,
     "hf_auth_token": "",
+    # Diarization clustering overrides. Empty => pyannote's own calibrated defaults.
+    # Recognised keys: "clustering_threshold" (0-1), "Fa", "Fb".
+    "diarization": {},
 }
 
 # Values that should be masked when sending to frontend

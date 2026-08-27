@@ -130,6 +130,22 @@ def update_preferences(body: dict):
         # Don't overwrite with the masked value
         if val and "*" not in val:
             current["hf_auth_token"] = val
+    if "diarization" in body:
+        raw = body["diarization"] if isinstance(body["diarization"], dict) else {}
+        # Drop unset / out-of-range knobs so an empty block means "model default".
+        bounds = {"clustering_threshold": (0.0, 1.0), "Fa": (0.0, 5.0), "Fb": (0.0, 5.0)}
+        clean = {}
+        for key, (lo, hi) in bounds.items():
+            v = raw.get(key)
+            if v is None or v == "":
+                continue
+            try:
+                num = float(v)
+            except (TypeError, ValueError):
+                continue
+            if lo <= num <= hi:
+                clean[key] = num
+        current["diarization"] = clean
     save_preferences(current)
     return get_public_preferences()
 

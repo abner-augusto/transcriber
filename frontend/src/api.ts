@@ -180,10 +180,17 @@ export async function saveProfileFromSpeaker(
 
 // --- Preferences ---
 
+export interface DiarizationPrefs {
+  clustering_threshold?: number | null;
+  Fa?: number | null;
+  Fb?: number | null;
+}
+
 export interface Preferences {
   default_vocabulary: string;
   speaker_profiles_enabled: boolean;
   hf_auth_token: string;
+  diarization?: DiarizationPrefs;
 }
 
 export async function getPreferences(): Promise<Preferences> {

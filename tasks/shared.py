@@ -20,8 +20,7 @@ MAX_SEGMENT_SECONDS = 30.0
 
 # A Word with no overlapping Turn is attributed to the nearest one within this gap —
 # diarization leaves small holes, and a word in a hole still belongs to somebody.
-# Kept tight (0.5s) to avoid bridging across rapid speaker turn-taking.
-NEAREST_TURN_TOLERANCE_SECONDS = 0.5
+NEAREST_TURN_TOLERANCE_SECONDS = 2.0
 
 UNKNOWN_SPEAKER = "UNKNOWN"
 

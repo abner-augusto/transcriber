@@ -12,7 +12,7 @@ import logging
 import torch
 import soundfile as sf
 
-from preferences import get_secret
+from preferences import get_secret, load_preferences
 
 from .ports import Turn
 
@@ -22,11 +22,16 @@ COMMUNITY_MODEL_ID = "pyannote/speaker-diarization-community-1"
 FALLBACK_MODEL_ID = "pyannote/speaker-diarization-3.1"
 TARGET_SAMPLE_RATE = 16000
 
-
-# Calibrated VBx clustering parameters to strictly separate distinct speakers without over-merging
-DEFAULT_CLUSTERING_THRESHOLD = 0.52
-DEFAULT_FA = 0.10
-DEFAULT_FB = 0.65
+# Optional diarization clustering overrides, read from preferences.json under
+# "diarization". When nothing is set the pipeline keeps pyannote's own calibrated
+# defaults. The clustering threshold is the main knob: lower splits more readily
+# (one person can become several speakers), higher merges more readily. Fa/Fb are
+# VBx-style and only some pipelines expose them — an unknown key is ignored below.
+_CLUSTERING_PREF_TO_PARAM = {
+    "clustering_threshold": "threshold",
+    "Fa": "Fa",
+    "Fb": "Fb",
+}
 
 
 class PyannoteDiarizer:
@@ -52,19 +57,7 @@ class PyannoteDiarizer:
                 cls._pipeline = Pipeline.from_pretrained(FALLBACK_MODEL_ID, **kwargs)
                 log.info(f"[pyannote] Loaded fallback {FALLBACK_MODEL_ID}")
 
-            try:
-                cls._pipeline.instantiate({
-                    "clustering": {
-                        "threshold": DEFAULT_CLUSTERING_THRESHOLD,
-                        "Fa": DEFAULT_FA,
-                        "Fb": DEFAULT_FB,
-                    }
-                })
-                log.info(
-                    f"[pyannote] Configured strict clustering (threshold={DEFAULT_CLUSTERING_THRESHOLD}, Fa={DEFAULT_FA}, Fb={DEFAULT_FB})"
-                )
-            except Exception as e:
-                log.warning(f"[pyannote] Could not set custom clustering parameters: {e}")
+            cls._apply_clustering_overrides()
 
             if torch.cuda.is_available():
                 torch.backends.cuda.matmul.allow_tf32 = True
@@ -73,6 +66,34 @@ class PyannoteDiarizer:
             elif torch.backends.mps.is_available():
                 cls._pipeline.to(torch.device("mps"))
         return cls._pipeline
+
+    @classmethod
+    def _apply_clustering_overrides(cls):
+        """Merge any preferences.json clustering overrides onto the pretrained params.
+
+        A missing / empty "diarization" block is the common case and a no-op, so the
+        pipeline runs with pyannote's shipped defaults. Any failure here is logged and
+        swallowed — a bad override must not stop diarization, it just falls back.
+        """
+        cfg = load_preferences().get("diarization") or {}
+        overrides = {
+            param: float(cfg[pref])
+            for pref, param in _CLUSTERING_PREF_TO_PARAM.items()
+            if cfg.get(pref) is not None
+        }
+        if not overrides:
+            return
+
+        try:
+            current = dict(cls._pipeline.parameters(instantiated=True))
+            clustering = {**dict(current.get("clustering", {})), **overrides}
+            cls._pipeline.instantiate({**current, "clustering": clustering})
+            log.info(f"[pyannote] Applied clustering overrides {overrides}")
+        except Exception as e:
+            log.warning(
+                f"[pyannote] Could not apply clustering overrides {overrides} ({e}); "
+                "using pipeline defaults"
+            )
 
     def diarize(
         self,
