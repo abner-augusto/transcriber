@@ -16,6 +16,7 @@ from database import SessionLocal
 from engines import DIARIZER_ENGINE, make_diarizer
 from models import Meeting, Speaker, Segment, Job, MeetingStatus
 from models.job import JobStatus
+from preferences import get_speaker_switch_penalty
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
 
@@ -76,7 +77,11 @@ def rediarize_task(self, meeting_id: str, job_id: str):
             if (bounded_exclusive_turns is not None and len(bounded_exclusive_turns) > 0)
             else bounded_turns
         )
-        aligned = build_segments(words, attribution_turns)
+        aligned = build_segments(
+            words,
+            attribution_turns,
+            switch_penalty=get_speaker_switch_penalty(),
+        )
 
         # Step 3: Speaker naming (Participant N, overridden by voice profile matches)
         update_progress(db, job, meeting, 65, "Matching against saved voice profiles...")
@@ -141,7 +146,11 @@ def reidentify_task(self, meeting_id: str, job_id: str):
 
         # Step 1: Rebuild the Segments from the stored Words and attribution Turns
         update_progress(db, job, meeting, 20, "Synchronizing speakers with text...")
-        aligned = build_segments(words, attribution_turns)
+        aligned = build_segments(
+            words,
+            attribution_turns,
+            switch_penalty=get_speaker_switch_penalty(),
+        )
 
         # Step 2: Re-name speakers against the saved Voice Profiles
         update_progress(db, job, meeting, 40, "Matching against saved voice profiles...")

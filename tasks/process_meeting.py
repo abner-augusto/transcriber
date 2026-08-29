@@ -45,8 +45,9 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
         transcriber = make_transcriber(preset)
         diarizer = make_diarizer()
 
-        from preferences import load_preferences
+        from preferences import get_speaker_switch_penalty, load_preferences
         prefs = load_preferences()
+        switch_penalty = get_speaker_switch_penalty()
         fa_pref = prefs.get("forced_alignment", {})
         fa_enabled = bool(
             preset.get("forced_alignment")
@@ -122,7 +123,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             if (bounded_exclusive_turns is not None and len(bounded_exclusive_turns) > 0)
             else bounded_turns
         )
-        aligned = build_segments(words, attribution_turns)
+        aligned = build_segments(words, attribution_turns, switch_penalty=switch_penalty)
         update_progress(db, job, meeting, 80, "Synchronization complete")
 
         # Step 5: Speaker naming (Participant N, overridden by voice profile matches)

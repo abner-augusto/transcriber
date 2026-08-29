@@ -462,6 +462,13 @@ def test_low_alignment_score_weakens_timestamp_evidence():
     ]
 
 
+def test_zero_alignment_score_is_floored_instead_of_erasing_emission_evidence():
+    words = [Word(start=0.0, end=1.0, text=" word", alignment_score=0.0)]
+    turns = [Turn(start=0.0, end=1.0, speaker="SPEAKER_00")]
+
+    assert smooth_word_speakers(words, turns) == ["SPEAKER_00"]
+
+
 def test_smoothing_empty_input_and_edge_cases():
     """Empty words or turns are handled gracefully."""
     turn = Turn(start=0.0, end=1.0, speaker="SPEAKER_00")

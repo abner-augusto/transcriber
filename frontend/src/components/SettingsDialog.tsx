@@ -32,6 +32,7 @@ export default function SettingsDialog({ onClose }: Props) {
   const [profilesEnabled, setProfilesEnabled] = useState(true);
   const [hfToken, setHfToken] = useState("");
   const [clusterThreshold, setClusterThreshold] = useState<number | null>(null);
+  const [switchPenalty, setSwitchPenalty] = useState(0.8);
   const [profiles, setProfiles] = useState<SpeakerProfile[]>([]);
   const [learnedVocab, setLearnedVocab] = useState<VocabularyEntry[]>([]);
 
@@ -52,6 +53,7 @@ export default function SettingsDialog({ onClose }: Props) {
     setProfilesEnabled(p.speaker_profiles_enabled);
     setHfToken(p.hf_auth_token || "");
     setClusterThreshold(p.diarization?.clustering_threshold ?? null);
+    setSwitchPenalty(p.speaker_switch_penalty ?? 0.8);
     setProfiles(await listSpeakerProfiles());
     setLearnedVocab(await listVocabulary());
   }
@@ -63,6 +65,7 @@ export default function SettingsDialog({ onClose }: Props) {
         default_vocabulary: defaultVocab,
         speaker_profiles_enabled: profilesEnabled,
         hf_auth_token: hfToken,
+        speaker_switch_penalty: switchPenalty,
         diarization: clusterThreshold == null ? {} : { clustering_threshold: clusterThreshold },
       });
     }
@@ -266,6 +269,28 @@ export default function SettingsDialog({ onClose }: Props) {
             </div>
 
             <div className="border-t border-slate-800" />
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Speaker attribution smoothing</label>
+              <p className="text-xs text-slate-500 mb-2">
+                Penalty for switching speakers between nearby words. Higher values suppress isolated
+                switches; set to zero to follow timestamp evidence directly.
+              </p>
+              <div className="flex items-center gap-3">
+                <input type="range" min={0} max={2} step={0.05}
+                  value={switchPenalty}
+                  onChange={(e) => setSwitchPenalty(parseFloat(e.target.value))}
+                  className="flex-1 accent-violet-600" />
+                <span className="text-xs text-slate-400 font-mono w-10 text-right">
+                  {switchPenalty.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex text-[10px] text-slate-600 mt-1">
+                <span>more responsive</span>
+                <span className="flex-1" />
+                <span>more stable</span>
+              </div>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Speaker separation</label>

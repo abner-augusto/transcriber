@@ -190,6 +190,7 @@ export interface Preferences {
   default_vocabulary: string;
   speaker_profiles_enabled: boolean;
   hf_auth_token: string;
+  speaker_switch_penalty?: number;
   diarization?: DiarizationPrefs;
 }
 

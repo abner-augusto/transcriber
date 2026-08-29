@@ -115,7 +115,8 @@ def test_alignment_fallback_on_audio_load_failure():
     ]
 
     result = align_words("non_existent_audio_path_123.wav", original_words)
-    assert result == original_words
+    assert [word.alignment_score for word in result] == [0.6, 0.6]
+    assert [word.start for word in result] == [word.start for word in original_words]
 
 
 def test_alignment_fallback_on_model_exception(tmp_path):
@@ -131,7 +132,8 @@ def test_alignment_fallback_on_model_exception(tmp_path):
     with patch.object(MMSCTCAligner, "get_model_and_aligner", side_effect=RuntimeError("CUDA OOM")):
         result = aligner.align(str(audio_path), original_words)
 
-    assert result == original_words
+    assert [word.alignment_score for word in result] == [0.6]
+    assert [word.start for word in result] == [word.start for word in original_words]
 
 
 def test_alignment_window_failure_keeps_successful_windows(tmp_path, caplog):
@@ -142,11 +144,14 @@ def test_alignment_window_failure_keeps_successful_windows(tmp_path, caplog):
         Word(start=2.0, end=2.5, text=" Dois"),
     ]
     aligner = MMSCTCAligner()
-    successful = Word(start=0.1, end=0.4, text=" Um")
+    successful = Word(start=0.1, end=0.4, text=" Um", alignment_score=0.9)
     with patch.object(aligner, "_align_window", side_effect=[[successful], RuntimeError("window failed")]):
         with patch.object(MMSCTCAligner, "get_model_and_aligner", return_value=(MagicMock(), MagicMock(), {"u": 1}, torch.device("cpu"))):
             result = aligner.align(str(audio_path), original_words)
-    assert result == [successful, original_words[1]]
+    assert result[0] == successful
+    assert result[1].start == original_words[1].start
+    assert result[1].end == original_words[1].end
+    assert result[1].alignment_score == 0.6
     assert "1/2 windows failed; kept original timestamps for those windows" in caplog.text
 
 
@@ -165,7 +170,28 @@ def test_failed_window_remains_untouched_when_previous_alignment_overruns(tmp_pa
             result = aligner.align(str(audio_path), original_words)
 
     assert result[0].end == 2.0
-    assert result[1] == original_words[1]
+    assert result[1].start == original_words[1].start
+    assert result[1].end == original_words[1].end
+    assert result[1].alignment_score == 0.6
+
+
+def test_failed_window_does_not_push_later_words_forward(tmp_path):
+    audio_path = tmp_path / "test.wav"
+    sf.write(audio_path, np.zeros(SAMPLE_RATE * 4, dtype=np.float32), SAMPLE_RATE)
+    original_words = [
+        Word(start=0.0, end=0.5, text=" Um"),
+        Word(start=2.0, end=2.5, text=" Dois"),
+        Word(start=3.0, end=3.5, text=" Três"),
+    ]
+    aligner = MMSCTCAligner()
+
+    with patch.object(aligner, "_align_window", side_effect=[RuntimeError("window failed"), RuntimeError("window failed")]):
+        with patch.object(MMSCTCAligner, "get_model_and_aligner", return_value=(MagicMock(), MagicMock(), {"u": 1}, torch.device("cpu"))):
+            result = aligner.align(str(audio_path), original_words)
+
+    assert [(word.start, word.end) for word in result] == [
+        (word.start, word.end) for word in original_words
+    ]
 
 
 def test_emission_frame_shortfall_counts_as_window_failure(tmp_path, caplog):
@@ -182,8 +208,64 @@ def test_emission_frame_shortfall_counts_as_window_failure(tmp_path, caplog):
     ):
         result = aligner.align(str(audio_path), original_words)
 
-    assert result == original_words
+    assert result[0].start == original_words[0].start
+    assert result[0].end == original_words[0].end
+    assert result[0].alignment_score == 0.6
     assert "1/1 windows failed" in caplog.text
+
+
+def test_missing_span_score_does_not_zero_alignment_evidence(tmp_path, caplog):
+    caplog.set_level("INFO")
+    audio_path = tmp_path / "test.wav"
+    sf.write(audio_path, np.zeros(SAMPLE_RATE, dtype=np.float32), SAMPLE_RATE)
+    original_words = [Word(start=0.0, end=1.0, text=" Teste")]
+    model = MagicMock(return_value=(torch.zeros(1, 20, 3), None))
+    span_without_score = [SimpleNamespace(start=2, end=8)]
+    aligner = MMSCTCAligner()
+
+    with patch.object(
+        MMSCTCAligner,
+        "get_model_and_aligner",
+        return_value=(model, MagicMock(return_value=[span_without_score]), {letter: index for index, letter in enumerate("teste", 1)}, torch.device("cpu")),
+    ):
+        result = aligner.align(str(audio_path), original_words)
+
+    assert result[0].alignment_score is None
+    assert "alignment score stats: no scores available" in caplog.text
+
+
+def test_log_probability_span_score_is_converted_to_probability(tmp_path):
+    audio_path = tmp_path / "test.wav"
+    sf.write(audio_path, np.zeros(SAMPLE_RATE, dtype=np.float32), SAMPLE_RATE)
+    model = MagicMock(return_value=(torch.zeros(1, 20, 3), None))
+    span = [SimpleNamespace(start=2, end=8, score=-0.69314718056)]
+    aligner = MMSCTCAligner()
+
+    with patch.object(
+        MMSCTCAligner,
+        "get_model_and_aligner",
+        return_value=(model, MagicMock(return_value=[span]), {letter: index for index, letter in enumerate("teste", 1)}, torch.device("cpu")),
+    ):
+        result = aligner.align(str(audio_path), [Word(start=0.0, end=1.0, text=" Teste")])
+
+    assert result[0].alignment_score == pytest.approx(0.5, abs=0.0001)
+
+
+def test_all_zero_span_score_uses_conservative_fallback_score(tmp_path):
+    audio_path = tmp_path / "test.wav"
+    sf.write(audio_path, np.zeros(SAMPLE_RATE, dtype=np.float32), SAMPLE_RATE)
+    model = MagicMock(return_value=(torch.zeros(1, 20, 3), None))
+    span = [SimpleNamespace(start=2, end=8, score=0.0)]
+    aligner = MMSCTCAligner()
+
+    with patch.object(
+        MMSCTCAligner,
+        "get_model_and_aligner",
+        return_value=(model, MagicMock(return_value=[span]), {letter: index for index, letter in enumerate("teste", 1)}, torch.device("cpu")),
+    ):
+        result = aligner.align(str(audio_path), [Word(start=0.0, end=1.0, text=" Teste")])
+
+    assert result[0].alignment_score == 0.6
 
 
 def test_alignment_handles_empty_words():
@@ -240,4 +322,36 @@ def test_monotonicity_prevents_words_from_overlapping():
 
     adjusted = MMSCTCAligner()._enforce_monotonicity(words, total_duration=10.0)
 
-    assert adjusted[1].start == adjusted[0].end == 2.0
+    assert adjusted[1].start == adjusted[0].end == 1.0
+
+
+def test_monotonicity_caps_an_overlong_word_at_the_next_word():
+    words = [
+        Word(start=0.0, end=9.0, text=" A"),
+        Word(start=1.0, end=1.5, text=" B"),
+        Word(start=2.0, end=2.5, text=" C"),
+    ]
+
+    adjusted = MMSCTCAligner()._enforce_monotonicity(words, total_duration=10.0)
+
+    assert [(word.start, word.end) for word in adjusted] == [
+        (0.0, 1.0),
+        (1.0, 1.5),
+        (2.0, 2.5),
+    ]
+
+
+def test_protected_fallback_end_does_not_push_later_words_forward():
+    words = [
+        Word(start=0.0, end=9.0, text=" fallback", alignment_score=0.6),
+        Word(start=1.0, end=1.5, text=" next"),
+    ]
+
+    adjusted = MMSCTCAligner()._enforce_monotonicity(
+        words,
+        total_duration=10.0,
+        protected_indices={0},
+    )
+
+    assert adjusted[0] == words[0]
+    assert (adjusted[1].start, adjusted[1].end) == (1.0, 1.5)

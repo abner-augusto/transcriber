@@ -1,3 +1,4 @@
+import math
 import shutil
 from pathlib import Path
 
@@ -119,6 +120,7 @@ def get_settings():
 @app.put("/api/settings/preferences")
 def update_preferences(body: dict):
     from preferences import save_preferences, load_preferences, get_public_preferences
+    from preferences import MIN_SPEAKER_SWITCH_PENALTY, MAX_SPEAKER_SWITCH_PENALTY
     current = load_preferences()
     # Only update known fields
     if "default_vocabulary" in body:
@@ -146,6 +148,17 @@ def update_preferences(body: dict):
             if lo <= num <= hi:
                 clean[key] = num
         current["diarization"] = clean
+    if "speaker_switch_penalty" in body:
+        try:
+            penalty = float(body["speaker_switch_penalty"])
+        except (TypeError, ValueError):
+            penalty = None
+        if (
+            penalty is not None
+            and math.isfinite(penalty)
+            and MIN_SPEAKER_SWITCH_PENALTY <= penalty <= MAX_SPEAKER_SWITCH_PENALTY
+        ):
+            current["speaker_switch_penalty"] = penalty
     if "forced_alignment" in body:
         raw_fa = body["forced_alignment"]
         if isinstance(raw_fa, dict):
@@ -162,5 +175,4 @@ def update_preferences(body: dict):
             }
     save_preferences(current)
     return get_public_preferences()
-
 

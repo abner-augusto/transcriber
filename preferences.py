@@ -1,14 +1,19 @@
 import json
+import math
 from pathlib import Path
 from config import settings
 
 _PREFS_FILE = Path("preferences.json")
+DEFAULT_SPEAKER_SWITCH_PENALTY = 0.8
+MIN_SPEAKER_SWITCH_PENALTY = 0.0
+MAX_SPEAKER_SWITCH_PENALTY = 2.0
 
 # Default values for non-sensitive public preferences
 _DEFAULTS = {
     "default_vocabulary": "",
     "speaker_profiles_enabled": False,
     "hf_auth_token": "",
+    "speaker_switch_penalty": DEFAULT_SPEAKER_SWITCH_PENALTY,
     # Forced alignment settings. Disabled by default so standard path is untouched.
     # Keys: "enabled" (bool), "model" (str, default "mms-fa"), "device" (str, default "auto").
     "forced_alignment": {
@@ -53,7 +58,9 @@ def get_public_preferences() -> dict:
     prefs = load_preferences()
     public = {}
     for k, v in prefs.items():
-        if k in _SECRET_KEYS and v:
+        if k == "speaker_switch_penalty":
+            public[k] = _coerce_speaker_switch_penalty(v)
+        elif k in _SECRET_KEYS and v:
             # Mask secret
             public[k] = v[:3] + "*" * 10 + v[-3:] if len(v) > 6 else "*" * 10
         else:
@@ -69,3 +76,19 @@ def get_secret(key: str) -> str:
 
     # Fallback to settings (which reads from env)
     return getattr(settings, key, "")
+
+
+def get_speaker_switch_penalty() -> float:
+    """Return a finite, bounded continuity penalty from persisted preferences."""
+    value = load_preferences().get("speaker_switch_penalty", DEFAULT_SPEAKER_SWITCH_PENALTY)
+    return _coerce_speaker_switch_penalty(value)
+
+
+def _coerce_speaker_switch_penalty(value) -> float:
+    try:
+        penalty = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_SPEAKER_SWITCH_PENALTY
+    if not math.isfinite(penalty) or not MIN_SPEAKER_SWITCH_PENALTY <= penalty <= MAX_SPEAKER_SWITCH_PENALTY:
+        return DEFAULT_SPEAKER_SWITCH_PENALTY
+    return penalty

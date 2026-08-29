@@ -19,6 +19,7 @@ Lifecycle & Constraints:
 import logging
 import math
 import unicodedata
+from dataclasses import replace
 from typing import Optional
 
 import numpy as np
@@ -35,6 +36,7 @@ TARGET_SAMPLE_RATE = 16000
 MAX_WINDOW_DURATION = 25.0
 PAUSE_SPLIT_THRESHOLD = 0.8
 WINDOW_PADDING_SECONDS = 0.2
+FALLBACK_ALIGNMENT_SCORE = 0.6
 
 
 class _WindowAlignmentUnavailable(RuntimeError):
@@ -123,13 +125,17 @@ class MMSCTCAligner:
             waveform, sample_rate, duration = self._load_audio(audio_path)
         except Exception as e:
             log.warning(f"[alignment] Failed to load audio '{audio_path}' ({e}); falling back to original timestamps")
-            return words
+            fallback = self._mark_fallback_words(words)
+            self._log_alignment_score_stats(fallback)
+            return fallback
 
         try:
             model, aligner, dictionary, device = self.get_model_and_aligner(self.requested_device)
         except Exception as e:
             log.warning(f"[alignment] Failed to load MMS_FA model ({e}); falling back to original timestamps")
-            return words
+            fallback = self._mark_fallback_words(words)
+            self._log_alignment_score_stats(fallback)
+            return fallback
 
         # Group words into contiguous time windows for safe and efficient alignment
         windows = self._build_windows(words, duration)
@@ -159,6 +165,7 @@ class MMSCTCAligner:
             except Exception as e:
                 failed_windows += 1
                 fallback_indices.update(range(win_start_idx, win_end_idx))
+                aligned_words[win_start_idx:win_end_idx] = self._mark_fallback_words(window_words)
                 log.debug(
                     f"[alignment] Window [{win_start_time:.2f}s - {win_end_time:.2f}s] failed ({e}); "
                     "keeping original timestamps for this window"
@@ -175,8 +182,28 @@ class MMSCTCAligner:
             duration,
             protected_indices=fallback_indices,
         )
+        self._log_alignment_score_stats(validated_words)
         log.info(f"[alignment] Refined timestamps for {aligned_count}/{len(words)} words in {len(windows)} windows")
         return validated_words
+
+    @staticmethod
+    def _mark_fallback_words(words: list[Word]) -> list[Word]:
+        """Mark Words whose timestamps were not produced by this alignment pass."""
+        return [replace(word, alignment_score=FALLBACK_ALIGNMENT_SCORE) for word in words]
+
+    @staticmethod
+    def _log_alignment_score_stats(words: list[Word]) -> None:
+        scores = [word.alignment_score for word in words if word.alignment_score is not None]
+        if not scores:
+            log.info("[alignment] alignment score stats: no scores available")
+            return
+        log.info(
+            "[alignment] alignment score stats: count=%d mean=%.4f min=%.4f max=%.4f",
+            len(scores),
+            sum(scores) / len(scores),
+            min(scores),
+            max(scores),
+        )
 
     def _load_audio(self, audio_path: str) -> tuple[torch.Tensor, int, float]:
         """Load audio file as mono float32 tensor at TARGET_SAMPLE_RATE."""
@@ -247,7 +274,7 @@ class MMSCTCAligner:
         # Track words that have alignable characters
         alignable_indices = [i for i, tokens in enumerate(token_lists) if len(tokens) > 0]
         if not alignable_indices:
-            return list(words)
+            raise _WindowAlignmentUnavailable("no dictionary-matching characters")
 
         alignable_tokens = [token_lists[i] for i in alignable_indices]
 
@@ -269,7 +296,7 @@ class MMSCTCAligner:
         spans = aligner(emission[0], alignable_tokens)
 
         frame_duration = (audio_slice.shape[1] / sample_rate) / emission_frames
-        result = list(words)
+        result = self._mark_fallback_words(words)
 
         for span_idx, word_idx in enumerate(alignable_indices):
             word_span = spans[span_idx]
@@ -286,13 +313,13 @@ class MMSCTCAligner:
             refined_start = max(0.0, refined_start)
             refined_end = max(refined_start, refined_end)
 
-            avg_score = sum(getattr(t, "score", 0.0) for t in word_span) / len(word_span)
-            raw_alignment_score = float(avg_score)
-            alignment_score = (
-                round(min(max(raw_alignment_score, 0.0), 1.0), 4)
-                if math.isfinite(raw_alignment_score)
-                else None
-            )
+            span_scores = [getattr(t, "score", None) for t in word_span]
+            if any(score is None for score in span_scores):
+                # The timestamp is usable, but this adapter cannot provide score evidence.
+                alignment_score = None
+            else:
+                numeric_scores = [float(score) for score in span_scores]
+                alignment_score = self._normalise_alignment_scores(numeric_scores)
 
             result[word_idx] = Word(
                 start=refined_start,
@@ -303,6 +330,23 @@ class MMSCTCAligner:
             )
 
         return result
+
+    @staticmethod
+    def _normalise_alignment_scores(raw_scores: list[float]) -> float:
+        """Convert MMS probability or log-probability scores to bounded confidence."""
+        if not all(math.isfinite(score) for score in raw_scores):
+            return FALLBACK_ALIGNMENT_SCORE
+        # torchaudio's MMS aligner currently returns probabilities after exp(), but
+        # accepting log-probabilities keeps this seam safe across torchaudio versions.
+        if all(score == 0.0 for score in raw_scores):
+            # Zero is ambiguous: it can be a probability underflow or a perfect
+            # log-probability. Treat an all-zero span conservatively as fallback.
+            return FALLBACK_ALIGNMENT_SCORE
+        if any(score < 0.0 for score in raw_scores):
+            scores = [math.exp(score) for score in raw_scores]
+        else:
+            scores = raw_scores
+        return round(min(max(sum(scores) / len(scores), 0.0), 1.0), 4)
 
     def _enforce_monotonicity(
         self,
@@ -333,10 +377,14 @@ class MMSCTCAligner:
                 prev_end = w.end
                 continue
 
-            start = max(0.0, w.start, prev_end)
+            lower_bound = 0.0 if index > 0 and index - 1 in protected else prev_end
+            start = max(0.0, w.start, lower_bound)
             if total_duration > 0:
                 start = min(total_duration, start)
             end = max(start, w.end)
+            if index + 1 < len(words) and words[index + 1].start >= start:
+                # A malformed span must not push every later Word forward.
+                end = min(end, words[index + 1].start)
             if total_duration > 0:
                 end = min(total_duration, end)
 

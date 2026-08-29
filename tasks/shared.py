@@ -120,8 +120,6 @@ def smooth_word_speakers(
         speaker: _TurnIndex.build(speaker_turns)
         for speaker, speaker_turns in turns_by_speaker.items()
     }
-    all_turns_index = _TurnIndex.build(turns)
-
     cand_order = {c: i for i, c in enumerate(candidates)}
     n_words = len(words)
     n_candidates = len(candidates)
@@ -129,10 +127,11 @@ def smooth_word_speakers(
     # Compute emission scores and tie-breaking keys for all (word, candidate)
     emissions: list[list[tuple[float, tuple[float, float, int]]]] = []
     for word in words:
-        nearby_any = bool(all_turns_index.near(word))
         word_emissions = []
+        nearby_any = False
         for cand in candidates:
             candidate_turns = indexes[cand].near(word) if cand in indexes else []
+            nearby_any = nearby_any or bool(candidate_turns)
             score, tie_break = _candidate_emission(
                 word,
                 cand,
@@ -262,7 +261,7 @@ def _candidate_emission(
 def _alignment_weight(word: Word) -> float:
     if word.alignment_score is None or not math.isfinite(word.alignment_score):
         return 1.0
-    return min(max(word.alignment_score, 0.0), 1.0)
+    return max(min(max(word.alignment_score, 0.0), 1.0), 0.2)
 
 
 def build_segments(
