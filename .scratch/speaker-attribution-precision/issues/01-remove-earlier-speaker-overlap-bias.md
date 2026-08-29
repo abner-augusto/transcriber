@@ -4,9 +4,9 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Equal-overlap Words are resolved by an explicit deterministic policy that is independent of Turn iteration order.
-- [ ] Strictly greater overlap still selects the Turn with the greatest overlap.
-- [ ] Words with no overlap retain the existing nearest-Turn tolerance and `UNKNOWN` fallback behavior.
-- [ ] Regression tests cover equal overlap, unequal overlap, reversed Turn order, diarization gaps, and no Turns.
+- [x] Equal-overlap Words are resolved by an explicit deterministic policy that is independent of Turn iteration order.
+- [x] Strictly greater overlap still selects the Turn with the greatest overlap.
+- [x] Words with no overlap retain the existing nearest-Turn tolerance and `UNKNOWN` fallback behavior.
+- [x] Regression tests cover equal overlap, unequal overlap, reversed Turn order, diarization gaps, and no Turns.

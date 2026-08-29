@@ -9,6 +9,19 @@ _DEFAULTS = {
     "default_vocabulary": "",
     "speaker_profiles_enabled": False,
     "hf_auth_token": "",
+    # Forced alignment settings. Disabled by default so standard path is untouched.
+    # Keys: "enabled" (bool), "model" (str, default "mms-fa"), "device" (str, default "auto").
+    "forced_alignment": {
+        "enabled": False,
+        "model": "mms-fa",
+        "device": "auto",
+    },
+    # Whisper DTW timestamp settings.
+    # Keys: "enabled" (bool, default True), "preset" (str, default "" for auto).
+    "whisper_dtw": {
+        "enabled": True,
+        "preset": "",
+    },
     # Diarization clustering overrides. Empty => pyannote's own calibrated defaults.
     # Recognised keys: "clustering_threshold" (0-1), "Fa", "Fb".
     "diarization": {},

@@ -12,17 +12,20 @@ from pathlib import Path
 
 from config import settings
 
-from .ports import Diarizer, Transcriber, Turn, Word
+from .ports import DiarizationResult, Aligner, Diarizer, Transcriber, Turn, Word
 
 __all__ = [
-    "Word", "Turn", "Transcriber", "Diarizer",
-    "make_transcriber", "make_diarizer",
-    "TRANSCRIBER_ENGINES", "engine_status",
+    "Word", "Turn", "DiarizationResult", "Transcriber", "Diarizer", "Aligner",
+    "make_transcriber", "make_diarizer", "make_aligner", "align_words",
+    "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "engine_status", "alignment_engine_status",
 ]
 
 TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp"]
 
+ALIGNMENT_ENGINES = ["mms-fa"]
+
 DIARIZER_ENGINE = "pyannote"
+
 
 
 def make_transcriber(preset: dict) -> Transcriber:
@@ -47,11 +50,30 @@ def make_transcriber(preset: dict) -> Transcriber:
 
     if engine == "whisper.cpp":
         from .whisper_cpp import WhisperCppTranscriber
+        from preferences import load_preferences
+
+        prefs = load_preferences()
+        whisper_dtw_pref = prefs.get("whisper_dtw", {})
+
+        dtw_enabled = preset.get(
+            "dtw",
+            whisper_dtw_pref.get("enabled", settings.whisper_dtw_enabled)
+            if isinstance(whisper_dtw_pref, dict)
+            else settings.whisper_dtw_enabled,
+        )
+        dtw_preset = preset.get(
+            "dtw_preset",
+            whisper_dtw_pref.get("preset", settings.whisper_dtw_preset)
+            if isinstance(whisper_dtw_pref, dict)
+            else settings.whisper_dtw_preset,
+        )
 
         return WhisperCppTranscriber(
             cli_path=settings.whisper_cli_path,
             model_path=model_path,
             language=preset.get("language", "auto"),
+            dtw_enabled=bool(dtw_enabled),
+            dtw_preset=dtw_preset or None,
         )
 
     if engine == "parakeet.cpp":
@@ -119,3 +141,25 @@ def engine_status(preset: dict) -> dict:
         return {"available": False, "reason": f"Model not found at {model_path}"}
 
     return {"available": True, "reason": None}
+
+
+def make_aligner(config: dict | None = None) -> Aligner:
+    """The Aligner. Uses CTC forced alignment to refine Word timestamps."""
+    from .alignment import make_aligner as _make_aligner
+
+    return _make_aligner(config)
+
+
+def align_words(audio_path: str, words: list[Word], config: dict | None = None) -> list[Word]:
+    """Align Words against audio using CTC forced alignment with graceful fallback."""
+    from .alignment import align_words as _align_words
+
+    return _align_words(audio_path, words, config)
+
+
+def alignment_engine_status() -> dict:
+    """Check availability of the forced alignment engine."""
+    from .alignment import alignment_engine_status as _status
+
+    return _status()
+

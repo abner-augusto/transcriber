@@ -230,3 +230,155 @@ def test_faster_whisper_words_parsing():
 def test_an_unknown_engine_fails_loudly():
     with pytest.raises(ValueError, match="Unknown transcription engine"):
         make_transcriber({"id": "x", "engine": "deepgram", "model_path": "x"})
+
+
+def test_whisper_dtw_preset_detection_from_model_name():
+    from engines.whisper_cpp import detect_dtw_preset_from_model
+
+    assert detect_dtw_preset_from_model("models/ggml-large-v3-turbo.bin") == "large.v3.turbo"
+    assert detect_dtw_preset_from_model("models/ggml-large-v3.bin") == "large.v3"
+    assert detect_dtw_preset_from_model("models/ggml-large-v2.bin") == "large.v2"
+    assert detect_dtw_preset_from_model("models/ggml-large-v1.bin") == "large.v1"
+    assert detect_dtw_preset_from_model("models/ggml-medium.bin") == "medium"
+    assert detect_dtw_preset_from_model("models/ggml-medium.en.bin") == "medium.en"
+    assert detect_dtw_preset_from_model("models/ggml-small.bin") == "small"
+    assert detect_dtw_preset_from_model("models/ggml-small.en.bin") == "small.en"
+    assert detect_dtw_preset_from_model("models/ggml-base.bin") == "base"
+    assert detect_dtw_preset_from_model("models/ggml-tiny.bin") == "tiny"
+    assert detect_dtw_preset_from_model("models/custom-unknown.bin") is None
+
+
+def test_whisper_command_construction_with_dtw():
+    transcriber = WhisperCppTranscriber(
+        cli_path="whisper-cli",
+        model_path="models/ggml-large-v3-turbo.bin",
+        language="pt",
+        dtw_enabled=True,
+    )
+    cmd = transcriber.build_command(
+        audio_path="test.wav",
+        vocabulary="Glossary terms",
+        dtw_preset=transcriber.resolve_dtw_preset(),
+    )
+    assert cmd == [
+        "whisper-cli",
+        "-m", "models/ggml-large-v3-turbo.bin",
+        "-f", "test.wav",
+        "-l", "pt",
+        "-ojf",
+        "-of", "test.wav",
+        "-dtw", "large.v3.turbo",
+        "-nfa",
+        "--prompt", "Glossary terms",
+    ]
+
+
+def test_whisper_command_construction_without_dtw():
+    transcriber = WhisperCppTranscriber(
+        cli_path="whisper-cli",
+        model_path="models/ggml-large-v3-turbo.bin",
+        language="pt",
+        dtw_enabled=False,
+    )
+    cmd = transcriber.build_command(
+        audio_path="test.wav",
+        vocabulary="Glossary terms",
+        dtw_preset=transcriber.resolve_dtw_preset(),
+    )
+    assert "-dtw" not in cmd
+    assert "-nfa" not in cmd
+    assert cmd == [
+        "whisper-cli",
+        "-m", "models/ggml-large-v3-turbo.bin",
+        "-f", "test.wav",
+        "-l", "pt",
+        "-ojf",
+        "-of", "test.wav",
+        "--prompt", "Glossary terms",
+    ]
+
+
+def test_whisper_dtw_capability_detection(tmp_path, monkeypatch):
+    import subprocess
+    from engines.whisper_cpp import detect_whisper_dtw_capability
+
+    fake_cli = tmp_path / "fake-whisper-cli.exe"
+    fake_cli.write_text("binary", encoding="utf-8")
+
+    # When --help outputs -dtw
+    def mock_run_with_dtw(*args, **kwargs):
+        class MockResult:
+            stdout = "options:\n  -dtw MODEL --dtw MODEL compute token-level timestamps\n"
+            stderr = ""
+        return MockResult()
+
+    monkeypatch.setattr(subprocess, "run", mock_run_with_dtw)
+    assert detect_whisper_dtw_capability(str(fake_cli)) is True
+
+    # When --help does NOT output -dtw
+    def mock_run_without_dtw(*args, **kwargs):
+        class MockResult:
+            stdout = "options:\n  -m MODEL --model MODEL\n"
+            stderr = ""
+        return MockResult()
+
+    monkeypatch.setattr(subprocess, "run", mock_run_without_dtw)
+    assert detect_whisper_dtw_capability(str(fake_cli)) is False
+
+    # When binary does not exist
+    assert detect_whisper_dtw_capability(str(tmp_path / "nonexistent.exe")) is False
+
+
+def test_whisper_dtw_fallback_handling_on_failure(tmp_path, monkeypatch):
+    """If whisper-cli fails when invoked with -dtw, it logs a warning and falls back to standard execution."""
+    import subprocess
+    from engines.whisper_cpp import WhisperCppTranscriber
+
+    invoked_cmds = []
+
+    def mock_run(cmd, *args, **kwargs):
+        invoked_cmds.append(list(cmd))
+        class MockResult:
+            pass
+
+        res = MockResult()
+        # If -dtw was passed, simulate failure (e.g. unknown option or unsupported build)
+        if "-dtw" in cmd:
+            res.returncode = 1
+            res.stderr = "error: unknown argument -dtw"
+            res.stdout = ""
+            return res
+
+        # Otherwise succeed and create the json file
+        res.returncode = 0
+        res.stderr = ""
+        res.stdout = ""
+        json_path = Path(cmd[cmd.index("-of") + 1] + ".json")
+        sample_json = {
+            "transcription": [
+                {
+                    "tokens": [
+                        {"id": 1, "text": " Olá", "offsets": {"from": 0, "to": 500}, "p": 0.95}
+                    ]
+                }
+            ]
+        }
+        json_path.write_text(json.dumps(sample_json), encoding="utf-8")
+        return res
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    transcriber = WhisperCppTranscriber(
+        cli_path="whisper-cli",
+        model_path="models/ggml-large-v3-turbo.bin",
+        dtw_enabled=True,
+    )
+    audio_path = str(tmp_path / "test.wav")
+    words = transcriber._transcribe_file(audio_path)
+
+    assert len(words) == 1
+    assert words[0].text == " Olá"
+    assert len(invoked_cmds) == 2
+    assert "-dtw" in invoked_cmds[0]
+    assert "-dtw" not in invoked_cmds[1]
+

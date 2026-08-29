@@ -67,6 +67,30 @@ class Turn:
         return cls(start=float(d["start"]), end=float(d["end"]), speaker=d["speaker"])
 
 
+@dataclass(frozen=True)
+class DiarizationResult:
+    """The outcome of running a Diarizer over audio.
+
+    ``turns`` contains the original (potentially overlapping) Turns.
+    ``exclusive_turns`` contains single-speaker exclusive Turns when available
+    (e.g., from Community-1), used for unambiguous Word/Segment attribution.
+    ``overlaps`` contains computed or model-provided overlapping speech regions.
+    """
+
+    turns: list[Turn]
+    exclusive_turns: list[Turn] | None = None
+    overlaps: list[dict] | None = None
+
+    def __iter__(self):
+        return iter(self.turns)
+
+    def __len__(self):
+        return len(self.turns)
+
+    def __getitem__(self, index):
+        return self.turns[index]
+
+
 @runtime_checkable
 class Transcriber(Protocol):
     """Turns audio into Words. Implemented by whisper.cpp and parakeet.cpp."""
@@ -90,6 +114,16 @@ class Diarizer(Protocol):
         audio_path: str,
         min_speakers: int | None = None,
         max_speakers: int | None = None,
-    ) -> list[Turn]:
+    ) -> DiarizationResult | list[Turn]:
         """Turns in ascending time order. May overlap when people talk over each other."""
         ...
+
+
+@runtime_checkable
+class Aligner(Protocol):
+    """Refines timestamps of existing Words against audio without altering text or order."""
+
+    def align(self, audio_path: str, words: list[Word]) -> list[Word]:
+        """Aligned Words with refined start and end timestamps."""
+        ...
+

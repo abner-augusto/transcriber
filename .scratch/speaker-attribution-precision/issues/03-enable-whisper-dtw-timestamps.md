@@ -4,11 +4,12 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The supported whisper.cpp build configuration enables DTW.
-- [ ] The Transcriber passes a configured DTW preset appropriate for the selected model.
-- [ ] The active DTW setting is visible in diagnostic logs or job diagnostics.
-- [ ] Unsupported or unavailable DTW capability produces a clear warning and a controlled fallback to the existing timestamp path.
-- [ ] Configuration and installation guidance explains how to verify the CLI flag and select the preset.
-- [ ] Tests cover command construction, default behavior, and capability/fallback handling.
+- [x] The supported whisper.cpp build configuration enables DTW.
+- [x] The Transcriber passes a configured DTW preset appropriate for the selected model.
+- [x] The active DTW setting is visible in diagnostic logs or job diagnostics.
+- [x] Unsupported or unavailable DTW capability produces a clear warning and a controlled fallback to the existing timestamp path.
+- [x] Configuration and installation guidance explains how to verify the CLI flag and select the preset.
+- [x] Tests cover command construction, default behavior, and capability/fallback handling.
+

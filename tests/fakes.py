@@ -5,7 +5,7 @@ of them can be tested without a GPU, a model file, or a subprocess. These two cl
 are the whole cost of that.
 """
 
-from engines import Turn, Word
+from engines import DiarizationResult, Turn, Word
 
 
 class FakeTranscriber:
@@ -21,10 +21,23 @@ class FakeTranscriber:
 
 
 class FakeDiarizer:
-    """Returns the Turns it was constructed with, and remembers how it was called."""
+    """Returns the Turns or DiarizationResult it was constructed with, and remembers how it was called."""
 
-    def __init__(self, turns: list[Turn]):
-        self.turns = turns
+    def __init__(
+        self,
+        turns: list[Turn] | DiarizationResult,
+        exclusive_turns: list[Turn] | None = None,
+        overlaps: list[dict] | None = None,
+    ):
+        if isinstance(turns, DiarizationResult):
+            self.result = turns
+        else:
+            self.result = DiarizationResult(
+                turns=list(turns),
+                exclusive_turns=list(exclusive_turns) if exclusive_turns is not None else None,
+                overlaps=overlaps,
+            )
+        self.turns = self.result.turns
         self.calls: list[tuple[str, int | None, int | None]] = []
 
     def diarize(
@@ -32,9 +45,9 @@ class FakeDiarizer:
         audio_path: str,
         min_speakers: int | None = None,
         max_speakers: int | None = None,
-    ) -> list[Turn]:
+    ) -> DiarizationResult:
         self.calls.append((audio_path, min_speakers, max_speakers))
-        return list(self.turns)
+        return self.result
 
 
 def spoken(text: str, start: float, end: float, confidence: float | None = None) -> Word:

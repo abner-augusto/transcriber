@@ -4,12 +4,12 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] When Community-1 provides exclusive diarization, Words and Segments are attributed from those exclusive Turns.
-- [ ] The original overlapping diarization and the exclusive diarization are both persisted in the Meeting's raw diarization data.
-- [ ] The meeting response exposes enough overlap information for the transcript UI to mark content affected by overlapping speech without changing transcript text or timestamps.
-- [ ] Full processing and re-diarization use the same exclusive-attribution behavior.
-- [ ] The Community-1 path and fallback diarizer path remain usable when exclusive output is unavailable.
-- [ ] Clustering preferences are applied only when supported, and logs expose the effective parameters and any ignored values.
-- [ ] Tests cover exclusive output selection, overlap metadata persistence/exposure, fallback output, and unsupported clustering parameters.
+- [x] When Community-1 provides exclusive diarization, Words and Segments are attributed from those exclusive Turns.
+- [x] The original overlapping diarization and the exclusive diarization are both persisted in the Meeting's raw diarization data.
+- [x] The meeting response exposes enough overlap information for the transcript UI to mark content affected by overlapping speech without changing transcript text or timestamps.
+- [x] Full processing and re-diarization use the same exclusive-attribution behavior.
+- [x] The Community-1 path and fallback diarizer path remain usable when exclusive output is unavailable.
+- [x] Clustering preferences are applied only when supported, and logs expose the effective parameters and any ignored values.
+- [x] Tests cover exclusive output selection, overlap metadata persistence/exposure, fallback output, and unsupported clustering parameters.

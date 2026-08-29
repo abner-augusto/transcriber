@@ -145,7 +145,21 @@ def update_preferences(body: dict):
                 continue
             if lo <= num <= hi:
                 clean[key] = num
-        current["diarization"] = clean
+    if "forced_alignment" in body:
+        raw_fa = body["forced_alignment"]
+        if isinstance(raw_fa, dict):
+            current["forced_alignment"] = {
+                "enabled": bool(raw_fa.get("enabled", False)),
+                "model": str(raw_fa.get("model", "mms-fa")),
+                "device": str(raw_fa.get("device", "auto")),
+            }
+        elif isinstance(raw_fa, bool):
+            current["forced_alignment"] = {
+                "enabled": raw_fa,
+                "model": "mms-fa",
+                "device": "auto",
+            }
     save_preferences(current)
     return get_public_preferences()
+
 

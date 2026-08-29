@@ -12,11 +12,17 @@ class Settings(BaseSettings):
 
     # Engine binaries. The models they run are named by a Preset, not here — see presets.py.
     whisper_cli_path: str = "../whisper.cpp/build/bin/Release/whisper-cli.exe"
+    whisper_dtw_enabled: bool = True
+    whisper_dtw_preset: str = ""  # auto-detected from model if empty
     parakeet_cli_path: str = "../parakeet.cpp/build/examples/cli/Release/parakeet-cli.exe"
 
     storage_path: str = "./storage"
     hf_auth_token: str = ""
     cors_origins: str = ""  # Comma-separated, e.g. "http://localhost:3000,http://myapp.com"
+
+    # Optional CTC forced alignment
+    forced_alignment_enabled: bool = False
+    forced_alignment_model: str = "mms-fa"
 
     class Config:
         env_file = ".env"

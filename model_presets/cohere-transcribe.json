@@ -1,0 +1,7 @@
+{
+  "id": "cohere-transcribe",
+  "name": "Cohere Transcribe (Multilingual)",
+  "engine": "parakeet.cpp",
+  "model_path": "./models/cohere/cohere-transcribe-q4_k.gguf",
+  "language": "pt"
+}

@@ -58,13 +58,19 @@ cmake -B build
 cmake --build build --config Release
 
 # OR with CUDA (if you have an NVIDIA GPU)
-cmake -B build -DWHISPER_CUDA=ON
+cmake -B build -DGGML_CUDA=ON
 cmake --build build --config Release
 
 cd ..\transcriber
 ```
 
 The binary will be at `..\whisper.cpp\build\bin\Release\whisper-cli.exe`.
+
+#### DTW Timestamps in whisper.cpp
+whisper.cpp natively supports Dynamic Time Warping (`-dtw <preset>`) for precise token/word timestamps.
+- Check support with: `..\whisper.cpp\build\bin\Release\whisper-cli.exe --help` (look for `-dtw MODEL`).
+- Transcriber automatically detects the model preset (e.g. `large.v3.turbo`, `medium`, `small`, `base`, `tiny`) and passes `-dtw <preset> -nfa`.
+- If DTW is unsupported on an older build, it gracefully falls back to standard token timestamps with a warning in the logs.
 
 ### 4. Download Whisper models
 
