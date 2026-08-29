@@ -25,6 +25,7 @@ import soundfile as sf
 import torch
 
 from config import settings
+from . import validate_alignment_engine
 from .ports import Aligner, Word
 
 log = logging.getLogger(__name__)
@@ -314,8 +315,7 @@ def make_aligner(preset_or_config: Optional[dict] = None) -> Aligner:
     if preset_or_config:
         device = preset_or_config.get("device")
         model = preset_or_config.get("model", model)
-    if model not in ("mms-fa",):
-        raise ValueError(f"Unknown alignment engine '{model}'. Known: mms-fa")
+    validate_alignment_engine(model)
     return MMSCTCAligner(device=device)
 
 
@@ -337,8 +337,10 @@ def alignment_engine_status(config: Optional[dict] = None) -> dict:
     model = settings.forced_alignment_model
     if config:
         model = config.get("model", model)
-    if model not in ("mms-fa",):
-        return {"available": False, "engine": model, "description": "Unsupported alignment engine", "reason": "Unknown alignment engine"}
+    try:
+        validate_alignment_engine(model)
+    except ValueError as exc:
+        return {"available": False, "engine": model, "description": "Unsupported alignment engine", "reason": str(exc)}
     try:
         import torchaudio.pipelines as pipelines  # noqa: F401
         return {

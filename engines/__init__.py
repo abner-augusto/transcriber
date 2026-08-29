@@ -27,6 +27,14 @@ ALIGNMENT_ENGINES = ["mms-fa"]
 DIARIZER_ENGINE = "pyannote"
 
 
+def validate_alignment_engine(engine: str | None) -> str:
+    """Return a supported alignment engine or fail with an actionable message."""
+    selected = engine or settings.forced_alignment_model
+    if selected not in ALIGNMENT_ENGINES:
+        raise ValueError(f"Unknown alignment engine '{selected}'. Known: {', '.join(ALIGNMENT_ENGINES)}")
+    return selected
+
+
 
 def make_transcriber(preset: dict) -> Transcriber:
     """The Transcriber a Preset asks for."""
