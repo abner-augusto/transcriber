@@ -4,6 +4,7 @@ from bench.wder import (
     evaluate,
     evaluate_with_review_queue,
     load_gemini_reference,
+    mismatch_report,
     shared_account_review_queue,
 )
 
@@ -90,3 +91,33 @@ def test_review_queue_resolves_shared_account_for_full_wder():
     assert result.evaluable_reference_words == 1
     assert result.speaker_errors == 0
     assert result.wder == 0.0
+
+
+def test_mismatch_report_includes_hypothesis_timestamps():
+    reference = [
+        LabeledWord("fala", "ABNER", word_index=0),
+        LabeledWord("mais", "ABNER", word_index=1),
+        LabeledWord("outra", "RICARDO", word_index=2),
+        LabeledWord("final", "RICARDO", word_index=3),
+    ]
+    hypothesis = [
+        LabeledWord("fala", "SPEAKER_01", 2.5, 3.5, word_index=0),
+        LabeledWord("mais", "SPEAKER_01", 3.5, 4.5, word_index=1),
+        LabeledWord("outra", "SPEAKER_01", 4.5, 5.5, word_index=2),
+        LabeledWord("final", "SPEAKER_02", 5.5, 6.5, word_index=3),
+    ]
+
+    report = mismatch_report(reference, hypothesis)
+
+    assert report["error_count"] == 1
+    assert report["errors"] == [{
+        "start": 4.5,
+        "end": 5.5,
+        "reference_word": "outra",
+        "hypothesis_word": "outra",
+        "reference_speaker": "RICARDO",
+        "hypothesis_speaker": "SPEAKER_01",
+        "mapped_hypothesis_speaker": "ABNER",
+        "reference_word_index": 2,
+        "hypothesis_word_index": 2,
+    }]

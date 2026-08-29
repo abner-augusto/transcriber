@@ -271,10 +271,9 @@ def shared_account_review_queue(
     return sorted(queue, key=lambda item: (item["start"] is None, item["start"] or 0.0))
 
 
-def evaluate_with_review_queue(
-    reference: list[LabeledWord], hypothesis: list[LabeledWord], queue: dict
-) -> Evaluation:
-    """Apply resolved shared-account labels to the reference before scoring."""
+def _resolve_reference_with_review_queue(
+    reference: list[LabeledWord], queue: dict
+) -> list[LabeledWord]:
     resolved_reference = list(reference)
     for item in queue.get("items", []):
         resolved_speaker = str(item.get("resolved_speaker") or "").strip().upper()
@@ -295,13 +294,79 @@ def evaluate_with_review_queue(
                 resolved_reference[word_index] = replace(
                     resolved_reference[word_index], speaker=resolved_speaker
                 )
-    return evaluate(resolved_reference, hypothesis)
+    return resolved_reference
+
+
+def evaluate_with_review_queue(
+    reference: list[LabeledWord], hypothesis: list[LabeledWord], queue: dict
+) -> Evaluation:
+    """Apply resolved shared-account labels to the reference before scoring."""
+    return evaluate(_resolve_reference_with_review_queue(reference, queue), hypothesis)
+
+
+def _apply_reference_speaker_overrides(
+    reference: list[LabeledWord], overrides: dict[str, str]
+) -> list[LabeledWord]:
+    return [
+        replace(word, speaker=overrides.get(word.speaker, word.speaker))
+        for word in reference
+    ]
+
+
+def _load_manifest_transcripts(path: Path) -> tuple[dict, list[LabeledWord], list[LabeledWord]]:
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    reference = load_reference(Path(manifest["reference"]))
+    reference = _apply_reference_speaker_overrides(
+        reference, manifest.get("reference_speaker_overrides", {})
+    )
+    hypothesis = load_json_transcript(Path(manifest["hypothesis"]))
+    return manifest, reference, hypothesis
+
+
+def mismatch_report(reference: list[LabeledWord], hypothesis: list[LabeledWord]) -> dict:
+    """Return timestamped aligned words whose mapped speakers disagree."""
+    evaluation = evaluate(reference, hypothesis)
+    errors = []
+    for ref_word, hyp_word in _aligned_pairs(reference, hypothesis):
+        if ref_word.speaker == SHARED_ACCOUNT:
+            continue
+        mapped_speaker = evaluation.speaker_mapping.get(hyp_word.speaker)
+        if mapped_speaker == ref_word.speaker:
+            continue
+        errors.append(
+            {
+                "start": hyp_word.start,
+                "end": hyp_word.end,
+                "reference_word": ref_word.text,
+                "hypothesis_word": hyp_word.text,
+                "reference_speaker": ref_word.speaker,
+                "hypothesis_speaker": hyp_word.speaker,
+                "mapped_hypothesis_speaker": mapped_speaker,
+                "reference_word_index": ref_word.word_index,
+                "hypothesis_word_index": hyp_word.word_index,
+            }
+        )
+    return {
+        "error_count": len(errors),
+        "wder": evaluation.wder,
+        "coverage": evaluation.coverage,
+        "speaker_mapping": evaluation.speaker_mapping,
+        "errors": errors,
+    }
+
+
+def error_report_manifest(path: Path, review_queue_path: Path | None = None) -> dict:
+    manifest, reference, hypothesis = _load_manifest_transcripts(path)
+    if review_queue_path:
+        queue = json.loads(review_queue_path.read_text(encoding="utf-8"))
+        reference = _resolve_reference_with_review_queue(reference, queue)
+    report = mismatch_report(reference, hypothesis)
+    report["sample_id"] = manifest["id"]
+    return report
 
 
 def evaluate_manifest(path: Path, review_queue_path: Path | None = None) -> Evaluation:
-    manifest = json.loads(path.read_text(encoding="utf-8"))
-    reference = load_reference(Path(manifest["reference"]))
-    hypothesis = load_json_transcript(Path(manifest["hypothesis"]))
+    _, reference, hypothesis = _load_manifest_transcripts(path)
     if review_queue_path:
         queue = json.loads(review_queue_path.read_text(encoding="utf-8"))
         return evaluate_with_review_queue(reference, hypothesis, queue)
@@ -335,13 +400,23 @@ def main() -> None:
         type=Path,
         help="Apply resolved_speaker values from a review queue before scoring",
     )
+    parser.add_argument(
+        "--error-report",
+        type=Path,
+        help="Write a timestamped JSON report of aligned speaker mismatches",
+    )
     args = parser.parse_args()
-    if args.review_queue and args.apply_review_queue:
-        parser.error("--review-queue and --apply-review-queue cannot be combined")
+    if args.review_queue and (args.apply_review_queue or args.error_report):
+        parser.error("--review-queue cannot be combined with scoring options")
     if args.review_queue:
         queue = review_queue_manifest(args.manifest)
         args.review_queue.write_text(json.dumps(queue, indent=2, ensure_ascii=False), encoding="utf-8")
         print(json.dumps({key: queue[key] for key in ("sample_id", "item_count", "word_count")}, indent=2))
+        return
+    if args.error_report:
+        report = error_report_manifest(args.manifest, args.apply_review_queue)
+        args.error_report.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(json.dumps({key: report[key] for key in ("sample_id", "error_count", "wder", "coverage")}, indent=2))
         return
     print(
         json.dumps(

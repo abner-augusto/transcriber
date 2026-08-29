@@ -1,0 +1,10 @@
+{
+  "id": "2026-08-18-arquitetura-03-parakeet-rerun-reviewed-2026-08-29",
+  "audio": "D:/Nextcloud/_INTEGRARTE.ARQ/2-IAR_PROJETOS/1-ARQUITETURA/_2026/0-VIABILIDADES BRASIL URBANO/1-SINOP - BRASIL URBANO/05-BRIEFINGS/2026-08-18 Reuniao Arquitetura 03 (pre legal).mov",
+  "reference": "D:/Nextcloud/_INTEGRARTE.ARQ/2-IAR_PROJETOS/1-ARQUITETURA/_2026/0-VIABILIDADES BRASIL URBANO/1-SINOP - BRASIL URBANO/05-BRIEFINGS/2026-08-18 Reuniao Arquitetura 03 (pre legal)_gemini.md",
+  "hypothesis": "D:/Nextcloud/_INTEGRARTE.ARQ/2-IAR_PROJETOS/1-ARQUITETURA/_2026/0-VIABILIDADES BRASIL URBANO/1-SINOP - BRASIL URBANO/05-BRIEFINGS/2026-08-18 Reuniao Arquitetura 03 (pre legal) - speaker review queue 2026-08-29 v2.json",
+  "reference_speaker_overrides": {
+    "SHARED_ACCOUNT": "GARRAH"
+  },
+  "notes": "Manual audio review confirmed that Chris did not speak in this meeting; Garrah used the shared Chris account. The override is meeting-specific and must not change the global speaker map."
+}

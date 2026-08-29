@@ -31,9 +31,16 @@ annotated queue with:
 venv\Scripts\python.exe -m bench.wder bench\samples\2026-08-18-arquitetura-03\manifest-parakeet-rerun.json --apply-review-queue review.json
 ```
 
+Generate a timestamped report of aligned speaker mismatches with:
+
+```text
+venv\Scripts\python.exe -m bench.wder bench\samples\2026-08-18-arquitetura-03\manifest-parakeet-rerun-reviewed.json --error-report errors.json
+```
+
 The manifest references the original audio and exports. It does not copy the `.mov`.
 The reference can be Gemini Markdown or JSON with `segments` or `words` entries. Each
-entry needs `text` and `speaker`.
+entry needs `text` and `speaker`. A meeting-specific `reference_speaker_overrides` map
+can record manual corrections without changing the global speaker map.
 
 The report includes WDER, aligned-word coverage, shared-account word counts, and the
 Speaker mapping selected for the comparison. Coverage matters: a low WDER with low
