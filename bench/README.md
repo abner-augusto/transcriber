@@ -7,8 +7,8 @@ the result.
 
 Reference words labelled `SHARED_ACCOUNT` are excluded from partial WDER. This is
 required for Meet transcripts where Chris and Garrah used the same Google account.
-After manual annotation, replace those labels with `CHRIS` or `GARRAH` and rerun the
-same manifest to obtain full WDER.
+After manual annotation, replace those labels with `CHRIS` or `GARRAH` and apply the
+queue to obtain full WDER.
 
 Run a sample with:
 
@@ -24,7 +24,12 @@ venv\Scripts\python.exe -m bench.wder bench\samples\2026-08-18-arquitetura-03\ma
 
 Listen to each queued interval in the original audio and replace `resolved_speaker`
 with `CHRIS` or `GARRAH`. The queue is grouped by hypothesis segment and keeps both
-the normalized reference excerpt and the current hypothesis excerpt.
+the normalized reference excerpt and the current hypothesis excerpt. Then score the
+annotated queue with:
+
+```text
+venv\Scripts\python.exe -m bench.wder bench\samples\2026-08-18-arquitetura-03\manifest-parakeet-rerun.json --apply-review-queue review.json
+```
 
 The manifest references the original audio and exports. It does not copy the `.mov`.
 The reference can be Gemini Markdown or JSON with `segments` or `words` entries. Each

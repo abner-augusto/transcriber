@@ -11,7 +11,7 @@ import argparse
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
 from itertools import permutations
 from pathlib import Path
@@ -46,6 +46,7 @@ class LabeledWord:
     start: float | None = None
     end: float | None = None
     source_index: int | None = None
+    word_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -94,8 +95,12 @@ def _labeled_tokens(
     start: float | None = None,
     end: float | None = None,
     source_index: int | None = None,
+    word_offset: int = 0,
 ) -> list[LabeledWord]:
-    return [LabeledWord(word, speaker, start, end, source_index) for word in tokenize(text)]
+    return [
+        LabeledWord(word, speaker, start, end, source_index, word_offset + index)
+        for index, word in enumerate(tokenize(text))
+    ]
 
 
 def _canonical_reference_speaker(speaker: str) -> str:
@@ -116,6 +121,7 @@ def load_gemini_reference(path: Path) -> list[LabeledWord]:
                     match.group(2),
                     _canonical_reference_speaker(match.group(1)),
                     source_index=line_index,
+                    word_offset=len(words),
                 )
             )
     return words
@@ -138,6 +144,7 @@ def load_json_transcript(path: Path, reference: bool = False) -> list[LabeledWor
                 float(entry["start"]) if entry.get("start") is not None else None,
                 float(entry["end"]) if entry.get("end") is not None else None,
                 source_index=entry_index,
+                word_offset=len(words),
             )
         )
     return words
@@ -239,14 +246,21 @@ def shared_account_review_queue(
                 "start": hyp_word.start,
                 "end": hyp_word.end,
                 "hypothesis_speaker": hyp_word.speaker,
+                "hypothesis_source_index": hyp_word.source_index,
                 "hypothesis_text": [],
                 "reference_text": [],
+                "hypothesis_word_indices": [],
+                "reference_word_indices": [],
                 "reference_speaker": SHARED_ACCOUNT,
                 "resolved_speaker": None,
             },
         )
         item["hypothesis_text"].append(hyp_word.text)
         item["reference_text"].append(ref_word.text)
+        if hyp_word.word_index is not None:
+            item["hypothesis_word_indices"].append(hyp_word.word_index)
+        if ref_word.word_index is not None:
+            item["reference_word_indices"].append(ref_word.word_index)
 
     queue = []
     for item in grouped.values():
@@ -257,10 +271,40 @@ def shared_account_review_queue(
     return sorted(queue, key=lambda item: (item["start"] is None, item["start"] or 0.0))
 
 
-def evaluate_manifest(path: Path) -> Evaluation:
+def evaluate_with_review_queue(
+    reference: list[LabeledWord], hypothesis: list[LabeledWord], queue: dict
+) -> Evaluation:
+    """Apply resolved shared-account labels to the reference before scoring."""
+    resolved_reference = list(reference)
+    for item in queue.get("items", []):
+        resolved_speaker = str(item.get("resolved_speaker") or "").strip().upper()
+        if not resolved_speaker:
+            continue
+        if resolved_speaker not in {"CHRIS", "GARRAH"}:
+            raise ValueError(
+                f"Invalid resolved_speaker {resolved_speaker!r}; use CHRIS or GARRAH"
+            )
+        if "reference_word_indices" not in item:
+            raise ValueError(
+                "Review queue item has no reference_word_indices; regenerate the queue"
+            )
+        for word_index in item["reference_word_indices"]:
+            if not isinstance(word_index, int) or not 0 <= word_index < len(resolved_reference):
+                raise ValueError(f"Invalid reference_word_indices entry: {word_index!r}")
+            if resolved_reference[word_index].speaker == SHARED_ACCOUNT:
+                resolved_reference[word_index] = replace(
+                    resolved_reference[word_index], speaker=resolved_speaker
+                )
+    return evaluate(resolved_reference, hypothesis)
+
+
+def evaluate_manifest(path: Path, review_queue_path: Path | None = None) -> Evaluation:
     manifest = json.loads(path.read_text(encoding="utf-8"))
     reference = load_reference(Path(manifest["reference"]))
     hypothesis = load_json_transcript(Path(manifest["hypothesis"]))
+    if review_queue_path:
+        queue = json.loads(review_queue_path.read_text(encoding="utf-8"))
+        return evaluate_with_review_queue(reference, hypothesis, queue)
     return evaluate(reference, hypothesis)
 
 
@@ -286,13 +330,26 @@ def main() -> None:
         type=Path,
         help="Write a timestamped queue for words labelled SHARED_ACCOUNT",
     )
+    parser.add_argument(
+        "--apply-review-queue",
+        type=Path,
+        help="Apply resolved_speaker values from a review queue before scoring",
+    )
     args = parser.parse_args()
+    if args.review_queue and args.apply_review_queue:
+        parser.error("--review-queue and --apply-review-queue cannot be combined")
     if args.review_queue:
         queue = review_queue_manifest(args.manifest)
         args.review_queue.write_text(json.dumps(queue, indent=2, ensure_ascii=False), encoding="utf-8")
         print(json.dumps({key: queue[key] for key in ("sample_id", "item_count", "word_count")}, indent=2))
         return
-    print(json.dumps(evaluate_manifest(args.manifest).to_dict(), indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            evaluate_manifest(args.manifest, args.apply_review_queue).to_dict(),
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

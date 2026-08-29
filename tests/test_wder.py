@@ -2,6 +2,7 @@ from bench.wder import (
     LabeledWord,
     SHARED_ACCOUNT,
     evaluate,
+    evaluate_with_review_queue,
     load_gemini_reference,
     shared_account_review_queue,
 )
@@ -53,8 +54,8 @@ def test_wder_excludes_shared_account_and_finds_optimal_label_mapping():
 
 
 def test_shared_account_review_queue_keeps_hypothesis_timestamps():
-    reference = [LabeledWord("fala", SHARED_ACCOUNT)]
-    hypothesis = [LabeledWord("fala", "GARRAH", 12.3, 13.4, source_index=7)]
+    reference = [LabeledWord("fala", SHARED_ACCOUNT, word_index=0)]
+    hypothesis = [LabeledWord("fala", "GARRAH", 12.3, 13.4, source_index=7, word_index=0)]
 
     queue = shared_account_review_queue(reference, hypothesis)
 
@@ -62,9 +63,30 @@ def test_shared_account_review_queue_keeps_hypothesis_timestamps():
         "start": 12.3,
         "end": 13.4,
         "hypothesis_speaker": "GARRAH",
+        "hypothesis_source_index": 7,
         "hypothesis_text": "fala",
         "reference_text": "fala",
+        "hypothesis_word_indices": [0],
+        "reference_word_indices": [0],
         "reference_speaker": SHARED_ACCOUNT,
         "resolved_speaker": None,
         "word_count": 1,
     }]
+
+
+def test_review_queue_resolves_shared_account_for_full_wder():
+    reference = [LabeledWord("fala", SHARED_ACCOUNT, word_index=0)]
+    hypothesis = [LabeledWord("fala", "SPEAKER_01", word_index=0)]
+    queue = {
+        "items": [{
+            "reference_word_indices": [0],
+            "resolved_speaker": "chris",
+        }]
+    }
+
+    result = evaluate_with_review_queue(reference, hypothesis, queue)
+
+    assert result.shared_account_words == 0
+    assert result.evaluable_reference_words == 1
+    assert result.speaker_errors == 0
+    assert result.wder == 0.0
