@@ -95,6 +95,7 @@ class ParakeetCppTranscriber:
                         end=round(w.end + start, 3),
                         text=w.text,
                         confidence=w.confidence,
+                        alignment_score=w.alignment_score,
                     )
                     for w in chunk_words
                 )

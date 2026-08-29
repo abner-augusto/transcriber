@@ -6,13 +6,12 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from engines import DiarizationResult, Turn, Word
+from engines import DiarizationResult, Turn, Word, compute_overlaps
 from engines.pyannote import PyannoteDiarizer, _UNSET
 from models import Meeting, MeetingStatus
 from tasks.shared import (
     attribution_turns_from_stored,
     build_segments,
-    compute_overlaps,
     exclusive_turns_from_stored,
     overlaps_from_stored,
 )
@@ -410,3 +409,63 @@ def test_tasks_keep_original_turns_separate_from_vad_bounded_turns():
     assert data["turns"] == [bounded[0].to_dict()]
     assert data["exclusive_turns"] == [bounded_exclusive[0].to_dict()]
     assert data["overlaps"] == []
+
+
+def test_prepare_diarization_keeps_turns_when_vad_returns_no_bounds(caplog):
+    from tasks.shared import prepare_diarization
+
+    original = [Turn(start=0.0, end=10.0, speaker="SPEAKER_00")]
+    exclusive = [Turn(start=0.0, end=10.0, speaker="SPEAKER_00")]
+
+    class EmptyVad:
+        def compute_vad_segments(self, path):
+            return []
+
+        def mask_turns_to_vad(self, turns, segments):
+            raise AssertionError("empty VAD must fail open before masking")
+
+    data, bounded, bounded_exclusive = prepare_diarization(
+        DiarizationResult(turns=original, exclusive_turns=exclusive), "audio.wav", EmptyVad()
+    )
+
+    assert bounded == original
+    assert bounded_exclusive == exclusive
+    assert data["turns"] == [original[0].to_dict()]
+    assert data["exclusive_turns"] == [exclusive[0].to_dict()]
+    assert "VAD returned no speech bounds; keeping original diarization Turns" in caplog.text
+
+
+def test_prepare_diarization_stores_overlaps_for_the_bounded_snapshot():
+    from tasks.shared import prepare_diarization
+
+    original = [
+        Turn(start=0.0, end=5.0, speaker="SPEAKER_00"),
+        Turn(start=4.0, end=8.0, speaker="SPEAKER_01"),
+    ]
+
+    class ClippingVad:
+        def compute_vad_segments(self, path):
+            return [(3.0, 4.5)]
+
+        def mask_turns_to_vad(self, turns, segments):
+            return [
+                Turn(start=max(turn.start, 3.0), end=min(turn.end, 4.5), speaker=turn.speaker)
+                for turn in turns
+                if min(turn.end, 4.5) > max(turn.start, 3.0)
+            ]
+
+    data, _, _ = prepare_diarization(
+        DiarizationResult(
+            turns=original,
+            overlaps=[{"start": 4.0, "end": 5.0, "speakers": ["SPEAKER_00", "SPEAKER_01"]}],
+        ),
+        "audio.wav",
+        ClippingVad(),
+    )
+
+    assert data["overlaps"] == [
+        {"start": 4.0, "end": 4.5, "speakers": ["SPEAKER_00", "SPEAKER_01"]},
+    ]
+    assert data["original_overlaps"] == [
+        {"start": 4.0, "end": 5.0, "speakers": ["SPEAKER_00", "SPEAKER_01"]},
+    ]

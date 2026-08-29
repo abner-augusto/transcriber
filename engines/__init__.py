@@ -13,11 +13,12 @@ from pathlib import Path
 from config import settings
 
 from .ports import DiarizationResult, Aligner, Diarizer, Transcriber, Turn, Word
+from .overlap import compute_overlaps
 
 __all__ = [
     "Word", "Turn", "DiarizationResult", "Transcriber", "Diarizer", "Aligner",
     "make_transcriber", "make_diarizer", "make_aligner", "align_words",
-    "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "engine_status", "alignment_engine_status",
+    "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "compute_overlaps", "engine_status", "alignment_engine_status",
 ]
 
 TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp"]

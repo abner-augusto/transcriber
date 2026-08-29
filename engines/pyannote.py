@@ -16,7 +16,7 @@ import soundfile as sf
 from preferences import get_secret, load_preferences
 
 from .ports import DiarizationResult, Turn
-from tasks.shared import compute_overlaps
+from .overlap import compute_overlaps
 
 log = logging.getLogger(__name__)
 

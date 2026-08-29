@@ -4,12 +4,11 @@ These tests are the reason the pipeline's currency is the Word. Ask a Transcribe
 sentences and an interruption is unattributable; ask it for Words and it falls out.
 """
 
-from engines import Turn, Word
+from engines import Turn, Word, compute_overlaps
 from tasks.shared import (
     SPEAKER_SWITCH_PENALTY,
     attribution_turns_from_stored,
     build_segments,
-    compute_overlaps,
     exclusive_turns_from_stored,
     overlaps_from_stored,
     smooth_word_speakers,
@@ -130,6 +129,19 @@ def test_words_from_a_meeting_transcribed_after_the_port():
     }
 
     assert words_from_stored(raw) == [Word(start=0.0, end=0.4, text=" Olá", confidence=0.99)]
+
+
+def test_word_alignment_score_round_trips_and_is_optional():
+    aligned = Word(
+        start=0.0,
+        end=0.4,
+        text=" Olá",
+        confidence=0.99,
+        alignment_score=0.72,
+    )
+
+    assert Word.from_dict(aligned.to_dict()) == aligned
+    assert Word.from_dict({"start": 0.0, "end": 0.4, "text": " Olá"}).alignment_score is None
 
 
 def test_turns_read_from_either_era():
@@ -291,6 +303,34 @@ def test_diarization_gap_exceeding_tolerance_is_unknown():
     assert res[0]["speaker"] == "UNKNOWN"
 
 
+def test_turn_index_keeps_long_turns_that_start_before_the_search_window():
+    word = spoken("inside", 100.0, 100.5)
+    turns = [
+        Turn(start=0.0, end=101.0, speaker="SPEAKER_00"),
+        Turn(start=99.0, end=99.2, speaker="SPEAKER_01"),
+    ]
+
+    assert build_segments([word], turns)[0]["speaker"] == "SPEAKER_00"
+
+
+def test_turn_index_excludes_turns_beyond_the_tolerance_window():
+    word = spoken("alone", 0.0, 0.5)
+    turns = [Turn(start=2.6, end=3.0, speaker="SPEAKER_00")]
+
+    assert build_segments([word], turns)[0]["speaker"] == "UNKNOWN"
+
+
+def test_dp_transition_tie_uses_previous_turn_evidence_not_candidate_order():
+    words = [spoken("first", 1.0, 2.0), spoken("later", 5.0, 6.0)]
+    turns = [
+        Turn(start=1.0, end=1.5, speaker="SPEAKER_00"),
+        Turn(start=0.5, end=1.5, speaker="SPEAKER_01"),
+        Turn(start=5.0, end=6.0, speaker="SPEAKER_02"),
+    ]
+
+    assert smooth_word_speakers(words, turns) == ["SPEAKER_01", "SPEAKER_02"]
+
+
 def test_isolated_one_word_flap_is_smoothed_to_surrounding_speaker():
     """Single-word timestamp flap / glitch is smoothed back into surrounding turn."""
     words = [
@@ -395,6 +435,31 @@ def test_switch_penalty_tunability():
     # With default switch penalty, flap is smoothed
     smoothed = smooth_word_speakers(words, turns, switch_penalty=SPEAKER_SWITCH_PENALTY)
     assert smoothed == ["SPEAKER_00"] * 5
+
+
+def test_low_alignment_score_weakens_timestamp_evidence():
+    turns = [
+        Turn(start=0.0, end=1.0, speaker="SPEAKER_00"),
+        Turn(start=1.0, end=2.0, speaker="SPEAKER_01"),
+        Turn(start=2.0, end=3.0, speaker="SPEAKER_00"),
+    ]
+    reliable = [
+        spoken("I", 0.0, 1.0),
+        spoken("object", 1.0, 2.0),
+        spoken("again", 2.0, 3.0),
+    ]
+    uncertain = [
+        reliable[0],
+        Word(start=1.0, end=2.0, text=" object", alignment_score=0.1),
+        reliable[2],
+    ]
+
+    assert smooth_word_speakers(reliable, turns, switch_penalty=0.3) == [
+        "SPEAKER_00", "SPEAKER_01", "SPEAKER_00",
+    ]
+    assert smooth_word_speakers(uncertain, turns, switch_penalty=0.3) == [
+        "SPEAKER_00", "SPEAKER_00", "SPEAKER_00",
+    ]
 
 
 def test_smoothing_empty_input_and_edge_cases():

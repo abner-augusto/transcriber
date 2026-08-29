@@ -12,11 +12,12 @@ Lifecycle & Constraints:
     - Runs on GPU (CUDA/MPS) if available, or CPU.
     - Follows ADR-0001: strictly local inference, no cloud calls.
     - Words retain their exact text, casing, punctuation, and ordering.
-    - Explicit fallback policy: if alignment fails or cannot be computed for any window,
-      the engine logs a warning and falls back to original timestamps without dropping words.
+    - Explicit fallback policy: model/audio failures keep all original timestamps; an
+      individual window failure keeps that window's original timestamps.
 """
 
 import logging
+import math
 import unicodedata
 from typing import Optional
 
@@ -34,6 +35,10 @@ TARGET_SAMPLE_RATE = 16000
 MAX_WINDOW_DURATION = 25.0
 PAUSE_SPLIT_THRESHOLD = 0.8
 WINDOW_PADDING_SECONDS = 0.2
+
+
+class _WindowAlignmentUnavailable(RuntimeError):
+    pass
 
 
 def normalize_token_text(text: str, dictionary: dict[str, int]) -> list[int]:
@@ -108,7 +113,8 @@ class MMSCTCAligner:
         Guarantees:
         - Word count and order are preserved.
         - Word.text is preserved verbatim.
-        - On failure or error, falls back to original words.
+        - Model or audio failure falls back to all original Words.
+        - Window failure keeps that window's original Words.
         """
         if not words:
             return []
@@ -130,7 +136,8 @@ class MMSCTCAligner:
         aligned_words = list(words)  # shallow copy to replace modified Word instances
 
         aligned_count = 0
-        failed_window = False
+        failed_windows = 0
+        fallback_indices: set[int] = set()
         for win_start_idx, win_end_idx, win_start_time, win_end_time in windows:
             window_words = words[win_start_idx:win_end_idx]
             try:
@@ -150,16 +157,24 @@ class MMSCTCAligner:
                     if ref_w.start != window_words[idx_offset].start or ref_w.end != window_words[idx_offset].end:
                         aligned_count += 1
             except Exception as e:
-                failed_window = True
-                log.warning(
+                failed_windows += 1
+                fallback_indices.update(range(win_start_idx, win_end_idx))
+                log.debug(
                     f"[alignment] Window [{win_start_time:.2f}s - {win_end_time:.2f}s] failed ({e}); "
-                    "falling back to original timestamps for all Words"
+                    "keeping original timestamps for this window"
                 )
 
-        if failed_window:
-            return words
+        if failed_windows:
+            log.warning(
+                f"[alignment] {failed_windows}/{len(windows)} windows failed; "
+                "kept original timestamps for those windows"
+            )
         # Ensure monotonicity and non-negative boundaries across all words
-        validated_words = self._enforce_monotonicity(aligned_words, duration)
+        validated_words = self._enforce_monotonicity(
+            aligned_words,
+            duration,
+            protected_indices=fallback_indices,
+        )
         log.info(f"[alignment] Refined timestamps for {aligned_count}/{len(words)} words in {len(windows)} windows")
         return validated_words
 
@@ -224,7 +239,7 @@ class MMSCTCAligner:
         audio_slice = waveform[:, start_sample:end_sample]
 
         if audio_slice.shape[1] < int(0.1 * sample_rate):
-            return list(words)
+            raise _WindowAlignmentUnavailable("audio slice is shorter than 100ms")
 
         # Extract tokens for each word
         token_lists = [normalize_token_text(w.text, dictionary) for w in words]
@@ -246,7 +261,9 @@ class MMSCTCAligner:
 
         # MMS_FA CTC aligner requires emission_frames >= total_tokens
         if emission_frames < total_tokens:
-            return list(words)
+            raise _WindowAlignmentUnavailable(
+                f"emission has {emission_frames} frames for {total_tokens} tokens"
+            )
 
         # Compute CTC alignment spans
         spans = aligner(emission[0], alignable_tokens)
@@ -270,29 +287,55 @@ class MMSCTCAligner:
             refined_end = max(refined_start, refined_end)
 
             avg_score = sum(getattr(t, "score", 0.0) for t in word_span) / len(word_span)
-            confidence = round(float(avg_score), 4) if words[word_idx].confidence is None else words[word_idx].confidence
+            raw_alignment_score = float(avg_score)
+            alignment_score = (
+                round(min(max(raw_alignment_score, 0.0), 1.0), 4)
+                if math.isfinite(raw_alignment_score)
+                else None
+            )
 
             result[word_idx] = Word(
                 start=refined_start,
                 end=refined_end,
                 text=words[word_idx].text,
-                confidence=confidence,
+                confidence=words[word_idx].confidence,
+                alignment_score=alignment_score,
             )
 
         return result
 
-    def _enforce_monotonicity(self, words: list[Word], total_duration: float) -> list[Word]:
-        """Ensure start <= end and timestamps do not regress chronologically."""
+    def _enforce_monotonicity(
+        self,
+        words: list[Word],
+        total_duration: float,
+        protected_indices: set[int] | None = None,
+    ) -> list[Word]:
+        """Prevent overlap without changing Words protected by window fallback."""
         if not words:
             return []
 
         adjusted = []
-        prev_start = 0.0
+        prev_end = 0.0
+        protected = protected_indices or set()
 
-        for w in words:
-            start = max(0.0, w.start)
-            if start < prev_start:
-                start = prev_start
+        for index, w in enumerate(words):
+            if index in protected:
+                if adjusted and adjusted[-1].end > w.start and index - 1 not in protected:
+                    previous = adjusted[-1]
+                    adjusted[-1] = Word(
+                        start=previous.start,
+                        end=max(previous.start, w.start),
+                        text=previous.text,
+                        confidence=previous.confidence,
+                        alignment_score=previous.alignment_score,
+                    )
+                adjusted.append(w)
+                prev_end = w.end
+                continue
+
+            start = max(0.0, w.start, prev_end)
+            if total_duration > 0:
+                start = min(total_duration, start)
             end = max(start, w.end)
             if total_duration > 0:
                 end = min(total_duration, end)
@@ -302,8 +345,9 @@ class MMSCTCAligner:
                 end=end,
                 text=w.text,
                 confidence=w.confidence,
+                alignment_score=w.alignment_score,
             ))
-            prev_start = start
+            prev_end = end
 
         return adjusted
 

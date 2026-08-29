@@ -21,13 +21,15 @@ class Word:
     whatever leading whitespace its language needs, so that words do not run
     together and punctuation still glues to the word before it. Whisper's
     subword tokens already carry that leading space; Parakeet's do not, so its
-    adapter adds one.
+    adapter adds one. ``confidence`` belongs to the Transcriber;
+    ``alignment_score`` is separate evidence from optional CTC alignment.
     """
 
     start: float
     end: float
     text: str
     confidence: float | None = None
+    alignment_score: float | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -35,6 +37,7 @@ class Word:
             "end": self.end,
             "text": self.text,
             "confidence": self.confidence,
+            "alignment_score": self.alignment_score,
         }
 
     @classmethod
@@ -44,6 +47,7 @@ class Word:
             end=float(d["end"]),
             text=d["text"],
             confidence=d.get("confidence"),
+            alignment_score=d.get("alignment_score"),
         )
 
 
