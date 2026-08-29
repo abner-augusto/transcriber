@@ -24,6 +24,7 @@ import numpy as np
 import soundfile as sf
 import torch
 
+from config import settings
 from .ports import Aligner, Word
 
 log = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ class MMSCTCAligner:
         aligned_words = list(words)  # shallow copy to replace modified Word instances
 
         aligned_count = 0
+        failed_window = False
         for win_start_idx, win_end_idx, win_start_time, win_end_time in windows:
             window_words = words[win_start_idx:win_end_idx]
             try:
@@ -147,9 +149,14 @@ class MMSCTCAligner:
                     if ref_w.start != window_words[idx_offset].start or ref_w.end != window_words[idx_offset].end:
                         aligned_count += 1
             except Exception as e:
-                log.debug(f"[alignment] Alignment failed for window [{win_start_time:.2f}s - {win_end_time:.2f}s]: {e}; keeping original timings")
-                # Keep original words for this window
+                failed_window = True
+                log.warning(
+                    f"[alignment] Window [{win_start_time:.2f}s - {win_end_time:.2f}s] failed ({e}); "
+                    "falling back to original timestamps for all Words"
+                )
 
+        if failed_window:
+            return words
         # Ensure monotonicity and non-negative boundaries across all words
         validated_words = self._enforce_monotonicity(aligned_words, duration)
         log.info(f"[alignment] Refined timestamps for {aligned_count}/{len(words)} words in {len(windows)} windows")
@@ -303,8 +310,12 @@ class MMSCTCAligner:
 def make_aligner(preset_or_config: Optional[dict] = None) -> Aligner:
     """Instantiate a configured Aligner."""
     device = None
+    model = settings.forced_alignment_model
     if preset_or_config:
         device = preset_or_config.get("device")
+        model = preset_or_config.get("model", model)
+    if model not in ("mms-fa",):
+        raise ValueError(f"Unknown alignment engine '{model}'. Known: mms-fa")
     return MMSCTCAligner(device=device)
 
 
@@ -321,8 +332,13 @@ def align_words(audio_path: str, words: list[Word], config: Optional[dict] = Non
     return aligner.align(audio_path, words)
 
 
-def alignment_engine_status() -> dict:
+def alignment_engine_status(config: Optional[dict] = None) -> dict:
     """Check availability of the forced alignment dependencies and model."""
+    model = settings.forced_alignment_model
+    if config:
+        model = config.get("model", model)
+    if model not in ("mms-fa",):
+        return {"available": False, "engine": model, "description": "Unsupported alignment engine", "reason": "Unknown alignment engine"}
     try:
         import torchaudio.pipelines as pipelines  # noqa: F401
         return {

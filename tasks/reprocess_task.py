@@ -4,16 +4,16 @@ from .celery_app import celery_app
 from .shared import (
     attribution_turns_from_stored,
     build_segments,
-    compute_overlaps,
     exclusive_turns_from_stored,
     overlaps_from_stored,
     publish_event,
     turns_from_stored,
     update_progress,
     words_from_stored,
+    prepare_diarization,
 )
 from database import SessionLocal
-from engines import DIARIZER_ENGINE, DiarizationResult, Turn, make_diarizer
+from engines import DIARIZER_ENGINE, make_diarizer
 from models import Meeting, Speaker, Segment, Job, MeetingStatus
 from models.job import JobStatus
 from services.speaker_id_service import SpeakerIdService
@@ -57,39 +57,14 @@ def rediarize_task(self, meeting_id: str, job_id: str):
             min_speakers=meeting.min_speakers,
             max_speakers=meeting.max_speakers,
         )
-        if isinstance(diar_result, DiarizationResult):
-            raw_turns = diar_result.turns
-            raw_exclusive_turns = diar_result.exclusive_turns
-        elif isinstance(diar_result, dict):
-            raw_turns = [Turn.from_dict(t) for t in diar_result.get("turns", [])]
-            raw_exclusive_turns = (
-                [Turn.from_dict(t) for t in diar_result["exclusive_turns"]]
-                if diar_result.get("exclusive_turns") is not None
-                else None
-            )
-        else:
-            raw_turns = list(diar_result)
-            raw_exclusive_turns = None
-
         vad_service = VadService()
-        vad_segments = vad_service.compute_vad_segments(audio_path)
-        bounded_turns = vad_service.mask_turns_to_vad(raw_turns, vad_segments)
-        bounded_exclusive_turns = (
-            vad_service.mask_turns_to_vad(raw_exclusive_turns, vad_segments)
-            if raw_exclusive_turns is not None
-            else None
+        diarization_data, bounded_turns, bounded_exclusive_turns = prepare_diarization(
+            diar_result, audio_path, vad_service
         )
-        overlaps = compute_overlaps(bounded_turns)
 
         meeting.raw_diarization = {
             "engine": DIARIZER_ENGINE,
-            "turns": [t.to_dict() for t in bounded_turns],
-            "exclusive_turns": (
-                [t.to_dict() for t in bounded_exclusive_turns]
-                if bounded_exclusive_turns is not None
-                else None
-            ),
-            "overlaps": overlaps,
+            **diarization_data,
         }
         db.commit()
         update_progress(db, job, meeting, 50, "Diarization complete")

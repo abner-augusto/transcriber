@@ -325,7 +325,7 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
     monkeypatch.setattr("tasks.reprocess_task.make_diarizer", lambda: FakeDiarizer(diar_result))
     monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid: fp)
     monkeypatch.setattr("services.audio_service.AudioService.get_duration", lambda self, fp: 10.0)
-    monkeypatch.setattr("services.vad_service.VadService.compute_vad_segments", lambda self, fp: [(0.0, 10.0)])
+    monkeypatch.setattr("services.vad_service.VadService.compute_vad_segments", lambda self, fp: [(0.0, 4.0)])
     monkeypatch.setattr("tasks.shared.publish_event", lambda mid, data: None)
 
     # 1. Run process_meeting_task
@@ -343,6 +343,10 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
         "end": 4.0,
         "speakers": ["SPEAKER_00", "SPEAKER_01"],
     }
+    assert meeting.raw_diarization["original_turns"][1]["end"] == 6.0
+    assert meeting.raw_diarization["turns"][1]["end"] == 4.0
+    assert meeting.raw_diarization["original_exclusive_turns"][1]["end"] == 6.0
+    assert meeting.raw_diarization["exclusive_turns"][1]["end"] == 4.0
 
     segments = sorted(meeting.segments, key=lambda s: s.order)
     assert len(segments) == 2
@@ -383,3 +387,26 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
     segments_reid = sorted(meeting.segments, key=lambda s: s.order)
     assert len(segments_reid) == 2
     assert segments_reid[1].speaker.label == "SPEAKER_01"
+
+
+def test_tasks_keep_original_turns_separate_from_vad_bounded_turns():
+    from tasks.shared import prepare_diarization
+
+    original = [Turn(start=0.0, end=10.0, speaker="SPEAKER_00")]
+    exclusive = [Turn(start=0.0, end=10.0, speaker="SPEAKER_00")]
+
+    class FakeVad:
+        def compute_vad_segments(self, path):
+            return [(2.0, 4.0)]
+
+        def mask_turns_to_vad(self, turns, segments):
+            return [Turn(start=2.0, end=4.0, speaker=turns[0].speaker)] if turns else []
+
+    data, bounded, bounded_exclusive = prepare_diarization(
+        DiarizationResult(turns=original, exclusive_turns=exclusive), "audio.wav", FakeVad()
+    )
+    assert data["original_turns"] == [original[0].to_dict()]
+    assert data["original_exclusive_turns"] == [exclusive[0].to_dict()]
+    assert data["turns"] == [bounded[0].to_dict()]
+    assert data["exclusive_turns"] == [bounded_exclusive[0].to_dict()]
+    assert data["overlaps"] == []

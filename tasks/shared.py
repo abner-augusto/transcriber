@@ -4,7 +4,7 @@ import logging
 import redis
 
 from config import settings
-from engines import Turn, Word
+from engines import DiarizationResult, Turn, Word
 from models import Job, Meeting
 from services.vad_service import mask_turns_to_vad
 
@@ -267,6 +267,44 @@ def turns_from_stored(raw) -> list[Turn]:
     return [Turn.from_dict(t) for t in raw]
 
 
+def prepare_diarization(result, audio_path: str, vad_service) -> tuple[dict, list[Turn], list[Turn] | None]:
+    """Normalize a diarizer result and retain both original and VAD-bounded Turns."""
+    if isinstance(result, DiarizationResult):
+        original_turns = result.turns
+        original_exclusive = result.exclusive_turns
+        supplied_overlaps = result.overlaps
+    elif isinstance(result, dict):
+        original_turns = [Turn.from_dict(t) for t in result.get("turns", [])]
+        original_exclusive = (
+            [Turn.from_dict(t) for t in result["exclusive_turns"]]
+            if result.get("exclusive_turns") is not None
+            else None
+        )
+        supplied_overlaps = result.get("overlaps")
+    else:
+        original_turns = list(result)
+        original_exclusive = None
+        supplied_overlaps = None
+
+    vad_segments = vad_service.compute_vad_segments(audio_path)
+    bounded_turns = vad_service.mask_turns_to_vad(original_turns, vad_segments)
+    bounded_exclusive = (
+        vad_service.mask_turns_to_vad(original_exclusive, vad_segments)
+        if original_exclusive is not None
+        else None
+    )
+    data = {
+        "turns": [t.to_dict() for t in bounded_turns],
+        "exclusive_turns": [t.to_dict() for t in bounded_exclusive] if bounded_exclusive is not None else None,
+        "original_turns": [t.to_dict() for t in original_turns],
+        "original_exclusive_turns": (
+            [t.to_dict() for t in original_exclusive] if original_exclusive is not None else None
+        ),
+        "overlaps": supplied_overlaps if supplied_overlaps is not None else compute_overlaps(original_turns),
+    }
+    return data, bounded_turns, bounded_exclusive
+
+
 def exclusive_turns_from_stored(raw) -> list[Turn] | None:
     """Exclusive turns out of a Meeting's raw_diarization if present."""
     if not raw or not isinstance(raw, dict):
@@ -341,40 +379,6 @@ def overlaps_from_stored(raw) -> list[dict]:
     return compute_overlaps(turns)
 
 
-def _speaker_of(word: Word, turns: list[Turn]) -> str:
-    """The Speaker who owns this Word: most overlap, else nearest, else nobody.
-
-    When multiple Turns overlap or are equally near, tie-breaking is deterministic
-    and independent of Turn iteration order (preferring earlier start time, earlier
-    end time, and lexicographical speaker name).
-    """
-    overlapping = []
-    for turn in turns:
-        overlap = min(word.end, turn.end) - max(word.start, turn.start)
-        if overlap > 0:
-            overlapping.append((round(overlap, 6), turn))
-
-    if overlapping:
-        _, best_turn = min(
-            overlapping,
-            key=lambda item: (-item[0], item[1].start, item[1].end, item[1].speaker),
-        )
-        return best_turn.speaker
-
-    nearby = []
-    for turn in turns:
-        gap = max(turn.start - word.end, word.start - turn.end, 0.0)
-        if gap <= NEAREST_TURN_TOLERANCE_SECONDS:
-            nearby.append((round(gap, 6), turn))
-
-    if nearby:
-        _, nearest_turn = min(
-            nearby,
-            key=lambda item: (item[0], item[1].start, item[1].end, item[1].speaker),
-        )
-        return nearest_turn.speaker
-
-    return UNKNOWN_SPEAKER
 
 
 def _breaks_before(current: list[tuple[Word, str]], word: Word, speaker: str) -> bool:

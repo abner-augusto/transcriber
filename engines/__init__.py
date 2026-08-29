@@ -157,9 +157,9 @@ def align_words(audio_path: str, words: list[Word], config: dict | None = None) 
     return _align_words(audio_path, words, config)
 
 
-def alignment_engine_status() -> dict:
+def alignment_engine_status(config: dict | None = None) -> dict:
     """Check availability of the forced alignment engine."""
     from .alignment import alignment_engine_status as _status
 
-    return _status()
+    return _status(config)
 

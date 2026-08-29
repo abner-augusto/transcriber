@@ -145,6 +145,7 @@ def update_preferences(body: dict):
                 continue
             if lo <= num <= hi:
                 clean[key] = num
+        current["diarization"] = clean
     if "forced_alignment" in body:
         raw_fa = body["forced_alignment"]
         if isinstance(raw_fa, dict):

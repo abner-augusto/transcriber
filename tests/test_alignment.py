@@ -30,6 +30,14 @@ def test_alignment_engine_status():
     assert "pt-BR" in status["description"]
 
 
+def test_alignment_factory_rejects_unknown_model():
+    with pytest.raises(ValueError, match="Unknown alignment engine"):
+        make_aligner({"model": "not-an-engine"})
+
+    status = alignment_engine_status({"model": "not-an-engine"})
+    assert status["available"] is False
+
+
 def test_normalize_token_text_portuguese_accents_and_punctuation():
     # Dictionary mockup mimicking MMS_FA character dictionary
     dictionary = {
@@ -122,6 +130,22 @@ def test_alignment_fallback_on_model_exception(tmp_path):
         result = aligner.align(str(audio_path), original_words)
 
     assert result == original_words
+
+
+def test_alignment_window_failure_falls_back_for_all_words(tmp_path, caplog):
+    audio_path = tmp_path / "test.wav"
+    sf.write(audio_path, np.zeros(SAMPLE_RATE * 3, dtype=np.float32), SAMPLE_RATE)
+    original_words = [
+        Word(start=0.0, end=0.5, text=" Um"),
+        Word(start=2.0, end=2.5, text=" Dois"),
+    ]
+    aligner = MMSCTCAligner()
+    successful = Word(start=0.1, end=0.4, text=" Um")
+    with patch.object(aligner, "_align_window", side_effect=[[successful], RuntimeError("window failed")]):
+        with patch.object(MMSCTCAligner, "get_model_and_aligner", return_value=(MagicMock(), MagicMock(), {"u": 1}, torch.device("cpu"))):
+            result = aligner.align(str(audio_path), original_words)
+    assert result == original_words
+    assert "falling back to original timestamps for all Words" in caplog.text
 
 
 def test_alignment_handles_empty_words():
