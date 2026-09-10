@@ -1,0 +1,8 @@
+{
+  "id": "vibevoice-7b",
+  "name": "VibeVoice-ASR 7B (Native Diarization)",
+  "engine": "vibevoice",
+  "model_path": "C:/Users/abner/_repos/_local-ai/models/VibeVoice-ASR-Streaming-7B",
+  "aligner_path": "C:/Users/abner/_repos/_local-ai/models/Qwen3-ForcedAligner-0.6B-hf",
+  "device": "cuda"
+}

@@ -15,13 +15,14 @@ from config import settings
 from .ports import DiarizationResult, Aligner, Diarizer, Transcriber, Turn, Word
 from .overlap import compute_overlaps
 
+
 __all__ = [
     "Word", "Turn", "DiarizationResult", "Transcriber", "Diarizer", "Aligner",
     "make_transcriber", "make_diarizer", "make_aligner", "align_words",
     "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "compute_overlaps", "engine_status", "alignment_engine_status",
 ]
 
-TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp"]
+TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp", "qwen3-asr", "vibevoice"]
 
 ALIGNMENT_ENGINES = ["mms-fa"]
 
@@ -34,7 +35,6 @@ def validate_alignment_engine(engine: str | None) -> str:
     if selected not in ALIGNMENT_ENGINES:
         raise ValueError(f"Unknown alignment engine '{selected}'. Known: {', '.join(ALIGNMENT_ENGINES)}")
     return selected
-
 
 
 def make_transcriber(preset: dict) -> Transcriber:
@@ -95,6 +95,29 @@ def make_transcriber(preset: dict) -> Transcriber:
             language=preset.get("language", "auto"),
         )
 
+    if engine == "qwen3-asr":
+        from .qwen3_asr import Qwen3AsrTranscriber
+
+        return Qwen3AsrTranscriber(
+            model_path=model_path,
+            aligner_path=preset.get("aligner_path"),
+            language=preset.get("language", "Portuguese"),
+            device=preset.get("device", "cuda"),
+            chunk_seconds=float(preset.get("chunk_seconds", 300.0)),
+            overlap_seconds=float(preset.get("overlap_seconds", 30.0)),
+        )
+
+    if engine == "vibevoice":
+        from .vibevoice import VibeVoiceTranscriber
+
+        return VibeVoiceTranscriber(
+            model_path=model_path,
+            aligner_path=preset.get("aligner_path"),
+            device=preset.get("device", "cuda"),
+            window_seconds=float(preset.get("window_seconds", 600.0)),
+            overlap_seconds=float(preset.get("overlap_seconds", 45.0)),
+        )
+
     raise ValueError(f"Unknown transcription engine '{engine}'. Known: {TRANSCRIBER_ENGINES}")
 
 
@@ -135,6 +158,22 @@ def engine_status(preset: dict) -> dict:
 
         return {"available": True, "reason": None}
 
+    if engine in ("qwen3-asr", "vibevoice"):
+        try:
+            import torch  # noqa: F401
+            import transformers  # noqa: F401
+        except ImportError:
+            return {"available": False, "reason": f"{engine} requires torch and transformers"}
+
+        model_path = preset.get("model_path") or ""
+        if not model_path:
+            return {"available": False, "reason": "Missing model_path"}
+
+        if not Path(model_path).exists():
+            return {"available": False, "reason": f"Model not found at {model_path}"}
+
+        return {"available": True, "reason": None}
+
     cli = {
         "whisper.cpp": settings.whisper_cli_path,
         "parakeet.cpp": settings.parakeet_cli_path,
@@ -171,4 +210,3 @@ def alignment_engine_status(config: dict | None = None) -> dict:
     from .alignment import alignment_engine_status as _status
 
     return _status(config)
-

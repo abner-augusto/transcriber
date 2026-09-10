@@ -382,3 +382,101 @@ def test_whisper_dtw_fallback_handling_on_failure(tmp_path, monkeypatch):
     assert "-dtw" in invoked_cmds[0]
     assert "-dtw" not in invoked_cmds[1]
 
+
+def test_qwen3_asr_and_vibevoice_satisfy_transcriber_protocol():
+    """Verify both new engines strictly implement the Transcriber protocol."""
+    from engines.qwen3_asr import Qwen3AsrTranscriber
+    from engines.vibevoice import VibeVoiceTranscriber
+
+    qwen = Qwen3AsrTranscriber(model_path="dummy")
+    vibe = VibeVoiceTranscriber(model_path="dummy")
+
+    assert isinstance(qwen, Transcriber)
+    assert isinstance(vibe, Transcriber)
+    assert getattr(vibe, "has_native_diarization", False) is True
+    assert getattr(qwen, "has_native_diarization", False) is False
+
+
+def test_make_transcriber_supports_qwen3_and_vibevoice():
+    """make_transcriber must instantiate the correct adapter from preset dicts."""
+    from engines.qwen3_asr import Qwen3AsrTranscriber
+    from engines.vibevoice import VibeVoiceTranscriber
+
+    qwen = make_transcriber({
+        "id": "test-qwen",
+        "engine": "qwen3-asr",
+        "model_path": "models/qwen",
+        "language": "Portuguese",
+    })
+    assert isinstance(qwen, Qwen3AsrTranscriber)
+    assert qwen.model_path == "models/qwen"
+    assert qwen.language == "Portuguese"
+
+    vibe = make_transcriber({
+        "id": "test-vibe",
+        "engine": "vibevoice",
+        "model_path": "models/vibe",
+    })
+    assert isinstance(vibe, VibeVoiceTranscriber)
+    assert vibe.model_path == "models/vibe"
+
+
+def test_vibevoice_segment_parsing_and_labels():
+    """VibeVoice raw output is parsed into SPEAKER_XX labeled segments."""
+    from engines.vibevoice import parse_segments_from_transcript
+
+    raw_text = (
+        "[Silence][Silence] "
+        "Speaker 0: Oi pessoal, bom dia, tudo bem? "
+        "Speaker 1: Bom dia! "
+        "Speaker 0: Vamos iniciar a reunião."
+    )
+    segments = parse_segments_from_transcript(raw_text)
+
+    assert len(segments) == 3
+    assert segments[0]["speaker"] == "SPEAKER_00"
+    assert segments[0]["text"] == "Oi pessoal, bom dia, tudo bem?"
+    assert segments[1]["speaker"] == "SPEAKER_01"
+    assert segments[1]["text"] == "Bom dia!"
+    assert segments[2]["speaker"] == "SPEAKER_00"
+    assert segments[2]["text"] == "Vamos iniciar a reunião."
+
+
+def test_qwen3_word_overlap_stitching():
+    """Qwen3 word stitcher detects overlapping words and removes duplicates."""
+    from engines.qwen3_asr import Qwen3AsrTranscriber
+
+    transcriber = Qwen3AsrTranscriber(model_path="dummy")
+    w1 = [
+        Word(start=0.0, end=1.0, text=" Olá"),
+        Word(start=1.0, end=2.0, text=" pessoal"),
+        Word(start=2.0, end=3.0, text=" tudo"),
+        Word(start=3.0, end=4.0, text=" bem"),
+    ]
+    w2 = [
+        Word(start=2.1, end=3.1, text=" tudo"),
+        Word(start=3.1, end=4.1, text=" bem"),
+        Word(start=4.1, end=5.0, text=" hoje"),
+    ]
+
+    stitched = transcriber._stitch_words(w1, w2)
+    assert [w.text for w in stitched] == [" Olá", " pessoal", " tudo", " bem", " hoje"]
+
+
+def test_engine_status_for_new_engines(tmp_path):
+    """engine_status checks torch/transformers and model_path existence."""
+    from engines import engine_status
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+
+    valid_qwen = {"engine": "qwen3-asr", "model_path": str(model_dir)}
+    status = engine_status(valid_qwen)
+    assert status["available"] is True
+
+    missing_qwen = {"engine": "qwen3-asr", "model_path": str(tmp_path / "nonexistent")}
+    status_miss = engine_status(missing_qwen)
+    assert status_miss["available"] is False
+    assert "not found" in status_miss["reason"].lower()
+
+

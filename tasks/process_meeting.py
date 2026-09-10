@@ -91,25 +91,41 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             resolved_dtw = transcriber.resolve_dtw_preset()
             raw_transcription_data["dtw"] = resolved_dtw if (getattr(transcriber, "dtw_enabled", False) and resolved_dtw) else False
 
+        raw_transcription_data = {
+            "engine": preset["engine"],
+            "preset": preset["id"],
+            "words": [w.to_dict() for w in words],
+        }
+        if hasattr(transcriber, "resolve_dtw_preset"):
+            resolved_dtw = transcriber.resolve_dtw_preset()
+            raw_transcription_data["dtw"] = resolved_dtw if (getattr(transcriber, "dtw_enabled", False) and resolved_dtw) else False
+
         meeting.raw_transcription = raw_transcription_data
         db.commit()
         update_progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
 
 
         # Step 3: Diarization & VAD bounding
-        update_progress(db, job, meeting, 50, "Identifying speakers (diarization)...")
-        diar_result = diarizer.diarize(
-            audio_path,
-            min_speakers=meeting.min_speakers,
-            max_speakers=meeting.max_speakers,
-        )
+        if getattr(transcriber, "has_native_diarization", False):
+            update_progress(db, job, meeting, 50, "Extracting native speaker diarization...")
+            diar_result = transcriber.get_native_diarization()
+            diar_engine_name = preset.get("engine", "vibevoice")
+        else:
+            update_progress(db, job, meeting, 50, "Identifying speakers (diarization)...")
+            diar_result = diarizer.diarize(
+                audio_path,
+                min_speakers=meeting.min_speakers,
+                max_speakers=meeting.max_speakers,
+            )
+            diar_engine_name = DIARIZER_ENGINE
+
         vad_service = VadService()
         diarization_data, bounded_turns, bounded_exclusive_turns = prepare_diarization(
             diar_result, audio_path, vad_service
         )
 
         meeting.raw_diarization = {
-            "engine": DIARIZER_ENGINE,
+            "engine": diar_engine_name,
             **diarization_data,
         }
         db.commit()
