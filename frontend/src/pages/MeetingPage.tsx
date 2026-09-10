@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMeeting, startProcessing, getJobs, rediarizeMeeting, reidentifyMeeting, updateMeetingTitle } from "../api";
+import { getMeeting, startProcessing, getJobs, rediarizeMeeting, reidentifyMeeting, updateMeetingTitle, updateMeeting } from "../api";
 import { useStore } from "../store";
 import type { ProgressUpdate } from "../types";
 import TranscriptView from "../components/TranscriptView";
@@ -10,6 +10,8 @@ import AudioPlayer from "../components/AudioPlayer";
 import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
 import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
+import KnownSpeakersInput from "../components/KnownSpeakersInput";
+import { parseVocabulary, formatVocabulary } from "../utils/vocabulary";
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,7 +23,10 @@ export default function MeetingPage() {
   const [showExport, setShowExport] = useState(false);
   const [showReprocess, setShowReprocess] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false);
-  const [skipLlm, setSkipLlm] = useState(false);
+  const [speakers, setSpeakers] = useState<string[]>([]);
+  const [domainVocab, setDomainVocab] = useState("");
+  const [showAdvancedVocab, setShowAdvancedVocab] = useState(false);
+  const [isSavingVocab, setIsSavingVocab] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"speakers" | "analytics">("speakers");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
@@ -92,11 +97,44 @@ export default function MeetingPage() {
     };
   }
 
+  useEffect(() => {
+    if (currentMeeting?.vocabulary) {
+      const parsed = parseVocabulary(currentMeeting.vocabulary);
+      setSpeakers(parsed.speakers);
+      setDomainVocab(parsed.vocabulary);
+    } else {
+      setSpeakers([]);
+      setDomainVocab("");
+    }
+  }, [currentMeeting?.id]);
+
   async function handleProcess() {
     if (!id) return;
-    await startProcessing(id, skipLlm);
+    const formatted = formatVocabulary(speakers, domainVocab);
+    if (currentMeeting && (formatted || "").trim() !== (currentMeeting.vocabulary || "").trim()) {
+      try {
+        await updateMeeting(id, { vocabulary: formatted });
+      } catch (err) {
+        console.error("Failed to update vocabulary before processing:", err);
+      }
+    }
+    await startProcessing(id);
     setProgress({ type: "progress", progress: 0, step: "Starting...", status: "processing" });
     loadMeeting();
+  }
+
+  async function handleSaveVocabulary() {
+    if (!id || !currentMeeting) return;
+    setIsSavingVocab(true);
+    try {
+      const formatted = formatVocabulary(speakers, domainVocab);
+      const updated = await updateMeeting(id, { vocabulary: formatted });
+      setCurrentMeeting({ ...currentMeeting, vocabulary: updated.vocabulary });
+    } catch (err) {
+      console.error("Failed to save vocabulary:", err);
+    } finally {
+      setIsSavingVocab(false);
+    }
   }
 
   async function handleRediarize() {
@@ -143,6 +181,10 @@ export default function MeetingPage() {
   const isUploaded = currentMeeting.status === "uploaded";
   const isFailed = currentMeeting.status === "failed";
   const isFinalizing = currentMeeting.status === "finalizing";
+
+  const currentVocabStr = (currentMeeting.vocabulary || "").trim();
+  const newVocabStr = (formatVocabulary(speakers, domainVocab) || "").trim();
+  const hasVocabChanges = newVocabStr !== currentVocabStr;
 
   return (
     <main className="max-w-7xl mx-auto px-6 py-6">
@@ -352,30 +394,86 @@ export default function MeetingPage() {
 
       {/* Uploaded but not started */}
       {isUploaded && (
-        <div className="text-center py-20">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center">
-            <svg className="w-10 h-10 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-slate-300">Ready to transcribe</h3>
-          <p className="text-slate-500 mt-2">Click "Start transcription" to begin processing</p>
-          <label className="mt-5 inline-flex items-center gap-2.5 cursor-pointer select-none group">
-            <div className="relative">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={!skipLlm}
-                onChange={(e) => setSkipLlm(!e.target.checked)}
-              />
-              <div className="w-9 h-5 bg-slate-700 peer-checked:bg-violet-600 rounded-full transition-colors" />
-              <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+        <div className="max-w-xl mx-auto py-12">
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-xl text-center">
+            <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
             </div>
-            <span className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">
-              AI analysis (speaker identification &amp; intro detection)
-            </span>
-          </label>
+            <h3 className="text-xl font-bold text-white">Ready to transcribe</h3>
+            <p className="text-slate-400 text-sm mt-1.5 max-w-md mx-auto">
+              Provide names of known speakers and domain terminology to prime the Transcriber with accurate vocabulary.
+            </p>
+
+            <div className="mt-6 text-left">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Known speakers
+              </label>
+              <KnownSpeakersInput
+                speakers={speakers}
+                onChange={setSpeakers}
+                placeholder="Add speaker name (e.g. Alice, Bob)..."
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                Known speaker names are merged into vocabulary to prime speech transcription.
+              </p>
+            </div>
+
+            <div className="mt-4 text-left">
+              <details className="group" open={Boolean(domainVocab) || showAdvancedVocab} onToggle={(e) => setShowAdvancedVocab((e.target as HTMLDetailsElement).open)}>
+                <summary className="text-xs font-semibold text-slate-400 cursor-pointer hover:text-slate-300 transition uppercase tracking-wider">
+                  Additional vocabulary &amp; domain terms
+                </summary>
+                <div className="mt-2 space-y-1.5">
+                  <textarea
+                    placeholder="Domain-specific terms, technical jargon, acronyms..."
+                    value={domainVocab}
+                    onChange={(e) => setDomainVocab(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 text-sm resize-none"
+                    rows={2}
+                    maxLength={2000}
+                  />
+                  <p className="text-xs text-slate-500">
+                    Additional technical terms or jargon to help the Transcriber spell them correctly.
+                  </p>
+                </div>
+              </details>
+            </div>
+
+            <div className="mt-8 flex items-center justify-between pt-6 border-t border-slate-800/80">
+              <div className="flex items-center gap-3">
+                {hasVocabChanges ? (
+                  <button
+                    type="button"
+                    onClick={handleSaveVocabulary}
+                    disabled={isSavingVocab}
+                    className="text-xs text-violet-400 hover:text-violet-300 font-medium transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 disabled:opacity-50"
+                  >
+                    {isSavingVocab ? "Saving..." : "Save changes"}
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-500">
+                    {speakers.length > 0
+                      ? `${speakers.length} speaker${speakers.length > 1 ? "s" : ""} configured`
+                      : "No speakers configured"}
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleProcess}
+                className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-medium hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/25 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Start transcription</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

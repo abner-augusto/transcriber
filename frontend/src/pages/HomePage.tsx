@@ -4,6 +4,8 @@ import { listMeetings, createMeeting, deleteMeeting, updateMeetingTitle, searchS
 import type { SearchResult } from "../api";
 import type { ModelSettings } from "../types";
 import { useStore } from "../store";
+import KnownSpeakersInput from "../components/KnownSpeakersInput";
+import { formatVocabulary } from "../utils/vocabulary";
 
 const STATUS_LABELS: Record<string, { text: string; color: string; dot: string }> = {
   uploaded: { text: "Ready", color: "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20", dot: "bg-sky-400" },
@@ -32,6 +34,7 @@ export default function HomePage() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [title, setTitle] = useState("");
+  const [speakers, setSpeakers] = useState<string[]>([]);
   const [minSpeakers, setMinSpeakers] = useState("");
   const [maxSpeakers, setMaxSpeakers] = useState("");
   const [vocabulary, setVocabulary] = useState("");
@@ -105,7 +108,8 @@ export default function HomePage() {
       form.append("title", title.trim());
       if (minSpeakers) form.append("min_speakers", minSpeakers);
       if (maxSpeakers) form.append("max_speakers", maxSpeakers);
-      if (vocabulary.trim()) form.append("vocabulary", vocabulary.trim());
+      const formattedVocab = formatVocabulary(speakers, vocabulary);
+      if (formattedVocab) form.append("vocabulary", formattedVocab);
       if (presetId) form.append("preset_id", presetId);
 
       const meeting = await createMeeting(form);
@@ -124,6 +128,7 @@ export default function HomePage() {
   function resetDialog() {
     setTitle("");
     setSelectedFile(null);
+    setSpeakers([]);
     setMinSpeakers("");
     setMaxSpeakers("");
     setVocabulary("");
@@ -286,6 +291,22 @@ export default function HomePage() {
               </p>
             </div>
 
+            {/* Known participants */}
+            {/* Known speakers */}
+            <div className="mb-4">
+              <label className="block text-xs text-slate-500 mb-1.5">
+                Known speakers
+              </label>
+              <KnownSpeakersInput
+                speakers={speakers}
+                onChange={setSpeakers}
+                placeholder="Add speaker name (e.g. Alice, Bob)..."
+              />
+              <p className="text-xs text-slate-500 mt-1.5">
+                Known speaker names are merged into vocabulary to prime speech transcription.
+              </p>
+            </div>
+
             {/* Advanced settings */}
             <details className="mb-5 group">
               <summary className="text-sm text-slate-500 cursor-pointer hover:text-slate-300 transition">
@@ -311,7 +332,7 @@ export default function HomePage() {
                   />
                 </div>
                 <textarea
-                  placeholder="Vocabulary priming (domain-specific terms, names, abbreviations...)"
+                  placeholder="Additional vocabulary (domain-specific terms, acronyms, jargon...)"
                   value={vocabulary}
                   onChange={(e) => setVocabulary(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 text-sm resize-none"
@@ -319,7 +340,7 @@ export default function HomePage() {
                   maxLength={2000}
                 />
                 <p className="text-xs text-slate-600">
-                  Add names, technical terms, or abbreviations to improve transcription accuracy.
+                  Add domain-specific terms, technical jargon, or abbreviations. Known speaker names above are merged automatically.
                 </p>
               </div>
             </details>

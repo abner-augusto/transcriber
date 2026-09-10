@@ -4,9 +4,9 @@
 
 **Blocked by:** 01-frontend-settings-model-and-engine-selector.md
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Remove the AI speaker identification toggle from the pre-transcription screen.
-- [ ] Add an input component for entering names of all known speakers in the meeting (e.g. tag/chip list or comma-separated names).
-- [ ] Merge the entered participant names into the `vocabulary` field sent to `POST /api/meetings`.
-- [ ] Verify that `vocabulary` flows directly into the ASR models (`--context` in Qwen3-ASR and `context_info` in VibeVoice).
+- [x] Remove the AI speaker identification toggle from the pre-transcription screen.
+- [x] Add an input component for entering names of all known speakers in the meeting (e.g. tag/chip list or comma-separated names).
+- [x] Merge the entered participant names into the `vocabulary` field sent to `POST /api/meetings`.
+- [x] Verify that `vocabulary` flows directly into the ASR models (`--context` in Qwen3-ASR and `context_info` in VibeVoice).

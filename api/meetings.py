@@ -143,7 +143,8 @@ def get_meeting(meeting_id: str, db: Session = Depends(get_db)):
 
 
 class UpdateMeetingRequest(BaseModel):
-    title: str
+    title: str | None = None
+    vocabulary: str | None = None
 
 
 @router.put("/{meeting_id}")
@@ -152,11 +153,16 @@ def update_meeting(meeting_id: str, req: UpdateMeetingRequest, db: Session = Dep
     if not meeting:
         raise HTTPException(404, "Meeting not found")
 
-    title = req.title.strip()[:MAX_TITLE_LENGTH]
-    if not title:
-        raise HTTPException(400, "Title is required")
+    if req.title is not None:
+        title = req.title.strip()[:MAX_TITLE_LENGTH]
+        if not title:
+            raise HTTPException(400, "Title is required")
+        meeting.title = title
 
-    meeting.title = title
+    if req.vocabulary is not None:
+        trimmed_vocab = req.vocabulary.strip()[:2000]
+        meeting.vocabulary = trimmed_vocab if trimmed_vocab else None
+
     db.commit()
     return meeting.to_dict()
 

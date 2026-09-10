@@ -22,13 +22,20 @@ export async function deleteMeeting(id: string): Promise<void> {
   await api.delete(`/meetings/${id}`);
 }
 
-export async function updateMeetingTitle(id: string, title: string): Promise<Meeting> {
-  const { data } = await api.put(`/meetings/${id}`, { title });
+export async function updateMeeting(
+  id: string,
+  updates: { title?: string; vocabulary?: string | null }
+): Promise<Meeting> {
+  const { data } = await api.put(`/meetings/${id}`, updates);
   return data;
 }
 
-export async function startProcessing(id: string, skipLlm = false): Promise<Job> {
-  const { data } = await api.post(`/meetings/${id}/process`, { skip_llm: skipLlm });
+export async function updateMeetingTitle(id: string, title: string): Promise<Meeting> {
+  return updateMeeting(id, { title });
+}
+
+export async function startProcessing(id: string): Promise<Job> {
+  const { data } = await api.post(`/meetings/${id}/process`);
   return data;
 }
 
