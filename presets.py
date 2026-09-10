@@ -88,6 +88,26 @@ def create_preset(data: dict) -> dict:
     return preset
 
 
+def update_preset(preset_id: str, data: dict) -> dict:
+    """Update an existing Preset in place."""
+    path = PRESETS_DIR / f"{preset_id}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Preset not found: {preset_id}")
+
+    existing = json.loads(path.read_text(encoding="utf-8"))
+    for k, v in data.items():
+        if v is not None:
+            existing[k] = v
+        elif k in existing:
+            del existing[k]
+    existing["id"] = preset_id
+
+    path.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return existing
+
+
 def delete_preset(preset_id: str) -> None:
     path = PRESETS_DIR / f"{preset_id}.json"
     if not path.exists():

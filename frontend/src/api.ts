@@ -109,19 +109,32 @@ export async function setDefaultPreset(presetId: string): Promise<{ default_pres
   return data;
 }
 
-export async function createModelPreset(preset: {
+export interface CreatePresetRequest {
   name: string;
   engine: string;
   model_path: string;
+  aligner_path?: string;
   language?: string;
   decoder?: string;
-}): Promise<Preset> {
+  device?: string;
+  compute_type?: string;
+  vad_filter?: boolean;
+}
+
+export async function createModelPreset(preset: CreatePresetRequest): Promise<Preset> {
   const { data } = await api.post("/model-settings/presets", preset);
   return data;
 }
 
 export async function deleteModelPreset(presetId: string) {
   await api.delete(`/model-settings/presets/${presetId}`);
+}
+
+export type UpdatePresetRequest = Partial<CreatePresetRequest>;
+
+export async function updateModelPreset(presetId: string, updates: UpdatePresetRequest): Promise<Preset> {
+  const { data } = await api.put(`/model-settings/presets/${presetId}`, updates);
+  return data;
 }
 
 // --- Search ---

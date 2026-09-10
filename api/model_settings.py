@@ -11,11 +11,22 @@ class CreatePreset(BaseModel):
     name: str
     engine: str
     model_path: str
+    aligner_path: str | None = None
     language: str | None = None
     decoder: str | None = None
     device: str | None = None
     compute_type: str | None = None
     vad_filter: bool | None = None
+
+
+class UpdatePreset(BaseModel):
+    name: str | None = None
+    engine: str | None = None
+    model_path: str | None = None
+    aligner_path: str | None = None
+    language: str | None = None
+    decoder: str | None = None
+    device: str | None = None
 
 
 class SetDefault(BaseModel):
@@ -49,6 +60,20 @@ def create_preset(body: CreatePreset):
     preset = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         return presets.create_preset(preset)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.put("/presets/{preset_id}")
+def update_preset(preset_id: str, body: UpdatePreset):
+    if body.engine and body.engine not in TRANSCRIBER_ENGINES:
+        raise HTTPException(400, f"Unknown engine '{body.engine}'. Known: {TRANSCRIBER_ENGINES}")
+
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        return presets.update_preset(preset_id, updates)
+    except FileNotFoundError:
+        raise HTTPException(404, "Preset not found")
     except ValueError as e:
         raise HTTPException(400, str(e))
 

@@ -1,15 +1,101 @@
 import { useEffect, useState } from "react";
-import type { ModelSettings } from "../types";
+import type { ModelSettings, Preset } from "../types";
 import {
-  getModelSettings, createModelPreset, deleteModelPreset, setDefaultPreset,
+  getModelSettings, createModelPreset, updateModelPreset, deleteModelPreset, setDefaultPreset,
   getPreferences, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile,
   listVocabulary, deleteVocabularyEntry,
 } from "../api";
-import type { Preferences, SpeakerProfile, VocabularyEntry } from "../api";
+import type { SpeakerProfile, VocabularyEntry } from "../api";
 
 interface Props {
   onClose: () => void;
 }
+
+interface EngineMetadata {
+  label: string;
+  badgeText: string;
+  badgeStyle: string;
+  badgeDot: string;
+  badgeTitle: string;
+  description?: string;
+  modelPlaceholder: string;
+  alignerPlaceholder?: string;
+  supportsAligner?: boolean;
+  supportsLanguage?: boolean;
+  supportsDecoder?: boolean;
+  supportsDevice?: boolean;
+  defaultLanguage?: string;
+  defaultDevice?: string;
+}
+
+const ENGINE_METADATA: Record<string, EngineMetadata> = {
+  "vibevoice": {
+    label: "VibeVoice 7B",
+    badgeText: "Native Diarization (7B)",
+    badgeStyle: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    badgeDot: "bg-emerald-400",
+    badgeTitle: "Unified transcription and speaker diarization in a single pass",
+    description: "Performs unified transcription and native speaker diarization with high accuracy, bypassing external diarization.",
+    modelPlaceholder: "./models/VibeVoice-ASR-Streaming-7B or HuggingFace repo",
+    alignerPlaceholder: "./models/Qwen3-ForcedAligner-0.6B-hf",
+    supportsAligner: true,
+    supportsDevice: true,
+    defaultDevice: "cuda",
+  },
+  "qwen3-asr": {
+    label: "Qwen3 1.7B",
+    badgeText: "External Diarization",
+    badgeStyle: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30",
+    badgeDot: "bg-indigo-400",
+    badgeTitle: "Qwen3 transcription with forced alignment, followed by external diarization",
+    description: "Transcribes with Qwen3 1.7B with hotword vocabulary injection; diarization is handled externally.",
+    modelPlaceholder: "./models/Qwen3-ASR-1.7B-hf or HuggingFace repo",
+    alignerPlaceholder: "./models/Qwen3-ForcedAligner-0.6B-hf",
+    supportsAligner: true,
+    supportsLanguage: true,
+    supportsDevice: true,
+    defaultLanguage: "Portuguese",
+    defaultDevice: "cuda",
+  },
+  "faster-whisper": {
+    label: "Faster Whisper",
+    badgeText: "External Diarization",
+    badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
+    badgeDot: "bg-slate-500",
+    badgeTitle: "Transcription followed by external diarization",
+    modelPlaceholder: "Model (e.g. large-v3-turbo, inesc-id/WhisperLv3-X-PT-All)",
+    supportsLanguage: true,
+    supportsDevice: true,
+    defaultDevice: "auto",
+  },
+  "whisper.cpp": {
+    label: "Whisper.cpp",
+    badgeText: "External Diarization",
+    badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
+    badgeDot: "bg-slate-500",
+    badgeTitle: "Transcription followed by external diarization",
+    modelPlaceholder: "Model path (e.g. ./models/ggml-medium.bin)",
+    supportsLanguage: true,
+  },
+  "parakeet.cpp": {
+    label: "Parakeet.cpp",
+    badgeText: "External Diarization",
+    badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
+    badgeDot: "bg-slate-500",
+    badgeTitle: "Transcription followed by external diarization",
+    modelPlaceholder: "Model path (e.g. ./models/parakeet/tdt-0.6b-v3-q4_k.gguf)",
+    supportsDecoder: true,
+  },
+};
+
+const DEFAULT_ENGINE_META: EngineMetadata = {
+  label: "Transcription Engine",
+  badgeText: "External Diarization",
+  badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
+  badgeDot: "bg-slate-500",
+  badgeTitle: "Transcription followed by external diarization",
+  modelPlaceholder: "Model path or identifier",
+};
 
 export default function SettingsDialog({ onClose }: Props) {
   const [settings, setSettings] = useState<ModelSettings | null>(null);
@@ -17,13 +103,16 @@ export default function SettingsDialog({ onClose }: Props) {
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<"presets" | "preferences">("presets");
 
-  // Add-preset form
+  // Preset form (Add / Edit)
   const [showAddPreset, setShowAddPreset] = useState(false);
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
-  const [newEngine, setNewEngine] = useState("whisper.cpp");
+  const [newEngine, setNewEngine] = useState("vibevoice");
   const [newModelPath, setNewModelPath] = useState("");
+  const [newAlignerPath, setNewAlignerPath] = useState("");
   const [newLanguage, setNewLanguage] = useState("");
   const [newDecoder, setNewDecoder] = useState("tdt");
+  const [newDevice, setNewDevice] = useState("cuda");
   const [addError, setAddError] = useState("");
   const [defaultSaving, setDefaultSaving] = useState<string | null>(null);
 
@@ -44,7 +133,57 @@ export default function SettingsDialog({ onClose }: Props) {
   async function loadSettings() {
     const data = await getModelSettings();
     setSettings(data);
-    if (data.engines.length > 0) setNewEngine(data.engines[0]);
+    if (data.engines.length > 0 && !editingPresetId) {
+      const initialEngine = data.engines.includes("vibevoice")
+        ? "vibevoice"
+        : data.engines.includes("qwen3-asr")
+        ? "qwen3-asr"
+        : data.engines[0];
+      setNewEngine(initialEngine);
+      applyEngineDefaults(initialEngine);
+    }
+  }
+
+  function applyEngineDefaults(engine: string) {
+    const meta = ENGINE_METADATA[engine] || DEFAULT_ENGINE_META;
+    setNewDevice(meta.defaultDevice || "cuda");
+    setNewLanguage(meta.defaultLanguage || "");
+    if (engine === "parakeet.cpp") setNewDecoder("tdt");
+  }
+
+  function handleEngineChange(engine: string) {
+    setNewEngine(engine);
+    setAddError("");
+    applyEngineDefaults(engine);
+  }
+
+  function resetPresetForm() {
+    setEditingPresetId(null);
+    setNewName("");
+    setNewModelPath("");
+    setNewAlignerPath("");
+    setNewLanguage("");
+    setNewDecoder("tdt");
+    setNewDevice("cuda");
+    setAddError("");
+  }
+
+  function startEditPreset(preset: Preset) {
+    setEditingPresetId(preset.id);
+    setNewName(preset.name);
+    setNewEngine(preset.engine);
+    setNewModelPath(preset.model_path);
+    setNewAlignerPath(preset.aligner_path || "");
+    setNewLanguage(preset.language || "");
+    setNewDecoder(preset.decoder || "tdt");
+    setNewDevice(preset.device || "cuda");
+    setAddError("");
+    setShowAddPreset(true);
+  }
+
+  function cancelPresetForm() {
+    setShowAddPreset(false);
+    resetPresetForm();
   }
 
   async function loadPreferences() {
@@ -74,26 +213,39 @@ export default function SettingsDialog({ onClose }: Props) {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  async function handleAddPreset() {
-    if (!newName.trim() || !newModelPath.trim()) {
-      setAddError("Name and model path are required.");
+  async function handleSavePreset() {
+    const trimmedName = newName.trim();
+    const trimmedModelPath = newModelPath.trim();
+
+    if (!trimmedName || !trimmedModelPath) {
+      setAddError("Preset name and model path are required.");
       return;
     }
     setAddError("");
+
+    const meta = ENGINE_METADATA[newEngine] || DEFAULT_ENGINE_META;
+
+    const payload = {
+      name: trimmedName,
+      engine: newEngine,
+      model_path: trimmedModelPath,
+      aligner_path: meta.supportsAligner && newAlignerPath.trim() ? newAlignerPath.trim() : undefined,
+      language: meta.supportsLanguage && newLanguage.trim() ? newLanguage.trim() : undefined,
+      device: meta.supportsDevice && newDevice.trim() ? newDevice.trim() : undefined,
+      decoder: meta.supportsDecoder ? newDecoder : undefined,
+    };
+
     try {
-      await createModelPreset({
-        name: newName.trim(),
-        engine: newEngine,
-        model_path: newModelPath.trim(),
-        language: (newEngine === "whisper.cpp" || newEngine === "faster-whisper") && newLanguage.trim() ? newLanguage.trim() : undefined,
-        decoder: newEngine === "parakeet.cpp" ? newDecoder : undefined,
-      });
-      setNewName(""); setNewModelPath(""); setNewLanguage(""); setNewDecoder("tdt");
-      setShowAddPreset(false);
+      if (editingPresetId) {
+        await updateModelPreset(editingPresetId, payload);
+      } else {
+        await createModelPreset(payload);
+      }
+      cancelPresetForm();
       const data = await getModelSettings();
       setSettings(data);
     } catch (err: any) {
-      setAddError(err?.response?.data?.detail || "Failed to create preset");
+      setAddError(err?.response?.data?.detail || "Failed to save preset");
     }
   }
 
@@ -102,6 +254,7 @@ export default function SettingsDialog({ onClose }: Props) {
     if (!confirm(`Delete preset "${preset?.name}"?`)) return;
     try {
       await deleteModelPreset(id);
+      if (editingPresetId === id) cancelPresetForm();
       const data = await getModelSettings();
       setSettings(data);
     } catch (err: any) {
@@ -131,8 +284,8 @@ export default function SettingsDialog({ onClose }: Props) {
 
   if (!settings) {
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl p-6 w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-center py-8">
             <div className="w-5 h-5 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
           </div>
@@ -141,12 +294,14 @@ export default function SettingsDialog({ onClose }: Props) {
     );
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-xl font-bold text-white mb-4">Settings</h2>
+  const currentEngineMeta = ENGINE_METADATA[newEngine] || DEFAULT_ENGINE_META;
 
-        <div className="flex bg-slate-800 rounded-xl p-1 mb-5">
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-xl font-bold text-white mb-4 flex-shrink-0">Settings</h2>
+
+        <div className="flex bg-slate-800 rounded-xl p-1 mb-5 flex-shrink-0">
           {(["presets", "preferences"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all capitalize ${tab === t ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white"}`}>
@@ -156,97 +311,283 @@ export default function SettingsDialog({ onClose }: Props) {
         </div>
 
         {tab === "presets" ? (
-          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+          <div className="space-y-5 overflow-y-auto pr-1 flex-1">
 
             {/* Transcription presets list */}
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2.5">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Transcription Presets</p>
-                <button onClick={() => setShowAddPreset(!showAddPreset)}
-                  className="text-xs text-violet-400 hover:text-violet-300 transition flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (showAddPreset) {
+                      cancelPresetForm();
+                    } else {
+                      resetPresetForm();
+                      setShowAddPreset(true);
+                    }
+                  }}
+                  className="text-xs text-violet-400 hover:text-violet-300 transition flex items-center gap-1 font-medium"
+                >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showAddPreset ? "M6 18L18 6M6 6l12 12" : "M12 4v16m8-8H4"} />
                   </svg>
-                  Add
+                  {showAddPreset ? "Cancel" : "Add preset"}
                 </button>
               </div>
 
-              <div className="space-y-1.5">
-                {settings.presets.map((p) => (
-                  <div key={p.id}
-                    className="flex items-center justify-between bg-slate-800/30 rounded-lg px-3 py-2 gap-3">
-                    <label className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer" title={p.available ? undefined : p.reason || "Unavailable"}>
-                      <input
-                        type="radio"
-                        name="default-preset"
-                        checked={settings.default_preset === p.id}
-                        disabled={!p.available || defaultSaving === p.id}
-                        onChange={() => handleSetDefault(p.id)}
-                        className="accent-violet-600"
-                      />
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${p.available ? "bg-emerald-400" : "bg-red-400"}`}
-                      />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm text-slate-200 truncate">{p.name}</span>
-                          <span className="text-[10px] text-slate-500 uppercase tracking-wide flex-shrink-0">{p.engine}</span>
-                          {settings.default_preset === p.id && (
-                            <span className="text-[10px] text-violet-400 flex-shrink-0">default</span>
+              <div className="space-y-2">
+                {settings.presets.map((p) => {
+                  const meta = ENGINE_METADATA[p.engine] || DEFAULT_ENGINE_META;
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="bg-slate-800/30 hover:bg-slate-800/50 border border-slate-700/20 rounded-xl px-3.5 py-2.5 transition flex items-center justify-between gap-3"
+                    >
+                      <label
+                        className="flex items-start gap-3 min-w-0 flex-1 cursor-pointer"
+                        title={p.available ? undefined : p.reason || "Unavailable"}
+                      >
+                        <input
+                          type="radio"
+                          name="default-preset"
+                          checked={settings.default_preset === p.id}
+                          disabled={!p.available || defaultSaving === p.id}
+                          onChange={() => handleSetDefault(p.id)}
+                          className="accent-violet-600 mt-1"
+                        />
+                        <span
+                          className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                            p.available ? "bg-emerald-400 ring-2 ring-emerald-400/20" : "bg-red-400 ring-2 ring-red-400/20"
+                          }`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-slate-200">{p.name}</span>
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-mono bg-slate-800 border border-slate-700/50 px-1.5 py-0.5 rounded flex-shrink-0">
+                              {p.engine}
+                            </span>
+
+                            {/* Diarization status badge */}
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 flex-shrink-0 border ${meta.badgeStyle}`}
+                              title={meta.badgeTitle}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full inline-block ${meta.badgeDot}`} />
+                              {meta.badgeText}
+                            </span>
+
+                            {settings.default_preset === p.id && (
+                              <span className="text-[10px] bg-violet-500/20 text-violet-300 border border-violet-500/30 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
+                                default
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Detail subline */}
+                          <div className="text-xs text-slate-400 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-1">
+                            <span className="font-mono text-slate-400 truncate max-w-xs">{p.model_path}</span>
+                            {p.language && (
+                              <span className="text-slate-400 text-[11px]">
+                                Lang: <span className="text-slate-300">{p.language}</span>
+                              </span>
+                            )}
+                            {p.aligner_path && (
+                              <span className="text-slate-500 text-[11px]">
+                                Aligner: <span className="font-mono text-slate-400">{p.aligner_path.split("/").pop()}</span>
+                              </span>
+                            )}
+                            {p.device && (
+                              <span className="text-[10px] text-slate-400 uppercase bg-slate-800 border border-slate-700/50 px-1.5 py-0.2 rounded">
+                                {p.device}
+                              </span>
+                            )}
+                            {p.decoder && (
+                              <span className="text-[10px] text-slate-400 uppercase bg-slate-800 border border-slate-700/50 px-1.5 py-0.2 rounded">
+                                {p.decoder}
+                              </span>
+                            )}
+                          </div>
+
+                          {!p.available && p.reason && (
+                            <p className="text-[11px] text-amber-400/90 mt-1 flex items-center gap-1">
+                              <span>⚠️</span> {p.reason}
+                            </p>
                           )}
                         </div>
-                        <span className="text-xs text-slate-500 font-mono truncate block">{p.model_path}</span>
+                      </label>
+
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => startEditPreset(p)}
+                          className="text-slate-500 hover:text-violet-300 transition p-1.5 rounded-lg hover:bg-slate-700/30"
+                          title={`Edit preset ${p.name}`}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePreset(p.id)}
+                          className="text-slate-600 hover:text-red-400 transition p-1.5 rounded-lg hover:bg-slate-700/30"
+                          title={`Delete preset ${p.name}`}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
-                    </label>
-                    <button onClick={() => handleDeletePreset(p.id)}
-                      className="text-slate-600 hover:text-red-400 transition p-1 flex-shrink-0">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
                 {settings.presets.length === 0 && (
                   <p className="text-xs text-slate-600">No presets configured yet.</p>
                 )}
               </div>
-              <p className="text-[10px] text-slate-600 mt-1.5">
+              <p className="text-[10px] text-slate-600 mt-2">
                 Select the radio to make a preset the default. Unavailable presets are missing their engine binary or model file.
               </p>
 
+              {/* Add / Edit preset form */}
               {showAddPreset && (
-                <div className="mt-3 bg-slate-800/50 rounded-xl p-3 space-y-2">
-                  <p className="text-xs font-medium text-slate-300">New preset</p>
-                  <input value={newName} onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Name (e.g. Whisper Medium)"
-                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
-                  <select value={newEngine} onChange={(e) => setNewEngine(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50">
-                    {settings.engines.map((e) => (
-                      <option key={e} value={e}>{e}</option>
-                    ))}
-                  </select>
-                  <input value={newModelPath} onChange={(e) => setNewModelPath(e.target.value)}
-                    placeholder={newEngine === "faster-whisper" ? "Model (e.g. large-v3-turbo, inesc-id/WhisperLv3-X-PT-All)" : "Model path (e.g. ./models/ggml-medium.bin)"}
-                    className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
-                  {(newEngine === "whisper.cpp" || newEngine === "faster-whisper") && (
-                    <input value={newLanguage} onChange={(e) => setNewLanguage(e.target.value)}
-                      placeholder="Language code (optional, e.g. pt)"
-                      className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
-                  )}
-                  {newEngine === "parakeet.cpp" && (
-                    <select value={newDecoder} onChange={(e) => setNewDecoder(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50">
-                      <option value="tdt">tdt</option>
-                      <option value="ctc">ctc</option>
+                <div className="mt-4 bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-slate-200 uppercase tracking-wide">
+                      {editingPresetId ? `Edit preset: ${editingPresetId}` : "New transcription preset"}
+                    </p>
+                  </div>
+
+                  {/* Preset Name */}
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Preset Name</label>
+                    <input
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="Name (e.g. Whisper Medium, VibeVoice 7B, Qwen3 1.7B)"
+                      className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    />
+                  </div>
+
+                  {/* Engine Selection */}
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Engine</label>
+                    <select
+                      value={newEngine}
+                      onChange={(e) => handleEngineChange(e.target.value)}
+                      className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    >
+                      {settings.engines.map((e) => {
+                        const meta = ENGINE_METADATA[e] || DEFAULT_ENGINE_META;
+                        return (
+                          <option key={e} value={e}>
+                            {e} — {meta.label}
+                          </option>
+                        );
+                      })}
                     </select>
+                  </div>
+
+                  {/* Engine Description Banner */}
+                  {currentEngineMeta.description && (
+                    <div className={`p-2.5 rounded-lg border text-xs ${currentEngineMeta.badgeStyle}`}>
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${currentEngineMeta.badgeDot}`} />
+                        {currentEngineMeta.label} ({currentEngineMeta.badgeText})
+                      </div>
+                      <p className="text-[11px] mt-1 opacity-90">
+                        {currentEngineMeta.description}
+                      </p>
+                    </div>
                   )}
+
+                  {/* Model Path */}
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Model Path / Identifier</label>
+                    <input
+                      value={newModelPath}
+                      onChange={(e) => setNewModelPath(e.target.value)}
+                      placeholder={currentEngineMeta.modelPlaceholder}
+                      className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    />
+                  </div>
+
+                  {/* Forced Aligner Path */}
+                  {currentEngineMeta.supportsAligner && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Forced Aligner Path (optional)</label>
+                      <input
+                        value={newAlignerPath}
+                        onChange={(e) => setNewAlignerPath(e.target.value)}
+                        placeholder={currentEngineMeta.alignerPlaceholder || "Path to alignment model"}
+                        className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                      />
+                    </div>
+                  )}
+
+                  {/* Language, Device, and Decoder Row */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {currentEngineMeta.supportsLanguage && (
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Language</label>
+                        <input
+                          value={newLanguage}
+                          onChange={(e) => setNewLanguage(e.target.value)}
+                          placeholder="Language code or name (e.g. pt, Portuguese)"
+                          className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        />
+                      </div>
+                    )}
+
+                    {currentEngineMeta.supportsDevice && (
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Device</label>
+                        <select
+                          value={newDevice}
+                          onChange={(e) => setNewDevice(e.target.value)}
+                          className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        >
+                          <option value="cuda">cuda (GPU)</option>
+                          <option value="cpu">cpu</option>
+                          <option value="auto">auto</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {currentEngineMeta.supportsDecoder && (
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Decoder</label>
+                        <select
+                          value={newDecoder}
+                          onChange={(e) => setNewDecoder(e.target.value)}
+                          className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        >
+                          <option value="tdt">tdt</option>
+                          <option value="ctc">ctc</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
                   {addError && <p className="text-xs text-red-400">{addError}</p>}
-                  <div className="flex gap-2 justify-end">
-                    <button onClick={() => { setShowAddPreset(false); setAddError(""); }}
-                      className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition">Cancel</button>
-                    <button onClick={handleAddPreset}
-                      className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition">Add</button>
+
+                  <div className="flex gap-2 justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={cancelPresetForm}
+                      className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSavePreset}
+                      className="px-4 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition font-medium shadow-sm shadow-violet-500/20"
+                    >
+                      {editingPresetId ? "Update preset" : "Add preset"}
+                    </button>
                   </div>
                 </div>
               )}
@@ -254,7 +595,7 @@ export default function SettingsDialog({ onClose }: Props) {
 
           </div>
         ) : (
-          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+          <div className="space-y-5 overflow-y-auto pr-1 flex-1">
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Hugging Face token</label>

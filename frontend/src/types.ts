@@ -73,8 +73,12 @@ export interface Preset {
   name: string;
   engine: string;
   model_path: string;
+  aligner_path?: string | null;
   language?: string | null;
   decoder?: string | null;
+  device?: string | null;
+  compute_type?: string | null;
+  vad_filter?: boolean | null;
   available: boolean;
   reason: string | null;
 }
