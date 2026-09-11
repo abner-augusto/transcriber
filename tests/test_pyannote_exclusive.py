@@ -280,8 +280,7 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
     Base.metadata.create_all(bind=test_engine)
     TestingSessionLocal = sessionmaker(bind=test_engine)
 
-    monkeypatch.setattr("tasks.process_meeting.SessionLocal", TestingSessionLocal)
-    monkeypatch.setattr("tasks.reprocess_task.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr("tasks.shared.SessionLocal", TestingSessionLocal)
 
     db = TestingSessionLocal()
 
