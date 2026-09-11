@@ -9,6 +9,7 @@ export interface Meeting {
   max_speakers: number | null;
   mode: "upload" | "live";
   vocabulary: string | null;
+  participants: string | null;
   recording_status: "recording" | "stopped" | "finalizing" | "complete" | null;
   created_at: string;
   updated_at: string;
@@ -87,4 +88,10 @@ export interface ModelSettings {
   presets: Preset[];
   default_preset: string;
   engines: string[];
+}
+
+export interface VocabularyProfile {
+  id: string;
+  name: string;
+  terms: string;
 }

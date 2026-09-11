@@ -4,8 +4,9 @@ import { listMeetings, createMeeting, deleteMeeting, updateMeetingTitle, searchS
 import type { SearchResult } from "../api";
 import type { ModelSettings } from "../types";
 import { useStore } from "../store";
-import KnownSpeakersInput from "../components/KnownSpeakersInput";
-import { formatVocabulary } from "../utils/vocabulary";
+import { formatVocabulary, cleanParticipants } from "../utils/vocabulary";
+import { listVocabularyProfiles, createVocabularyProfile } from "../api";
+import type { VocabularyProfile } from "../types";
 
 const STATUS_LABELS: Record<string, { text: string; color: string; dot: string }> = {
   uploaded: { text: "Ready", color: "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20", dot: "bg-sky-400" },
@@ -34,10 +35,14 @@ export default function HomePage() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [title, setTitle] = useState("");
-  const [speakers, setSpeakers] = useState<string[]>([]);
+  const [participants, setParticipants] = useState("");
   const [minSpeakers, setMinSpeakers] = useState("");
   const [maxSpeakers, setMaxSpeakers] = useState("");
   const [vocabulary, setVocabulary] = useState("");
+  const [profiles, setProfiles] = useState<VocabularyProfile[]>([]);
+  const [profileId, setProfileId] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileName, setProfileName] = useState("");
   const [presetId, setPresetId] = useState("");
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -86,6 +91,7 @@ export default function HomePage() {
   useEffect(() => {
     loadMeetings();
     loadModelSettings();
+    loadProfiles();
   }, []);
 
   async function loadMeetings() {
@@ -99,6 +105,15 @@ export default function HomePage() {
       setModelSettings(data);
     } catch {
       setModelSettings(null);
+    }
+  }
+
+  async function loadProfiles() {
+    try {
+      const data = await listVocabularyProfiles();
+      setProfiles(data);
+    } catch {
+      setProfiles([]);
     }
   }
 
@@ -116,8 +131,10 @@ export default function HomePage() {
       form.append("title", title.trim());
       if (minSpeakers) form.append("min_speakers", minSpeakers);
       if (maxSpeakers) form.append("max_speakers", maxSpeakers);
-      const formattedVocab = formatVocabulary(speakers, vocabulary);
+      const formattedVocab = formatVocabulary(cleanParticipants(participants), vocabulary);
       if (formattedVocab) form.append("vocabulary", formattedVocab);
+      const cleanedParticipants = cleanParticipants(participants).join(", ");
+      if (cleanedParticipants) form.append("participants", cleanedParticipants);
       if (presetId) form.append("preset_id", presetId);
 
       const meeting = await createMeeting(form);
@@ -139,12 +156,38 @@ export default function HomePage() {
     setMicFile(null);
     setSystemFile(null);
     setDualTrackMode(false);
-    setSpeakers([]);
+    setParticipants("");
     setMinSpeakers("");
     setMaxSpeakers("");
     setVocabulary("");
     setPresetId("");
+    setProfileId("");
+    setProfileName("");
     setError(null);
+  }
+
+  function handleProfileSelect(id: string) {
+    setProfileId(id);
+    const profile = profiles.find((p) => p.id === id);
+    if (profile) {
+      setVocabulary(profile.terms);
+    }
+  }
+
+  async function handleSaveProfile() {
+    const name = profileName.trim();
+    const terms = vocabulary.trim();
+    if (!name || !terms) return;
+    setSavingProfile(true);
+    try {
+      await createVocabularyProfile(name, terms);
+      setProfileName("");
+      await loadProfiles();
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to save profile");
+    } finally {
+      setSavingProfile(false);
+    }
   }
 
   function startRename(e: React.MouseEvent, id: string, currentTitle: string) {
@@ -403,20 +446,91 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Known participants */}
-            {/* Known speakers */}
+            {/* Participants */}
             <div className="mb-4">
               <label className="block text-xs text-slate-500 mb-1.5">
-                Known speakers
+                Meeting Participants / Attendees
               </label>
-              <KnownSpeakersInput
-                speakers={speakers}
-                onChange={setSpeakers}
-                placeholder="Add speaker name (e.g. Alice, Bob)..."
+              <textarea
+                value={participants}
+                onChange={(e) => setParticipants(e.target.value)}
+                placeholder="Paste names from Google Meet, Zoom, Teams, or call chat (one per line or separated by commas)"
+                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 text-sm resize-none"
+                rows={3}
+                maxLength={2000}
               />
-              <p className="text-xs text-slate-500 mt-1.5">
-                Known speaker names are merged into vocabulary to prime speech transcription.
+              <p className="text-xs text-slate-600 mt-1.5">
+                Names are cleaned automatically (emails, timestamps, status markers stripped).
               </p>
+            </div>
+
+            {/* Domain Terms */}
+            <div className="mb-4">
+              <label className="block text-xs text-slate-500 mb-1.5">
+                Domain Terms &amp; Jargon
+              </label>
+              <textarea
+                value={vocabulary}
+                onChange={(e) => setVocabulary(e.target.value)}
+                placeholder="Technical terms, acronyms, product names, or project keywords"
+                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 text-sm resize-none"
+                rows={2}
+                maxLength={2000}
+              />
+              {/* Profile selector */}
+              <div className="flex items-center gap-2 mt-2">
+                <select
+                  value={profileId}
+                  onChange={(e) => handleProfileSelect(e.target.value)}
+                  className="flex-1 bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                >
+                  <option value="">Load a vocabulary profile...</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile || !vocabulary.trim() || !profileName.trim()}
+                  className="px-3 py-1.5 text-xs text-violet-400 hover:text-violet-300 transition flex items-center gap-1 font-medium disabled:opacity-40"
+                >
+                  {savingProfile ? "Saving..." : "Save as profile"}
+                </button>
+              </div>
+              {profiles.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {profiles.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => handleProfileSelect(p.id)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition border ${
+                        profileId === p.id
+                          ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                          : "bg-slate-800 text-slate-400 border-slate-700/50 hover:text-white hover:border-slate-600"
+                      }`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Save-as-profile name input */}
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="Profile name (e.g. Dev / Engineering)"
+                  className="flex-1 bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                />
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile || !vocabulary.trim() || !profileName.trim()}
+                  className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-medium transition disabled:opacity-40"
+                >
+                  {savingProfile ? "Saving..." : "Save"}
+                </button>
+              </div>
             </div>
 
             {/* Advanced settings */}
@@ -443,17 +557,7 @@ export default function HomePage() {
                     min="1"
                   />
                 </div>
-                <textarea
-                  placeholder="Additional vocabulary (domain-specific terms, acronyms, jargon...)"
-                  value={vocabulary}
-                  onChange={(e) => setVocabulary(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 text-sm resize-none"
-                  rows={2}
-                  maxLength={2000}
-                />
-                <p className="text-xs text-slate-600">
-                  Add domain-specific terms, technical jargon, or abbreviations. Known speaker names above are merged automatically.
-                </p>
+
               </div>
             </details>
 

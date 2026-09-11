@@ -10,8 +10,7 @@ import AudioPlayer from "../components/AudioPlayer";
 import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
 import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
-import KnownSpeakersInput from "../components/KnownSpeakersInput";
-import { parseVocabulary, formatVocabulary } from "../utils/vocabulary";
+import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,7 +22,7 @@ export default function MeetingPage() {
   const [showExport, setShowExport] = useState(false);
   const [showReprocess, setShowReprocess] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false);
-  const [speakers, setSpeakers] = useState<string[]>([]);
+  const [participants, setParticipants] = useState("");
   const [domainVocab, setDomainVocab] = useState("");
   const [showAdvancedVocab, setShowAdvancedVocab] = useState(false);
   const [isSavingVocab, setIsSavingVocab] = useState(false);
@@ -100,20 +99,31 @@ export default function MeetingPage() {
   useEffect(() => {
     if (currentMeeting?.vocabulary) {
       const parsed = parseVocabulary(currentMeeting.vocabulary);
-      setSpeakers(parsed.speakers);
       setDomainVocab(parsed.vocabulary);
     } else {
-      setSpeakers([]);
       setDomainVocab("");
+    }
+    if (currentMeeting?.participants) {
+      setParticipants(currentMeeting.participants);
+    } else {
+      setParticipants("");
     }
   }, [currentMeeting?.id]);
 
   async function handleProcess() {
-    if (!id) return;
-    const formatted = formatVocabulary(speakers, domainVocab);
-    if (currentMeeting && (formatted || "").trim() !== (currentMeeting.vocabulary || "").trim()) {
+    if (!id || !currentMeeting) return;
+    const formatted = formatVocabulary(cleanParticipants(participants), domainVocab);
+    const cleanedParticipants = cleanParticipants(participants).join(", ");
+    const updates: { vocabulary?: string | null; participants?: string | null } = {};
+    if (formatted !== (currentMeeting.vocabulary || "")) {
+      updates.vocabulary = formatted;
+    }
+    if (cleanedParticipants !== (currentMeeting.participants || "")) {
+      updates.participants = cleanedParticipants;
+    }
+    if (Object.keys(updates).length > 0) {
       try {
-        await updateMeeting(id, { vocabulary: formatted });
+        await updateMeeting(id, updates);
       } catch (err) {
         console.error("Failed to update vocabulary before processing:", err);
       }
@@ -127,9 +137,10 @@ export default function MeetingPage() {
     if (!id || !currentMeeting) return;
     setIsSavingVocab(true);
     try {
-      const formatted = formatVocabulary(speakers, domainVocab);
-      const updated = await updateMeeting(id, { vocabulary: formatted });
-      setCurrentMeeting({ ...currentMeeting, vocabulary: updated.vocabulary });
+      const formatted = formatVocabulary(cleanParticipants(participants), domainVocab);
+      const cleanedParticipants = cleanParticipants(participants).join(", ");
+      const updated = await updateMeeting(id, { vocabulary: formatted, participants: cleanedParticipants });
+      setCurrentMeeting({ ...currentMeeting, vocabulary: updated.vocabulary, participants: updated.participants });
     } catch (err) {
       console.error("Failed to save vocabulary:", err);
     } finally {
@@ -183,7 +194,7 @@ export default function MeetingPage() {
   const isFinalizing = currentMeeting.status === "finalizing";
 
   const currentVocabStr = (currentMeeting.vocabulary || "").trim();
-  const newVocabStr = (formatVocabulary(speakers, domainVocab) || "").trim();
+  const newVocabStr = (formatVocabulary(cleanParticipants(participants), domainVocab) || "").trim();
   const hasVocabChanges = newVocabStr !== currentVocabStr;
 
   return (
@@ -383,6 +394,7 @@ export default function MeetingPage() {
                   segments={currentMeeting.segments}
                   onUpdate={loadMeeting}
                   meetingId={currentMeeting.id}
+                  participants={cleanParticipants(currentMeeting.participants || "")}
                 />
               ) : (
                 <AnalyticsPanel meetingId={currentMeeting.id} />
@@ -408,15 +420,18 @@ export default function MeetingPage() {
 
             <div className="mt-6 text-left">
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                Known speakers
+                Meeting Participants
               </label>
-              <KnownSpeakersInput
-                speakers={speakers}
-                onChange={setSpeakers}
-                placeholder="Add speaker name (e.g. Alice, Bob)..."
+              <textarea
+                value={participants}
+                onChange={(e) => setParticipants(e.target.value)}
+                placeholder="Paste names from Google Meet, Zoom, Teams, or call chat"
+                className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 text-sm resize-none"
+                rows={3}
+                maxLength={2000}
               />
               <p className="text-xs text-slate-500 mt-2">
-                Known speaker names are merged into vocabulary to prime speech transcription.
+                Names are cleaned automatically (emails, timestamps, status markers stripped).
               </p>
             </div>
 
@@ -454,9 +469,9 @@ export default function MeetingPage() {
                   </button>
                 ) : (
                   <span className="text-xs text-slate-500">
-                    {speakers.length > 0
-                      ? `${speakers.length} speaker${speakers.length > 1 ? "s" : ""} configured`
-                      : "No speakers configured"}
+                    {cleanParticipants(participants).length > 0
+                      ? `${cleanParticipants(participants).length} participant${cleanParticipants(participants).length > 1 ? "s" : ""} configured`
+                      : "No participants configured"}
                   </span>
                 )}
               </div>

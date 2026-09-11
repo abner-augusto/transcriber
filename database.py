@@ -36,6 +36,7 @@ def init_db():
 
     migrations = [
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS vocabulary TEXT",
+        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS participants TEXT",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS preset_id VARCHAR",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS mic_audio_filepath VARCHAR",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS system_audio_filepath VARCHAR",

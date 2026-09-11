@@ -13,9 +13,10 @@ interface Props {
   segments: Segment[];
   onUpdate: () => void;
   meetingId?: string;
+  participants?: string[];
 }
 
-export default function SpeakerPanel({ speakers, segments, onUpdate, meetingId }: Props) {
+export default function SpeakerPanel({ speakers, segments, onUpdate, meetingId, participants = [] }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [mergeMode, setMergeMode] = useState(false);
@@ -37,10 +38,11 @@ export default function SpeakerPanel({ speakers, segments, onUpdate, meetingId }
     }
   }
 
-  async function saveName(id: string) {
-    if (editName.trim()) {
+  async function saveName(id: string, nameToSave?: string) {
+    const finalName = (nameToSave !== undefined ? nameToSave : editName).trim();
+    if (finalName) {
       try {
-        await updateSpeaker(id, { display_name: editName.trim() });
+        await updateSpeaker(id, { display_name: finalName });
         onUpdate();
       } catch (err) {
         console.error("Failed to save speaker name:", err);
@@ -126,18 +128,47 @@ export default function SpeakerPanel({ speakers, segments, onUpdate, meetingId }
                 </div>
 
                 {editingId === s.id ? (
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") saveName(s.id);
-                      if (e.key === "Escape") setEditingId(null);
-                    }}
-                    onBlur={() => saveName(s.id)}
-                    autoFocus
-                    className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-0.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                  />
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveName(s.id);
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      onBlur={() => saveName(s.id)}
+                      autoFocus
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-0.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    />
+                    {/* Quick-select attendee chips */}
+                    {participants.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {participants.map((name) => (
+                          <button
+                            key={name}
+                            type="button"
+                            onMouseDown={(e) => {
+                              // Prevent input onBlur from firing before click
+                              e.preventDefault();
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditName(name);
+                              saveName(s.id, name);
+                            }}
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium transition border ${
+                              editName === name
+                                ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                                : "bg-slate-800 text-slate-400 border-slate-700/50 hover:text-white hover:border-slate-600"
+                            }`}
+                          >
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <span
                     className="flex-1 text-sm font-medium text-slate-200 cursor-pointer hover:text-violet-300 transition truncate"

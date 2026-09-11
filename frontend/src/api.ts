@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Meeting, Segment, Speaker, Job, ModelSettings, Preset } from "./types";
+import type { Meeting, Segment, Speaker, Job, ModelSettings, Preset, VocabularyProfile } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -24,7 +24,7 @@ export async function deleteMeeting(id: string): Promise<void> {
 
 export async function updateMeeting(
   id: string,
-  updates: { title?: string; vocabulary?: string | null }
+  updates: { title?: string; vocabulary?: string | null; participants?: string | null }
 ): Promise<Meeting> {
   const { data } = await api.put(`/meetings/${id}`, updates);
   return data;
@@ -246,6 +246,30 @@ export async function deleteVocabularyEntry(id: string): Promise<void> {
 export async function suggestVocabulary(): Promise<{ terms: string[]; text: string }> {
   const { data } = await api.get("/vocabulary/suggest");
   return data;
+}
+
+// --- Vocabulary Profiles ---
+
+export async function listVocabularyProfiles(): Promise<VocabularyProfile[]> {
+  const { data } = await api.get("/preferences/vocabulary-profiles");
+  return data;
+}
+
+export async function createVocabularyProfile(name: string, terms: string): Promise<VocabularyProfile> {
+  const { data } = await api.post("/preferences/vocabulary-profiles", { name, terms });
+  return data;
+}
+
+export async function updateVocabularyProfile(
+  id: string,
+  updates: { name?: string; terms?: string }
+): Promise<VocabularyProfile> {
+  const { data } = await api.put(`/preferences/vocabulary-profiles/${id}`, updates);
+  return data;
+}
+
+export async function deleteVocabularyProfile(id: string): Promise<void> {
+  await api.delete(`/preferences/vocabulary-profiles/${id}`);
 }
 
 // --- Speaker Analytics ---

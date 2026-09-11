@@ -59,6 +59,7 @@ async def create_meeting(
     min_speakers: int = Form(None),
     max_speakers: int = Form(None),
     vocabulary: str = Form(None),
+    participants: str = Form(None),
     preset_id: str = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -108,6 +109,7 @@ async def create_meeting(
         min_speakers=min_speakers,
         max_speakers=max_speakers,
         vocabulary=effective_vocab,
+        participants=participants.strip()[:2000] if participants else None,
         preset_id=preset_id or None,
     )
     db.add(meeting)
@@ -166,6 +168,7 @@ def get_meeting(meeting_id: str, db: Session = Depends(get_db)):
 class UpdateMeetingRequest(BaseModel):
     title: str | None = None
     vocabulary: str | None = None
+    participants: str | None = None
 
 
 @router.put("/{meeting_id}")
@@ -183,6 +186,10 @@ def update_meeting(meeting_id: str, req: UpdateMeetingRequest, db: Session = Dep
     if req.vocabulary is not None:
         trimmed_vocab = req.vocabulary.strip()[:2000]
         meeting.vocabulary = trimmed_vocab if trimmed_vocab else None
+
+    if req.participants is not None:
+        trimmed_participants = req.participants.strip()[:2000]
+        meeting.participants = trimmed_participants if trimmed_participants else None
 
     db.commit()
     return meeting.to_dict()

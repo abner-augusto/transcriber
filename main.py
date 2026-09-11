@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from config import settings as _settings
 from database import init_db, recover_stale_jobs, cleanup_orphaned_storage, get_db, engine
 from models import Meeting
-from api import meetings, speakers, segments, export, websocket, model_settings, search, speaker_profiles, vocabulary, analytics
+from api import meetings, speakers, segments, export, websocket, model_settings, search, speaker_profiles, vocabulary, analytics, preferences
 
 app = FastAPI(title="Transcriber")
 
@@ -37,6 +37,7 @@ app.include_router(search.router)
 app.include_router(speaker_profiles.router)
 app.include_router(vocabulary.router)
 app.include_router(analytics.router)
+app.include_router(preferences.router)
 
 
 @app.on_event("startup")

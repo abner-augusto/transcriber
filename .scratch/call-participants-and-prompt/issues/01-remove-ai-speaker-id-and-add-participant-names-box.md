@@ -48,13 +48,13 @@ Redesign the pre-transcription configuration to provide two dedicated, high-leve
 **Blocked by:** 
 - `.scratch/dual-track-audio/issues/01-dual-track-mic-and-system-diarization.md` (active execution).
 
-**Status:** ready-for-agent
+**Status:** closed-fixed
 
-- [ ] Add `vocabulary_profiles` CRUD support in `preferences.py` and `api/preferences.py`.
-- [ ] Replace old vocabulary/speaker inputs in `HomePage.tsx` with two dedicated fields: Participants and Domain Terms.
-- [ ] Add Vocabulary Profile selector dropdown and "Save as profile" button in `HomePage.tsx`.
-- [ ] Implement robust name extraction and cleaning parser in `frontend/src/utils/vocabulary.ts`.
-- [ ] Pass structured `participants` and `vocabulary` to `POST /api/meetings` and store in `Meeting`.
-- [ ] Verify prompt compilation and passing across all ASR engines (Whisper, Qwen3-ASR, VibeVoice).
-- [ ] Add quick-select attendee chips in `SpeakerPanel.tsx` for 1-click speaker renaming.
-- [ ] Add tests for vocabulary profile management, prompt combination, and participant cleaning.
+- [x] Add `vocabulary_profiles` CRUD support in `preferences.py` and `api/preferences.py`.
+- [x] Replace old vocabulary/speaker inputs in `HomePage.tsx` with two dedicated fields: Participants and Domain Terms.
+- [x] Add Vocabulary Profile selector dropdown and "Save as profile" button in `HomePage.tsx`.
+- [x] Implement robust name extraction and cleaning parser in `frontend/src/utils/vocabulary.ts`.
+- [x] Pass structured `participants` and `vocabulary` to `POST /api/meetings` and store in `Meeting`.
+- [x] Verify prompt compilation and passing across all ASR engines (Whisper, Qwen3-ASR, VibeVoice).
+- [x] Add quick-select attendee chips in `SpeakerPanel.tsx` for 1-click speaker renaming.
+- [x] Add tests for vocabulary profile management, prompt combination, and participant cleaning.

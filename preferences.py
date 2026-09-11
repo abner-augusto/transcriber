@@ -30,6 +30,7 @@ _DEFAULTS = {
     # Diarization clustering overrides. Empty => pyannote's own calibrated defaults.
     # Recognised keys: "clustering_threshold" (0-1), "Fa", "Fb".
     "diarization": {},
+    "vocabulary_profiles": [],
 }
 
 # Values that should be masked when sending to frontend

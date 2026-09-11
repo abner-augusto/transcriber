@@ -4,8 +4,10 @@ import {
   getModelSettings, createModelPreset, updateModelPreset, deleteModelPreset, setDefaultPreset,
   getPreferences, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile,
   listVocabulary, deleteVocabularyEntry,
+  listVocabularyProfiles, createVocabularyProfile, deleteVocabularyProfile,
 } from "../api";
 import type { SpeakerProfile, VocabularyEntry } from "../api";
+import type { VocabularyProfile } from "../types";
 
 interface Props {
   onClose: () => void;
@@ -124,6 +126,10 @@ export default function SettingsDialog({ onClose }: Props) {
   const [switchPenalty, setSwitchPenalty] = useState(0.8);
   const [profiles, setProfiles] = useState<SpeakerProfile[]>([]);
   const [learnedVocab, setLearnedVocab] = useState<VocabularyEntry[]>([]);
+  const [vocabProfiles, setVocabProfiles] = useState<VocabularyProfile[]>([]);
+  const [newProfileName, setNewProfileName] = useState("");
+  const [newProfileTerms, setNewProfileTerms] = useState("");
+  const [savingVocabProfile, setSavingVocabProfile] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -195,6 +201,31 @@ export default function SettingsDialog({ onClose }: Props) {
     setSwitchPenalty(p.speaker_switch_penalty ?? 0.8);
     setProfiles(await listSpeakerProfiles());
     setLearnedVocab(await listVocabulary());
+    setVocabProfiles(await listVocabularyProfiles());
+  }
+
+  async function handleCreateVocabProfile() {
+    const name = newProfileName.trim();
+    const terms = newProfileTerms.trim();
+    if (!name || !terms) return;
+    setSavingVocabProfile(true);
+    try {
+      await createVocabularyProfile(name, terms);
+      setNewProfileName("");
+      setNewProfileTerms("");
+      setVocabProfiles(await listVocabularyProfiles());
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || "Failed to create profile");
+    } finally {
+      setSavingVocabProfile(false);
+    }
+  }
+
+  async function handleDeleteVocabProfile(id: string) {
+    const profile = vocabProfiles.find((p) => p.id === id);
+    if (!confirm(`Delete vocabulary profile "${profile?.name}"?`)) return;
+    await deleteVocabularyProfile(id);
+    setVocabProfiles(vocabProfiles.filter((p) => p.id !== id));
   }
 
   async function handleSave() {
@@ -694,6 +725,69 @@ export default function SettingsDialog({ onClose }: Props) {
                 </div>
               </div>
             )}
+
+            {/* Vocabulary Profiles */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-slate-300">Vocabulary Profiles</label>
+                <button
+                  onClick={() => setNewProfileName("")}
+                  className="text-xs text-violet-400 hover:text-violet-300 transition flex items-center gap-1 font-medium"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add profile
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mb-2">Reusable term presets for quick loading in the upload dialog.</p>
+
+              {/* Existing profiles */}
+              {vocabProfiles.length > 0 && (
+                <div className="space-y-1.5 mb-3">
+                  {vocabProfiles.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm text-slate-300">{p.name}</span>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{p.terms}</p>
+                      </div>
+                      <button onClick={() => handleDeleteVocabProfile(p.id)}
+                        className="text-slate-600 hover:text-red-400 transition p-1 flex-shrink-0">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Create new profile form */}
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={newProfileName}
+                  onChange={(e) => setNewProfileName(e.target.value)}
+                  placeholder="Profile name (e.g. Dev / Engineering)"
+                  className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                />
+                <textarea
+                  value={newProfileTerms}
+                  onChange={(e) => setNewProfileTerms(e.target.value)}
+                  placeholder="Terms (comma-separated: Docker, Kubernetes, gRPC, Celery...)"
+                  className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
+                  rows={2}
+                  maxLength={2000}
+                />
+                <button
+                  onClick={handleCreateVocabProfile}
+                  disabled={savingVocabProfile || !newProfileName.trim() || !newProfileTerms.trim()}
+                  className="px-4 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-medium transition disabled:opacity-40"
+                >
+                  {savingVocabProfile ? "Saving..." : "Create profile"}
+                </button>
+              </div>
+            </div>
 
             <div>
               <div className="flex items-center justify-between">

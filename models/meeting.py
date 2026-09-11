@@ -39,6 +39,7 @@ class Meeting(Base):
     raw_diarization: Mapped[dict] = mapped_column(JSON, nullable=True)
     raw_transcription: Mapped[dict] = mapped_column(JSON, nullable=True)
     vocabulary: Mapped[str] = mapped_column(Text, nullable=True)  # Domain terms for Whisper prompt
+    participants: Mapped[str] = mapped_column(Text, nullable=True)  # Meeting attendee names (cleaned)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -62,6 +63,7 @@ class Meeting(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "vocabulary": self.vocabulary,
+            "participants": self.participants,
             "speaker_count": speaker_count if speaker_count is not None else (len(self.speakers) if self.speakers else 0),
             "segment_count": segment_count if segment_count is not None else (len(self.segments) if self.segments else 0),
         }

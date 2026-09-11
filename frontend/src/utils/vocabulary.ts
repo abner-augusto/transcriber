@@ -66,6 +66,67 @@ export function parseVocabulary(raw: string | null | undefined): ParsedVocabular
   return { speakers, vocabulary };
 }
 
+/**
+ * Clean raw participant text into a list of names.
+ *
+ * Strips emails, timestamps, status markers, and role annotations:
+ *   "Alice Silva (Organizer)" -> "Alice Silva"
+ *   "alice@example.com" -> "Alice Silva" (if name part exists)
+ *   "Bob: joined at 10:30" -> "Bob"
+ *   "Carol (Host)" -> "Carol"
+ *
+ * Splits on newlines, commas, semicolons, and "and".
+ * Deduplicates case-insensitively while preserving order.
+ */
+export function cleanParticipants(raw: string): string[] {
+  if (!raw || !raw.trim()) return [];
+
+  // Split on newlines, commas, semicolons, and " and "
+  const parts = raw.split(/\n|,|;|\s+and\s+/i);
+
+  const names: string[] = [];
+  const seenLower = new Set<string>();
+
+  for (const part of parts) {
+    let name = part.trim();
+    if (!name) continue;
+
+    // Strip leading list numbering like "1. ", "1 - ", "1) ", "- ", "* "
+    name = name.replace(/^[\d\s*•\-.)]+\s*/, "").trim();
+
+    // Strip angle bracket emails: "Alice Silva <alice@example.com>" -> "Alice Silva"
+    name = name.replace(/\s*<[^>]+@[^>]+>/g, "").trim();
+
+    // Strip email addresses: "alice@example.com" -> "alice"
+    const emailMatch = name.match(/^([^@]+)@\S+$/);
+    if (emailMatch) {
+      name = emailMatch[1].trim();
+    }
+
+    // Strip parenthetical annotations: "Alice (Organizer)" -> "Alice"
+    name = name.replace(/\s*\([^)]*\)/g, "").trim();
+
+    // Strip trailing timestamps before status markers: "Alice 10:30" -> "Alice"
+    name = name.replace(/\s+\d{1,2}:\d{2}(?::\d{2})?\s*$/, "").trim();
+
+    // Strip trailing role/status markers: "Bob: joined at 10:30" -> "Bob", "Carol - Host" -> "Carol"
+    name = name.replace(/\s*[:\-]\s*.*$/, "").trim();
+
+    // Strip leading/trailing whitespace and punctuation
+    name = name.replace(/^[\s.,]+|[\s.,]+$/g, "").trim();
+
+    if (!name) continue;
+
+    const lower = name.toLowerCase();
+    if (!seenLower.has(lower)) {
+      seenLower.add(lower);
+      names.push(name);
+    }
+  }
+
+  return names;
+}
+
 export function formatVocabulary(speakers: string[], vocabulary: string): string | null {
   const cleanSpeakers = speakers.map((s) => s.trim()).filter(Boolean);
   const cleanVocab = vocabulary.trim();
