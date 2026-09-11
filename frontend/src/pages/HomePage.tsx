@@ -41,8 +41,13 @@ export default function HomePage() {
   const [presetId, setPresetId] = useState("");
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const micFileRef = useRef<HTMLInputElement>(null);
+  const systemFileRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dualTrackMode, setDualTrackMode] = useState(false);
+  const [micFile, setMicFile] = useState<File | null>(null);
+  const [systemFile, setSystemFile] = useState<File | null>(null);
 
   // Error feedback
   const [error, setError] = useState<string | null>(null);
@@ -98,13 +103,16 @@ export default function HomePage() {
   }
 
   async function handleUpload() {
-    const file = selectedFile;
-    if (!file || !title.trim()) return;
+    if (!title.trim()) return;
+    const primary = dualTrackMode ? micFile : selectedFile;
+    if (!primary) return;
+    const secondary = dualTrackMode ? systemFile : null;
 
     setUploading(true);
     try {
       const form = new FormData();
-      form.append("file", file);
+      form.append("file", primary);
+      if (secondary) form.append("system_file", secondary);
       form.append("title", title.trim());
       if (minSpeakers) form.append("min_speakers", minSpeakers);
       if (maxSpeakers) form.append("max_speakers", maxSpeakers);
@@ -128,6 +136,9 @@ export default function HomePage() {
   function resetDialog() {
     setTitle("");
     setSelectedFile(null);
+    setMicFile(null);
+    setSystemFile(null);
+    setDualTrackMode(false);
     setSpeakers([]);
     setMinSpeakers("");
     setMaxSpeakers("");
@@ -206,8 +217,108 @@ export default function HomePage() {
           <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xl font-bold text-white mb-5">New transcription</h2>
 
-            {/* File upload area */}
-            <div
+            {/* Mode toggle: single file vs dual-track */}
+            <div className="flex gap-2 mb-5">
+              <button
+                onClick={() => setDualTrackMode(false)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                  !dualTrackMode
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                }`}
+              >
+                Single file
+              </button>
+              <button
+                onClick={() => setDualTrackMode(true)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                  dualTrackMode
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                }`}
+              >
+                Dual-track / OBS
+              </button>
+            </div>
+
+            {dualTrackMode ? (
+              <div className="space-y-3 mb-5">
+                {/* Mic track (required) */}
+                <div
+                  className={`relative border-2 border-dashed rounded-xl p-5 text-center transition-all cursor-pointer group ${
+                    micFile
+                      ? "border-emerald-500/50 bg-emerald-500/5"
+                      : "border-slate-700 hover:border-slate-500 hover:bg-slate-800/50"
+                  }`}
+                  onClick={() => micFileRef.current?.click()}
+                >
+                  <input
+                    ref={micFileRef}
+                    type="file"
+                    accept="audio/*,video/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setMicFile(f);
+                        if (!title) setTitle(f.name.replace(/\.[^/.]+$/, ""));
+                      }
+                    }}
+                  />
+                  {micFile ? (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Microphone track</p>
+                      <p className="text-white font-medium">{micFile.name}</p>
+                      <p className="text-slate-500 text-sm mt-1">{(micFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-slate-300 font-medium">Microphone track</p>
+                      <p className="text-slate-500 text-sm mt-1">Drop or click — a stereo file is split into mic + system</p>
+                    </div>
+                  )}
+                </div>
+                {/* System track (optional) */}
+                <div
+                  className={`relative border-2 border-dashed rounded-xl p-5 text-center transition-all cursor-pointer group ${
+                    systemFile
+                      ? "border-emerald-500/50 bg-emerald-500/5"
+                      : "border-slate-700 hover:border-slate-500 hover:bg-slate-800/50"
+                  }`}
+                  onClick={() => systemFileRef.current?.click()}
+                >
+                  <input
+                    ref={systemFileRef}
+                    type="file"
+                    accept="audio/*,video/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setSystemFile(f);
+                    }}
+                  />
+                  {systemFile ? (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">System audio track</p>
+                      <p className="text-white font-medium">{systemFile.name}</p>
+                      <p className="text-slate-500 text-sm mt-1">{(systemFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSystemFile(null); }}
+                        className="mt-2 text-xs text-slate-500 hover:text-red-400 transition"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-slate-300 font-medium">System audio track (optional)</p>
+                      <p className="text-slate-500 text-sm mt-1">Meeting / desktop audio. Leave empty to split a stereo mic file.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div
                 className={`relative border-2 border-dashed rounded-xl p-8 text-center mb-5 transition-all cursor-pointer group ${
                   dragOver
                     ? "border-violet-500 bg-violet-500/10"
@@ -256,6 +367,7 @@ export default function HomePage() {
                   </div>
                 )}
               </div>
+            )}
 
             {/* Title */}
             <input
@@ -365,7 +477,7 @@ export default function HomePage() {
               </button>
               <button
                 onClick={handleUpload}
-                disabled={uploading || !selectedFile || !title.trim()}
+                disabled={uploading || (dualTrackMode ? !micFile : !selectedFile) || !title.trim()}
                 className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-medium hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-violet-500/25"
               >
                 {uploading ? (

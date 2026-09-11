@@ -40,13 +40,26 @@ class SpeakerIdService:
         speaker_labels: list[str],
         turns: list[Turn],
         audio_path: str,
+        host_label: str | None = None,
     ) -> dict[str, dict]:
-        """Return {speaker_label: {name, confidence, identified_by}} for every label."""
+        """Return {speaker_label: {name, confidence, identified_by}} for every label.
+
+        ``host_label`` (dual-track only) is the local mic speaker. It is named
+        "You" with 100% confidence and is exempt from voice-profile matching — the
+        host is known deterministically, not inferred.
+        """
         speaker_info = self._participant_names(speaker_labels)
+
+        if host_label and host_label in speaker_info:
+            speaker_info[host_label] = {
+                "name": "You",
+                "confidence": 1.0,
+                "identified_by": "host_track",
+            }
 
         profiles = self._load_profiles(db)
         if profiles and audio_path:
-            self._apply_voice_profiles(speaker_info, profiles, turns, audio_path)
+            self._apply_voice_profiles(speaker_info, profiles, turns, audio_path, host_label)
 
         return speaker_info
 
@@ -72,12 +85,15 @@ class SpeakerIdService:
         profiles: list,
         turns: list[Turn],
         audio_path: str,
+        host_label: str | None = None,
     ) -> None:
         from services.embedding_service import EmbeddingService
 
         embedding_service = EmbeddingService()
 
         for label, info in speaker_info.items():
+            if label == host_label:
+                continue
             sample_turns = self._best_turns_for_speaker(turns, label)
             if not sample_turns:
                 continue

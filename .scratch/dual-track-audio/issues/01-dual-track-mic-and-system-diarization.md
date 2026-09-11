@@ -24,11 +24,18 @@ Enable dual-track audio ingestion and processing for meeting recordings, specifi
 **Blocked by:** 
 - `.scratch/tasks-layer-refactor/issues/01-deduplicate-celery-tasks-and-lifecycle.md` (recommended to land first so the pipeline modifications integrate cleanly into the refactored `meeting_job` and `shared.py` structure).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Extend `models/meeting.py` with `mic_audio_filepath` and `system_audio_filepath`.
-- [ ] Add dual-track extraction and channel splitting methods in `services/audio_service.py`.
-- [ ] Update `POST /api/meetings` in `api/meetings.py` to handle dual-file uploads and probe multi-stream files.
-- [ ] Implement dual-track diarization flow in `tasks/process_meeting.py`: VAD for mic track + Diarizer for system track.
-- [ ] Add regression tests in `tests/test_audio_service.py` and `tests/test_dual_track.py` covering turn combination, crosstalk, and single-file fallback.
-- [ ] Update frontend upload modal in `HomePage.tsx` to support selecting mic and system audio tracks.
+- [x] Extend `models/meeting.py` with `mic_audio_filepath` and `system_audio_filepath`.
+- [x] Add dual-track extraction and channel splitting methods in `services/audio_service.py`.
+- [x] Update `POST /api/meetings` in `api/meetings.py` to handle dual-file uploads and probe multi-stream files.
+- [x] Implement dual-track diarization flow in `tasks/process_meeting.py`: VAD for mic track + Diarizer for system track.
+- [x] Add regression tests in `tests/test_audio_service.py` and `tests/test_dual_track.py` covering turn combination, crosstalk, and single-file fallback.
+- [x] Update frontend upload modal in `HomePage.tsx` to support selecting mic and system audio tracks.
+
+**Implementation notes:**
+- Host speaker is attributed deterministically via VAD on `mic.wav` (label `HOST`, named "You" with 100% confidence, exempt from voice-profile matching).
+- Remote speakers are isolated by running the Diarizer exclusively on `system.wav`, bounded by VAD on that track.
+- Host and remote turns are merged into one `DiarizationResult`; crosstalk overlaps are preserved and exclusive turns are computed for unambiguous attribution.
+- Stereo / multi-stream single files are auto-detected via `ffprobe` at upload and split at processing (channel 0 = mic, channel 1 = system).
+- Migration `0003_dual_track.sql` adds the three new columns; `duplicate_meeting` copies dual-track sources.

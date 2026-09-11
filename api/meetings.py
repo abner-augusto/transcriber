@@ -14,6 +14,7 @@ from database import get_db
 from models import Meeting, MeetingStatus, Speaker, Segment
 from models.job import Job, JobType, JobStatus
 from config import get_meeting_path
+from services.audio_service import AudioService
 from tasks.process_meeting import process_meeting_task
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
@@ -54,6 +55,7 @@ def list_meetings(db: Session = Depends(get_db)):
 async def create_meeting(
     title: str = Form(...),
     file: UploadFile = File(...),
+    system_file: UploadFile = File(None),
     min_speakers: int = Form(None),
     max_speakers: int = Form(None),
     vocabulary: str = Form(None),
@@ -111,27 +113,46 @@ async def create_meeting(
     db.add(meeting)
     db.flush()
 
-    # Save uploaded file with size limit
     meeting_dir = get_meeting_path(meeting.id)
-    upload_path = str(meeting_dir / f"original{ext}")
 
-    total_size = 0
-    with open(upload_path, "wb") as f:
-        while chunk := await file.read(1024 * 1024):  # 1MB chunks
-            total_size += len(chunk)
-            if total_size > MAX_UPLOAD_SIZE:
-                # Clean up partial file
-                f.close()
-                Path(upload_path).unlink(missing_ok=True)
-                shutil.rmtree(meeting_dir, ignore_errors=True)
-                db.rollback()
-                raise HTTPException(413, f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024**3)} GB")
-            f.write(chunk)
+    if system_file is not None:
+        # Explicit dual-track: mic + system files.
+        mic_path = await _save_upload(file, str(meeting_dir / f"mic{ext}"))
+        system_path = await _save_upload(system_file, str(meeting_dir / f"system{ext}"))
+        meeting.mic_audio_filepath = mic_path
+        meeting.system_audio_filepath = system_path
+        meeting.is_dual_track = True
+    else:
+        # Single file: probe for stereo / multi-stream and split into dual-track if found.
+        upload_path = await _save_upload(file, str(meeting_dir / f"original{ext}"))
+        probe = AudioService().probe_audio(upload_path)
+        if probe["stream_count"] >= 2 or probe["channels"] >= 2:
+            meeting.mic_audio_filepath = upload_path
+            meeting.system_audio_filepath = upload_path
+            meeting.is_dual_track = True
+        else:
+            meeting.audio_filepath = upload_path
 
-    meeting.audio_filepath = upload_path
     db.commit()
 
     return meeting.to_dict()
+
+
+async def _save_upload(file: UploadFile, path: str) -> str:
+    """Stream an uploaded file to disk, enforcing the size limit."""
+    total_size = 0
+    with open(path, "wb") as f:
+        while chunk := await file.read(1024 * 1024):  # 1MB chunks
+            total_size += len(chunk)
+            if total_size > MAX_UPLOAD_SIZE:
+                f.close()
+                Path(path).unlink(missing_ok=True)
+                raise HTTPException(
+                    413,
+                    f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024**3)} GB",
+                )
+            f.write(chunk)
+    return path
 
 
 @router.get("/{meeting_id}")
@@ -239,7 +260,7 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
     source = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not source:
         raise HTTPException(404, "Meeting not found")
-    if not source.audio_filepath:
+    if not source.audio_filepath and not source.is_dual_track:
         raise HTTPException(400, "Meeting has no audio to duplicate")
 
     preset = presets.get_preset(req.preset_id)
@@ -253,14 +274,23 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
         max_speakers=source.max_speakers,
         vocabulary=source.vocabulary,
         preset_id=preset["id"],
+        is_dual_track=source.is_dual_track,
     )
     db.add(copy)
     db.flush()
 
-    src_path = Path(source.audio_filepath)
-    dest_path = get_meeting_path(copy.id) / f"original{src_path.suffix}"
-    shutil.copyfile(src_path, dest_path)
-    copy.audio_filepath = str(dest_path)
+    dest_dir = get_meeting_path(copy.id)
+    if source.is_dual_track:
+        for attr, prefix in (("mic_audio_filepath", "mic"), ("system_audio_filepath", "system")):
+            src = Path(getattr(source, attr))
+            dest = dest_dir / f"{prefix}{src.suffix}"
+            shutil.copyfile(src, dest)
+            setattr(copy, attr, str(dest))
+    else:
+        src_path = Path(source.audio_filepath)
+        dest_path = dest_dir / f"original{src_path.suffix}"
+        shutil.copyfile(src_path, dest_path)
+        copy.audio_filepath = str(dest_path)
     copy.status = MeetingStatus.PROCESSING
     db.commit()
 

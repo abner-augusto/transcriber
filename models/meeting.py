@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Float, Integer, DateTime, JSON, Enum, Text
+from sqlalchemy import String, Float, Integer, DateTime, JSON, Enum, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -24,6 +24,12 @@ class Meeting(Base):
     status: Mapped[MeetingStatus] = mapped_column(Enum(MeetingStatus), default=MeetingStatus.UPLOADED)
     original_filename: Mapped[str] = mapped_column(String, nullable=True)
     audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
+    # Dual-track sources. When a Meeting is dual-track (mic + system), these point
+    # to the raw source files. For a stereo file both point to the same file and
+    # the pipeline splits it into the two mono tracks. NULL for single-track Meetings.
+    mic_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
+    system_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
+    is_dual_track: Mapped[bool] = mapped_column(Boolean, nullable=True)
     duration: Mapped[float] = mapped_column(Float, nullable=True)
     # Which Preset to transcribe with. NULL means "whatever the default is" — only an
     # A/B run against a specific Engine needs to pin one.
@@ -46,6 +52,9 @@ class Meeting(Base):
             "title": self.title,
             "status": self.status.value,
             "original_filename": self.original_filename,
+            "mic_audio_filepath": self.mic_audio_filepath,
+            "system_audio_filepath": self.system_audio_filepath,
+            "is_dual_track": self.is_dual_track,
             "duration": self.duration,
             "preset_id": self.preset_id,
             "min_speakers": self.min_speakers,

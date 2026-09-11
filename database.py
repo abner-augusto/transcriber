@@ -37,6 +37,9 @@ def init_db():
     migrations = [
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS vocabulary TEXT",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS preset_id VARCHAR",
+        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS mic_audio_filepath VARCHAR",
+        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS system_audio_filepath VARCHAR",
+        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS is_dual_track BOOLEAN",
         "ALTER TABLE segments ADD COLUMN IF NOT EXISTS confidence FLOAT",
         # Full-text search index on segment text
         "CREATE INDEX IF NOT EXISTS ix_segments_text_search ON segments USING gin (to_tsvector('simple', text))",
