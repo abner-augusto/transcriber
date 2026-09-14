@@ -11,10 +11,6 @@ pyannote.audio
 speechbrain
 torch
 torchaudio
-accelerate==1.12.0
-transformers==4.57.6
-tokenizers==0.22.2
-huggingface-hub>=0.34.0,<1.0
 soundfile
 numpy
 scipy
@@ -23,22 +19,4 @@ reportlab
 pytest==8.3.4
 faster-whisper
 
-# Qwen3-ASR 0.0.6 runtime dependencies.
-nagisa==0.2.11
-soynlp==0.0.493
-qwen-omni-utils
-sox
-flask
-gradio
-pytz
-
-# VibeVoice 1.0.0 runtime dependencies.
-absl-py
-aiortc
-ml-collections
-pydub
-diffusers
-librosa
-numba>=0.57.0
-llvmlite>=0.40.0
-av
+# Qwen3-ASR and VibeVoice are installed from immutable Engine requirement files.

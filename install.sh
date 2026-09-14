@@ -182,19 +182,22 @@ fi
 
 info "Installing Python dependencies (this may take a while)..."
 source venv/bin/activate
-pip install --upgrade pip -q
 
 # Install torch with CUDA support if an NVIDIA GPU is present (Linux only)
 if [ "$PLATFORM" = "linux" ] && command -v nvidia-smi >/dev/null 2>&1; then
   info "Installing PyTorch with CUDA 12.8 support..."
-  pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128 -q
+  pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128 -q
 else
   info "Installing PyTorch (CPU/Metal)..."
-  pip install torch torchaudio -q
+  pip install torch==2.11.0 torchaudio==2.11.0 -q
 fi
 
-pip install -r requirements.txt -q
-ok "Python dependencies installed"
+python -m pip install -r requirements.txt -q
+python -m pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt -q
+python -m pip check
+python -m engine_runtimes.manifest qwen3-asr --include-optional --presets-dir model_presets
+python -m engine_runtimes.manifest vibevoice --include-optional --presets-dir model_presets
+ok "Python dependencies installed and validated"
 
 # -------------------------------------------
 # Step 6: Frontend

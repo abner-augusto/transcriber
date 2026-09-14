@@ -176,6 +176,3 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
 
     except MeetingNotFoundError:
         return {"error": "Meeting or Job not found"}
-    except Exception as e:
-        log.error(f"process_meeting_task failed: {e}")
-        return {"error": str(e)}

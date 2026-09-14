@@ -29,10 +29,6 @@ log = logging.getLogger(__name__)
 
 CHUNK_SECONDS = 300.0
 OVERLAP_SECONDS = 30.0
-DEFAULT_ASR_PATH = r"C:\Users\abner\_repos\_local-ai\models\Qwen3-ASR-1.7B-hf"
-DEFAULT_ALIGNER_PATH = r"C:\Users\abner\_repos\_local-ai\models\Qwen3-ForcedAligner-0.6B-hf"
-
-
 def normalize_text_word(text: str) -> str:
     """Normalize word for robust overlap alignment."""
     decomposed = unicodedata.normalize("NFKD", text.casefold())
@@ -81,8 +77,8 @@ class Qwen3AsrTranscriber:
 
     def __init__(
         self,
-        model_path: str = DEFAULT_ASR_PATH,
-        aligner_path: Optional[str] = DEFAULT_ALIGNER_PATH,
+        model_path: Optional[str] = None,
+        aligner_path: Optional[str] = None,
         language: str = "Portuguese",
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         chunk_seconds: float = CHUNK_SECONDS,
@@ -99,32 +95,60 @@ class Qwen3AsrTranscriber:
         self._asr_model = None
         self._aligner_processor = None
         self._aligner_model = None
+        self._aligner_unavailable_reason: Optional[str] = None
 
     def _ensure_asr_loaded(self):
         if self._asr_model is None:
-            from transformers import AutoModelForMultimodalLM, AutoProcessor
+            if not self.model_path:
+                raise RuntimeError("Qwen3-ASR model_path must be configured in the selected Preset")
+            from qwen_asr.core.transformers_backend import (
+                Qwen3ASRForConditionalGeneration,
+                Qwen3ASRProcessor,
+            )
 
             log.info(f"[qwen3-asr] Loading ASR model from {self.model_path} onto {self.device}")
-            self._asr_processor = AutoProcessor.from_pretrained(self.model_path)
+            self._asr_processor = Qwen3ASRProcessor.from_pretrained(self.model_path)
             model_dtype = torch.bfloat16 if "cuda" in self.device else torch.float32
-            self._asr_model = AutoModelForMultimodalLM.from_pretrained(
+            self._asr_model = Qwen3ASRForConditionalGeneration.from_pretrained(
                 self.model_path,
                 dtype=model_dtype,
                 device_map=self.device,
             )
 
     def _ensure_aligner_loaded(self):
-        if self._aligner_model is None and self.aligner_path and Path(self.aligner_path).exists():
+        if (
+            self._aligner_model is not None
+            or self._aligner_unavailable_reason is not None
+            or not self.aligner_path
+            or not Path(self.aligner_path).exists()
+        ):
+            return
+
+        try:
             from transformers import AutoModelForTokenClassification, AutoProcessor
 
             log.info(f"[qwen3-asr] Loading ForcedAligner from {self.aligner_path} onto {self.device}")
-            self._aligner_processor = AutoProcessor.from_pretrained(self.aligner_path)
+            processor = AutoProcessor.from_pretrained(self.aligner_path)
             model_dtype = torch.bfloat16 if "cuda" in self.device else torch.float32
-            self._aligner_model = AutoModelForTokenClassification.from_pretrained(
+            model = AutoModelForTokenClassification.from_pretrained(
                 self.aligner_path,
                 dtype=model_dtype,
                 device_map=self.device,
             )
+        except Exception as exc:
+            self._aligner_processor = None
+            self._aligner_model = None
+            self._aligner_unavailable_reason = f"{type(exc).__name__}: {exc}"
+            log.warning(
+                "[qwen3-asr] Forced aligner at %s is unavailable (%s); "
+                "using proportional timestamp fallback",
+                self.aligner_path,
+                self._aligner_unavailable_reason,
+            )
+            return
+
+        self._aligner_processor = processor
+        self._aligner_model = model
 
     def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
         """Transcribe audio into Words in ascending time order."""

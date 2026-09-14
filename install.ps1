@@ -7,6 +7,9 @@ function Info($msg)  { Write-Host "[INFO] $msg" -ForegroundColor Cyan }
 function Ok($msg)    { Write-Host "[OK]   $msg" -ForegroundColor Green }
 function Warn($msg)  { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Fail($msg)  { Write-Host "[FAIL] $msg" -ForegroundColor Red; exit 1 }
+function Assert-NativeSuccess($step, $exitCode) {
+    if ($exitCode -ne 0) { Fail "$step failed with exit code $exitCode" }
+}
 
 Write-Host ""
 Write-Host "========================================"
@@ -164,19 +167,29 @@ if (Test-Path "venv") {
 
 Info "Installing Python dependencies (this may take a while)..."
 & "venv\Scripts\activate.ps1"
-pip install --upgrade pip -q
 
 # Install torch with CUDA support if an NVIDIA GPU is present
 if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
     Info "Installing PyTorch with CUDA 12.8 support..."
-    pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128 -q
+    pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128 -q
+    Assert-NativeSuccess "PyTorch CUDA installation" $LASTEXITCODE
 } else {
     Info "Installing PyTorch (CPU-only)..."
-    pip install torch torchaudio -q
+    pip install torch==2.11.0 torchaudio==2.11.0 -q
+    Assert-NativeSuccess "PyTorch CPU installation" $LASTEXITCODE
 }
 
-pip install -r requirements.txt -q
-Ok "Python dependencies installed"
+python -m pip install -r requirements.txt -q
+Assert-NativeSuccess "Application dependency installation" $LASTEXITCODE
+python -m pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt -q
+Assert-NativeSuccess "Engine dependency installation" $LASTEXITCODE
+python -m pip check
+Assert-NativeSuccess "Dependency integrity validation" $LASTEXITCODE
+python -m engine_runtimes.manifest qwen3-asr --include-optional --presets-dir model_presets
+Assert-NativeSuccess "Qwen3-ASR runtime validation" $LASTEXITCODE
+python -m engine_runtimes.manifest vibevoice --include-optional --presets-dir model_presets
+Assert-NativeSuccess "VibeVoice runtime validation" $LASTEXITCODE
+Ok "Python dependencies installed and validated"
 
 # -------------------------------------------
 # Fix: speechbrain LazyModule path check fails on Windows

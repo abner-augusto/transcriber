@@ -5,6 +5,9 @@ The fixtures are real output — captured from whisper-cli and parakeet-cli runn
 """
 
 import json
+import logging
+import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -478,5 +481,176 @@ def test_engine_status_for_new_engines(tmp_path):
     status_miss = engine_status(missing_qwen)
     assert status_miss["available"] is False
     assert "not found" in status_miss["reason"].lower()
+
+
+@pytest.mark.parametrize(
+    ("module_name", "class_name", "engine_name"),
+    [
+        ("engines.qwen3_asr", "Qwen3AsrTranscriber", "qwen3-asr"),
+        ("engines.vibevoice", "VibeVoiceTranscriber", "vibevoice"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("failure_stage", "failure"),
+    [
+        ("model", ValueError("unknown model type `qwen3_asr`")),
+        ("model", RuntimeError("CUDA out of memory")),
+        ("processor", RuntimeError("processor is incompatible")),
+    ],
+)
+def test_optional_aligner_load_failure_is_transactional_and_warned_once(
+    tmp_path, monkeypatch, caplog, module_name, class_name, engine_name, failure_stage, failure
+):
+    module = __import__(module_name, fromlist=[class_name])
+    transcriber_class = getattr(module, class_name)
+    aligner_path = tmp_path / "aligner"
+    aligner_path.mkdir()
+    processor = object()
+
+    class ProcessorLoader:
+        @staticmethod
+        def from_pretrained(path):
+            if failure_stage == "processor":
+                raise failure
+            return processor
+
+    class ModelLoader:
+        calls = 0
+
+        @classmethod
+        def from_pretrained(cls, path, **kwargs):
+            cls.calls += 1
+            raise failure
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        types.SimpleNamespace(
+            AutoProcessor=ProcessorLoader,
+            AutoModelForTokenClassification=ModelLoader,
+        ),
+    )
+    transcriber = transcriber_class(model_path="primary", aligner_path=str(aligner_path), device="cpu")
+
+    with caplog.at_level(logging.WARNING):
+        transcriber._ensure_aligner_loaded()
+        transcriber._ensure_aligner_loaded()
+
+    assert transcriber._aligner_processor is None
+    assert transcriber._aligner_model is None
+    assert str(failure) in transcriber._aligner_unavailable_reason
+    warnings = [record.message for record in caplog.records if engine_name in record.message]
+    assert len(warnings) == 1
+    assert str(aligner_path) in warnings[0]
+    assert "proportional" in warnings[0].lower()
+    assert ModelLoader.calls == (0 if failure_stage == "processor" else 1)
+
+
+def test_qwen3_proportional_fallback_produces_join_ready_ordered_words():
+    from engines.qwen3_asr import Qwen3AsrTranscriber
+
+    class Inputs(dict):
+        def to(self, *_args):
+            return self
+
+    class Processor:
+        def apply_transcription_request(self, **_kwargs):
+            return Inputs(input_ids=np.zeros((1, 1), dtype=np.int64))
+
+        def decode(self, *_args, **_kwargs):
+            return "primeira segunda terceira"
+
+    class Model:
+        device = "cpu"
+        dtype = None
+
+        def generate(self, **_kwargs):
+            return np.zeros((1, 2), dtype=np.int64)
+
+    transcriber = Qwen3AsrTranscriber(model_path="primary", aligner_path=None, device="cpu")
+    transcriber._asr_processor = Processor()
+    transcriber._asr_model = Model()
+
+    words = transcriber._transcribe_and_align_chunk(np.zeros(48000, dtype=np.float32), 2.0)
+
+    assert [word.text for word in words] == [" primeira", " segunda", " terceira"]
+    assert all(word.start <= word.end for word in words)
+    assert all(before.end <= after.start for before, after in zip(words, words[1:]))
+    assert all(word.alignment_score == 0.5 for word in words)
+
+
+def test_vibevoice_proportional_fallback_produces_join_ready_ordered_words(monkeypatch):
+    import engines.vibevoice as module
+
+    class Model:
+        def streaming_generate(self, **_kwargs):
+            yield None, None, "Speaker 0: primeira segunda terceira"
+
+    transcriber = module.VibeVoiceTranscriber(model_path="primary", aligner_path=None, device="cpu")
+    transcriber._model = Model()
+    transcriber._processor = types.SimpleNamespace(tokenizer=object())
+    monkeypatch.setattr(module, "get_audio_duration", lambda _path: 3.0)
+    monkeypatch.setattr(module, "load_audio_ffmpeg", lambda *_args, **_kwargs: np.zeros(48000, dtype=np.float32))
+
+    words = transcriber.transcribe("meeting.wav")
+
+    assert [word.text for word in words] == [" primeira", " segunda", " terceira"]
+    assert all(word.start <= word.end for word in words)
+    assert all(before.end <= after.start for before, after in zip(words, words[1:]))
+    assert all(word.alignment_score < 0.98 for word in words)
+
+
+@pytest.mark.parametrize(
+    ("module_name", "class_name", "duration_function", "load_method"),
+    [
+        ("engines.qwen3_asr", "Qwen3AsrTranscriber", "get_audio_duration_seconds", "_ensure_asr_loaded"),
+        ("engines.vibevoice", "VibeVoiceTranscriber", "get_audio_duration", "_ensure_model_loaded"),
+    ],
+)
+def test_primary_model_load_failures_still_propagate(
+    monkeypatch, module_name, class_name, duration_function, load_method
+):
+    module = __import__(module_name, fromlist=[class_name])
+    transcriber = getattr(module, class_name)(model_path="primary", aligner_path=None, device="cpu")
+    monkeypatch.setattr(module, duration_function, lambda _path: 1.0)
+
+    def fail_primary_load():
+        raise RuntimeError("primary model load failed")
+
+    monkeypatch.setattr(transcriber, load_method, fail_primary_load)
+
+    with pytest.raises(RuntimeError, match="primary model load failed"):
+        transcriber.transcribe("meeting.wav")
+
+
+def test_qwen3_primary_loader_uses_the_supported_qwen_asr_runtime(monkeypatch):
+    import qwen_asr.core.transformers_backend as backend
+
+    from engines.qwen3_asr import Qwen3AsrTranscriber
+
+    processor = object()
+    model = object()
+
+    class ProcessorLoader:
+        @staticmethod
+        def from_pretrained(path):
+            assert path == "primary"
+            return processor
+
+    class ModelLoader:
+        @staticmethod
+        def from_pretrained(path, **kwargs):
+            assert path == "primary"
+            assert kwargs["device_map"] == "cpu"
+            return model
+
+    monkeypatch.setattr(backend, "Qwen3ASRProcessor", ProcessorLoader)
+    monkeypatch.setattr(backend, "Qwen3ASRForConditionalGeneration", ModelLoader)
+    transcriber = Qwen3AsrTranscriber(model_path="primary", aligner_path=None, device="cpu")
+
+    transcriber._ensure_asr_loaded()
+
+    assert transcriber._asr_processor is processor
+    assert transcriber._asr_model is model
 
 

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "runtime_id": "vibevoice-v1",
+  "python": ">=3.10,<3.15",
+  "packages": {
+    "vibevoice": "==1.0.0",
+    "transformers": "==4.57.6",
+    "torch": ">=2.11,<2.12",
+    "torchaudio": "==2.11.0"
+  },
+  "sources": {
+    "vibevoice": {"url": "https://github.com/microsoft/VibeVoice.git", "commit": "1541f590c7099820f10ea012f48d2399282df69f"}
+  },
+  "transformers": "==4.57.6",
+  "torch": {"version": ">=2.11,<2.12", "cuda": "CUDA 12.8 wheel tested; CPU loading supported"},
+  "model_types": ["vibevoice"],
+  "capabilities": {
+    "forced-alignment": {
+      "required": false,
+      "supported": false,
+      "reason": "The pinned Qwen3-ASR commit does not export Qwen3ASRForTokenClassification and Transformers 4.57.6 cannot load qwen3_asr through the Auto token-classification API.",
+      "packages": {},
+      "model_types": ["qwen3_asr"],
+      "required_imports": []
+    }
+  },
+  "required_imports": ["vibevoice.modular.modeling_vibevoice_asr:VibeVoiceASRForConditionalGeneration", "vibevoice.processor.vibevoice_asr_processor:VibeVoiceASRProcessor"],
+  "tested": {"python": "3.14.7", "torch": "2.11.0", "cuda": "12.8", "transformers": "4.57.6", "platform": "Windows 11"}
+}

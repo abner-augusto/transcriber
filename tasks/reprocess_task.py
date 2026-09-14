@@ -107,8 +107,6 @@ def rediarize_task(self, meeting_id: str, job_id: str):
         return {"status": "completed", "meeting_id": meeting_id}
     except MeetingNotFoundError:
         return {"error": "Meeting or Job not found"}
-    except Exception as e:
-        return {"error": str(e)}
 
 
 @celery_app.task(bind=True)
@@ -125,5 +123,3 @@ def reidentify_task(self, meeting_id: str, job_id: str):
         return {"status": "completed", "meeting_id": meeting_id}
     except MeetingNotFoundError:
         return {"error": "Meeting or Job not found"}
-    except Exception as e:
-        return {"error": str(e)}

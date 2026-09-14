@@ -135,6 +135,10 @@ Edit the file and fill in your actual paths and tokens.
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt
+python -m pip check
+python -m engine_runtimes.manifest qwen3-asr --include-optional --presets-dir model_presets
+python -m engine_runtimes.manifest vibevoice --include-optional --presets-dir model_presets
 ```
 
 **Note**: Installing PyTorch, pyannote.audio and SpeechBrain may take a while and download several GB of model files on first run.
@@ -142,9 +146,25 @@ pip install -r requirements.txt
 If you have an NVIDIA GPU, install the CUDA version of PyTorch first:
 
 ```powershell
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
 pip install -r requirements.txt
+pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt
 ```
+
+The Engine requirement files use immutable source commits. Compatibility is
+recorded separately in `engine_runtimes\manifests`. Validate model metadata after
+setting the model path:
+
+```powershell
+python -m engine_runtimes.manifest qwen3-asr --checkpoint C:\path\to\Qwen3-ASR-1.7B-hf
+python -m engine_runtimes.manifest vibevoice --checkpoint C:\path\to\VibeVoice-ASR-Streaming-7B
+python -m engine_runtimes.manifest vibevoice --checkpoint C:\path\to\Qwen3-ForcedAligner-0.6B-hf --capability forced-alignment
+```
+
+On a compatibility error, recreate `venv` and reinstall these files. Do not
+upgrade Transformers independently; the tested version is 4.57.6.
+The pinned runtime does not support the optional Qwen forced aligner; leave
+`aligner_path` unset to use the proportional timestamp fallback.
 
 ### 8. Set up the frontend
 

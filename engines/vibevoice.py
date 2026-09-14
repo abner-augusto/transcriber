@@ -14,7 +14,6 @@ import logging
 import os
 import re
 import subprocess
-import sys
 import unicodedata
 from pathlib import Path
 from typing import Optional
@@ -37,14 +36,6 @@ try:
     AutoModel.register = _safe_register
 except Exception:
     pass
-
-# Ensure VibeVoice repo path is in sys.path
-VIBEVOICE_REPO_PATH = Path(r"C:\Users\abner\_repos\VibeVoice")
-if VIBEVOICE_REPO_PATH.exists() and str(VIBEVOICE_REPO_PATH) not in sys.path:
-    sys.path.insert(0, str(VIBEVOICE_REPO_PATH))
-
-DEFAULT_VIBEVOICE_MODEL = r"C:\Users\abner\_repos\_local-ai\models\VibeVoice-ASR-Streaming-7B"
-DEFAULT_ALIGNER_MODEL = r"C:\Users\abner\_repos\_local-ai\models\Qwen3-ForcedAligner-0.6B-hf"
 
 WINDOW_SECONDS = 600.0   # 10 minutes
 OVERLAP_SECONDS = 45.0  # 45s overlap
@@ -233,8 +224,8 @@ class VibeVoiceTranscriber:
 
     def __init__(
         self,
-        model_path: str = DEFAULT_VIBEVOICE_MODEL,
-        aligner_path: Optional[str] = DEFAULT_ALIGNER_MODEL,
+        model_path: Optional[str] = None,
+        aligner_path: Optional[str] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         window_seconds: float = WINDOW_SECONDS,
         overlap_seconds: float = OVERLAP_SECONDS,
@@ -249,12 +240,20 @@ class VibeVoiceTranscriber:
         self._processor = None
         self._aligner_model = None
         self._aligner_processor = None
+        self._aligner_unavailable_reason: Optional[str] = None
         self._native_diarization: Optional[DiarizationResult] = None
 
     def _ensure_model_loaded(self):
         if self._model is None:
-            from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
-            from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
+            if not self.model_path:
+                raise RuntimeError("VibeVoice model_path must be configured in the selected Preset")
+            try:
+                from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
+                from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
+            except ImportError as exc:
+                raise RuntimeError(
+                    "VibeVoice runtime is missing; install requirements/engines/vibevoice.txt"
+                ) from exc
 
             log.info(f"[vibevoice] Loading model from {self.model_path} onto {self.device}")
             self._processor = VibeVoiceASRProcessor.from_pretrained(self.model_path)
@@ -266,16 +265,38 @@ class VibeVoiceTranscriber:
             self._model.eval()
 
     def _ensure_aligner_loaded(self):
-        if self._aligner_model is None and self.aligner_path and Path(self.aligner_path).exists():
+        if (
+            self._aligner_model is not None
+            or self._aligner_unavailable_reason is not None
+            or not self.aligner_path
+            or not Path(self.aligner_path).exists()
+        ):
+            return
+
+        try:
             from transformers import AutoModelForTokenClassification, AutoProcessor
 
             log.info(f"[vibevoice] Loading aligner from {self.aligner_path} onto {self.device}")
-            self._aligner_processor = AutoProcessor.from_pretrained(self.aligner_path)
-            self._aligner_model = AutoModelForTokenClassification.from_pretrained(
+            processor = AutoProcessor.from_pretrained(self.aligner_path)
+            model = AutoModelForTokenClassification.from_pretrained(
                 self.aligner_path,
                 dtype=torch.bfloat16 if "cuda" in self.device else torch.float32,
                 device_map=self.device,
             )
+        except Exception as exc:
+            self._aligner_processor = None
+            self._aligner_model = None
+            self._aligner_unavailable_reason = f"{type(exc).__name__}: {exc}"
+            log.warning(
+                "[vibevoice] Forced aligner at %s is unavailable (%s); "
+                "using proportional timestamp fallback",
+                self.aligner_path,
+                self._aligner_unavailable_reason,
+            )
+            return
+
+        self._aligner_processor = processor
+        self._aligner_model = model
 
     def get_native_diarization(self) -> DiarizationResult:
         """Access the native DiarizationResult produced during transcription."""
@@ -426,6 +447,7 @@ class VibeVoiceTranscriber:
                             end=round(w_end, 3),
                             text=join_t,
                             confidence=0.9,
+                            alignment_score=0.5,
                         )
                     )
                     cur_time += time_per_word

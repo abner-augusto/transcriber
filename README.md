@@ -179,7 +179,29 @@ Edit the file and fill in your actual paths and tokens.
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt
+python -m pip check
+python -m engine_runtimes.manifest qwen3-asr --include-optional --presets-dir model_presets
+python -m engine_runtimes.manifest vibevoice --include-optional --presets-dir model_presets
 ```
+
+The Engine files pin Qwen3-ASR and VibeVoice to immutable Git commits. Their
+independent compatibility contracts and tested Python/Torch/CUDA/Transformers
+matrix are in `engine_runtimes/manifests/`. The current matrix uses Transformers
+4.57.6 for both Engines; do not upgrade it independently of those manifests.
+The Qwen forced-aligner capability is explicitly unsupported by this pinned
+runtime and the Engines use proportional timestamps when no supported aligner is
+configured.
+
+To verify downloaded checkpoint metadata, configure its path and run, for example:
+
+```bash
+python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/VibeVoice-ASR-Streaming-7B
+python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/Qwen3-ForcedAligner-0.6B-hf --capability forced-alignment
+```
+
+If validation fails, recreate the virtual environment and reinstall the checked-in
+requirements. The installer does not upgrade pip or select newer Engine revisions.
 
 ### 7. Set up the frontend
 

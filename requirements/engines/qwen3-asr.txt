@@ -1,0 +1,5 @@
+# Immutable Qwen3-ASR source tested by engine_runtimes/manifests/qwen3-asr.json.
+qwen-asr @ git+https://github.com/QwenLM/Qwen3-ASR.git@7c6daf77a2421100f5fb066495372c00129d39ff
+transformers==4.57.6
+torch==2.11.0
+torchaudio==2.11.0
