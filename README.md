@@ -203,6 +203,35 @@ python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/Qwen3-ForcedA
 If validation fails, recreate the virtual environment and reinstall the checked-in
 requirements. The installer does not upgrade pip or select newer Engine revisions.
 
+After any dependency or model change, run the tiered Engine release gate. The
+metadata tier is deterministic and never loads weights, contacts the network, or
+allocates GPU memory:
+
+```bash
+python -m pytest -m "not model_load and not model_inference" -q
+python -m scripts.engine_doctor
+python -m scripts.engine_doctor --json
+```
+
+The following heavyweight checks are local-operator gates only. They never run in
+the ordinary suite, require both the explicit flag and independently selected
+Preset IDs, and reject non-local model/audio paths. Run one Preset at a time on
+resource-constrained machines:
+
+```bash
+python -m pytest -m model_load --run-engine-smoke --engine-smoke-preset qwen3-asr-1.7b -q
+python -m pytest -m model_inference --run-engine-smoke --engine-smoke-preset qwen3-asr-1.7b --engine-smoke-audio /path/to/tiny-local-speech.wav -q
+python -m scripts.engine_doctor --tier load --preset qwen3-asr-1.7b --run-engine-smoke
+python -m scripts.engine_doctor --tier inference --preset qwen3-asr-1.7b --audio /path/to/tiny-local-speech.wav --run-engine-smoke --json
+```
+
+Repeat `--engine-smoke-preset`/`--preset` to select additional Presets, or set
+`ENGINE_SMOKE_PRESETS` to a comma-separated list for pytest. Inference validates
+the `Word` contract and native `Turn` contract where advertised; it deliberately
+does not assert exact transcript wording. Use only redistributable test speech or
+your own local fixture—never commit private Meeting audio. Both heavy tiers force
+Hugging Face and Transformers offline mode before loading an Engine.
+
 ### 7. Set up the frontend
 
 ```bash

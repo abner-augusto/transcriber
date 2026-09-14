@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transcriber.local/schemas/engine-doctor-v1.json",
+  "title": "Transcriber Engine doctor report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "packages", "presets", "blocked"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "packages": {"type": "object", "additionalProperties": {"type": ["string", "null"]}},
+    "presets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "engine", "health"],
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "engine": {"type": "string"},
+          "health": {"type": "object"},
+          "smoke": {"type": "object"}
+        }
+      }
+    },
+    "blocked": {"type": "boolean"}
+  }
+}

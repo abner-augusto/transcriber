@@ -9,13 +9,17 @@ command.
 
 **Blocked by:** 03 - Pin Reproducible Engine Runtime Dependencies; 04 - Probe Engine Health Before Queueing Jobs.
 
-**Status:** blocked
+**Status:** done
 
-- [ ] Metadata tests run without model weights, GPU, or network access.
-- [ ] The original unsupported `qwen3_asr` architecture combination is a regression fixture.
-- [ ] Model-load and inference tests require explicit opt-in and use local files only.
-- [ ] Smoke inference checks Word/Turn contracts without asserting hardware-sensitive exact text.
-- [ ] Every shipped Preset can be selected independently for smoke testing.
-- [ ] The doctor command returns nonzero for blocked Engines and emits schema-validated JSON.
-- [ ] Installation and dependency changes document the required smoke commands.
+- [x] Metadata tests run without model weights, GPU, or network access.
+- [x] The original unsupported `qwen3_asr` architecture combination is a regression fixture.
+- [x] Model-load and inference tests require explicit opt-in and use local files only.
+- [x] Smoke inference checks Word/Turn contracts without asserting hardware-sensitive exact text.
+- [x] Every shipped Preset can be selected independently for smoke testing.
+- [x] The doctor command returns nonzero for blocked Engines and emits schema-validated JSON.
+- [x] Installation and dependency changes document the required smoke commands.
 
+**Verification:** Metadata/doctor tests pass (16 tests). The normal resource-limited
+backend suite passes (206 tests, 20 heavy smoke cases deselected). The real JSON
+doctor validates its report and returns nonzero for the currently blocked local
+Presets. Model-load and inference tiers remain deliberately opt-in and were not run.

@@ -13,7 +13,7 @@ update the status here when finished.
 | 002 | Make Celery task failures truthful | P1 | S | — | DONE |
 | 003 | Pin reproducible Engine runtime dependencies | P1 | M | — | DONE |
 | 004 | Probe Engine health before queueing Jobs | P1 | M | 003 | DONE |
-| 005 | Add a tiered Preset smoke-test matrix | P2 | M | 003, 004 | TODO |
+| 005 | Add a tiered Preset smoke-test matrix | P2 | M | 003, 004 | DONE |
 | 006 | Isolate Python Engines in dedicated runtimes | P2 | L | 001–005 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or

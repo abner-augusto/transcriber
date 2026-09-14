@@ -9,6 +9,8 @@
 
 ## Status
 
+**Execution:** IN PROGRESS — implementation added by static inspection; runtime gates pending.
+
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: LOW
@@ -161,4 +163,3 @@ downloads nothing.
 Any new Engine must add metadata fixtures and opt-in load/inference cases before its
 Preset becomes selectable. Quality benchmarks remain under `bench/`; smoke tests
 verify operability, not model accuracy.
-
