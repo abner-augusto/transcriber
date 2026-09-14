@@ -2,6 +2,6 @@
   "id": "vibevoice-7b",
   "name": "VibeVoice-ASR 7B (Native Diarization)",
   "engine": "vibevoice",
-  "model_path": "./models/VibeVoice-ASR-Streaming-7B",
+  "model_path": "C:/Users/abner/_repos/_local-ai/models/VibeVoice-ASR-Streaming-7B",
   "device": "cuda"
 }
