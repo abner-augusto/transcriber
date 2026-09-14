@@ -193,10 +193,15 @@ else
 fi
 
 python -m pip install -r requirements.txt -q
-python -m pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt -q
 python -m pip check
-python -m engine_runtimes.manifest qwen3-asr --include-optional --presets-dir model_presets
-python -m engine_runtimes.manifest vibevoice --include-optional --presets-dir model_presets
+for engine_runtime in qwen3-asr vibevoice; do
+  runtime_dir="venv-engines/$engine_runtime"
+  runtime_python="$runtime_dir/bin/python"
+  [ -x "$runtime_python" ] || python3 -m venv "$runtime_dir"
+  "$runtime_python" -m pip install -r "requirements/engines/$engine_runtime.txt" -q
+  "$runtime_python" -m pip check
+  "$runtime_python" -m engine_runtimes.manifest "$engine_runtime" --include-optional --presets-dir model_presets
+done
 ok "Python dependencies installed and validated"
 
 # -------------------------------------------

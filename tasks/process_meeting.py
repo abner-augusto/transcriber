@@ -78,6 +78,12 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                 "preset": preset["id"],
                 "words": [w.to_dict() for w in words],
             }
+            runtime_fingerprint = getattr(transcriber, "runtime_fingerprint", None)
+            if runtime_fingerprint:
+                raw_transcription_data["runtime"] = {
+                    "fingerprint": runtime_fingerprint,
+                    "diagnostics": getattr(transcriber, "runtime_diagnostics", {}),
+                }
             if hasattr(transcriber, "resolve_dtw_preset"):
                 resolved_dtw = transcriber.resolve_dtw_preset()
                 raw_transcription_data["dtw"] = resolved_dtw if (getattr(transcriber, "dtw_enabled", False) and resolved_dtw) else False

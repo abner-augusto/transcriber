@@ -10,6 +10,7 @@
 
 ## Status
 
+- **Execution**: DONE
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: HIGH
@@ -205,4 +206,3 @@ and health modules; all test tiers pass.
 Treat protocol and manifest versions as public internal APIs. Add fields compatibly
 or bump the schema. Reviewers should scrutinize shell avoidance, path handling,
 timeouts, cleanup, local-only behavior, and accidental heavy imports in core.
-

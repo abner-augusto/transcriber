@@ -46,18 +46,36 @@ def _check(code: str, required: bool, passed: bool, message: str) -> EngineCheck
     return EngineCheck(code=code, required=required, passed=passed, message=message)
 
 
-def _distribution_version(name: str) -> str | None:
-    try:
-        return importlib.metadata.version(name)
-    except importlib.metadata.PackageNotFoundError:
-        return None
+def _normalized_distribution_name(name: str) -> str:
+    return name.lower().replace("_", "-").replace(".", "-")
 
 
-def _module_source(distribution_name: str, module_name: str) -> Path | None:
+def _runtime_site_packages(executable: Path) -> tuple[Path, ...]:
+    """Locate a venv's package roots without running or importing from it."""
+    venv = executable.parent.parent
+    windows = venv / "Lib" / "site-packages"
+    posix = tuple(sorted((venv / "lib").glob("python*/site-packages")))
+    return tuple(path for path in (windows, *posix) if path.is_dir())
+
+
+def _runtime_distributions(executable: Path) -> dict[str, importlib.metadata.Distribution]:
+    result = {}
+    for distribution in importlib.metadata.distributions(path=[str(path) for path in _runtime_site_packages(executable)]):
+        name = distribution.metadata.get("Name")
+        if name:
+            result[_normalized_distribution_name(name)] = distribution
+    return result
+
+
+def _distribution_version(name: str, distributions: dict[str, importlib.metadata.Distribution]) -> str | None:
+    distribution = distributions.get(_normalized_distribution_name(name))
+    return distribution.version if distribution is not None else None
+
+
+def _module_source(distribution_name: str, module_name: str, distributions: dict[str, importlib.metadata.Distribution]) -> Path | None:
     """Locate module source from distribution metadata without importing it."""
-    try:
-        distribution = importlib.metadata.distribution(distribution_name)
-    except importlib.metadata.PackageNotFoundError:
+    distribution = distributions.get(_normalized_distribution_name(distribution_name))
+    if distribution is None:
         return None
     relative = Path(*module_name.split("."))
     candidates = (relative.with_suffix(".py"), relative / "__init__.py")
@@ -76,11 +94,22 @@ def _source_defines(path: Path, attribute: str) -> bool:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, SyntaxError):
         return False
-    return any(
-        isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == attribute
-        for node in tree.body
-    )
+    for node in tree.body:
+        if (
+            isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == attribute
+        ):
+            return True
+        if isinstance(node, ast.ImportFrom) and any(
+            (alias.asname or alias.name) == attribute for alias in node.names
+        ):
+            return True
+        if isinstance(node, ast.Import) and any(
+            (alias.asname or alias.name.rsplit(".", 1)[-1]) == attribute
+            for alias in node.names
+        ):
+            return True
+    return False
 
 
 def _config(path: Path) -> tuple[dict | None, str]:
@@ -145,18 +174,25 @@ def _cuda_available() -> bool:
 
 def _manifest_probe(preset: dict, manifest: RuntimeManifest) -> tuple[list[EngineCheck], list[str]]:
     checks: list[EngineCheck] = []
-    facts = [manifest.runtime_id]
+    engine = preset.get("engine")
+    runtime_text = settings.qwen3_asr_python if engine == "qwen3-asr" else settings.vibevoice_python
+    runtime = Path(runtime_text)
+    runtime_exists = runtime.is_file()
+    checks.append(_check("runtime.executable", True, runtime_exists, f"Dedicated runtime {'found' if runtime_exists else 'not found'}: {runtime_text}"))
+    runtime_fact = f"{runtime.resolve()}:{runtime.stat().st_size}:{runtime.stat().st_mtime_ns}" if runtime_exists else f"missing:{runtime_text}"
+    facts = [manifest.runtime_id, runtime_fact]
+    runtime_distributions = _runtime_distributions(runtime) if runtime_exists else {}
     for package, specifier in manifest.packages.items():
-        installed = _distribution_version(package)
+        installed = _distribution_version(package, runtime_distributions)
         passed = installed is not None and version_satisfies(installed, specifier)
         checks.append(_check(f"runtime.package.{package}", True, passed, f"{package} {installed or 'is not installed'}; required {specifier}"))
         facts.append(f"{package}={installed}")
         source = manifest.sources.get(package)
         if source and installed is not None:
             try:
-                direct_text = importlib.metadata.distribution(package).read_text("direct_url.json")
+                direct_text = runtime_distributions[_normalized_distribution_name(package)].read_text("direct_url.json")
                 direct = json.loads(direct_text) if direct_text else {}
-            except (importlib.metadata.PackageNotFoundError, json.JSONDecodeError):
+            except (KeyError, OSError, json.JSONDecodeError):
                 direct = {}
             commit = direct.get("vcs_info", {}).get("commit_id")
             immutable = commit == source["commit"] and not direct.get("dir_info", {}).get("editable", False)
@@ -166,7 +202,7 @@ def _manifest_probe(preset: dict, manifest: RuntimeManifest) -> tuple[list[Engin
     primary_distribution = next((name for name in manifest.sources if name in manifest.packages), next(iter(manifest.packages)))
     for import_contract in manifest.required_imports:
         module, separator, attribute = import_contract.partition(":")
-        source = _module_source(primary_distribution, module)
+        source = _module_source(primary_distribution, module, runtime_distributions)
         passed = source is not None and (not separator or _source_defines(source, attribute))
         checks.append(_check(f"runtime.import.{module}.{attribute or 'module'}", True, passed, f"Required class {import_contract} {'is present' if passed else 'was not found'}"))
 
@@ -200,7 +236,10 @@ def _legacy_probe(preset: dict) -> tuple[list[EngineCheck], list[str]]:
     model_path = preset.get("model_path") or ""
     checks: list[EngineCheck] = []
     if engine == "faster-whisper":
-        installed = _distribution_version("faster-whisper")
+        try:
+            installed = importlib.metadata.version("faster-whisper")
+        except importlib.metadata.PackageNotFoundError:
+            installed = None
         checks.append(_check("runtime.package.faster-whisper", True, installed is not None, f"faster-whisper {installed or 'is not installed'}"))
         local = model_path.startswith((".", "/", "\\")) or (len(model_path) > 1 and model_path[1] == ":")
         model_ok = bool(model_path) and (not local or Path(model_path).exists())

@@ -181,14 +181,22 @@ if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
 
 python -m pip install -r requirements.txt -q
 Assert-NativeSuccess "Application dependency installation" $LASTEXITCODE
-python -m pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt -q
-Assert-NativeSuccess "Engine dependency installation" $LASTEXITCODE
 python -m pip check
 Assert-NativeSuccess "Dependency integrity validation" $LASTEXITCODE
-python -m engine_runtimes.manifest qwen3-asr --include-optional --presets-dir model_presets
-Assert-NativeSuccess "Qwen3-ASR runtime validation" $LASTEXITCODE
-python -m engine_runtimes.manifest vibevoice --include-optional --presets-dir model_presets
-Assert-NativeSuccess "VibeVoice runtime validation" $LASTEXITCODE
+foreach ($engineRuntime in @("qwen3-asr", "vibevoice")) {
+    $runtimeDir = Join-Path "venv-engines" $engineRuntime
+    $runtimePython = Join-Path $runtimeDir "Scripts\python.exe"
+    if (-not (Test-Path $runtimePython)) {
+        python -m venv $runtimeDir
+        Assert-NativeSuccess "$engineRuntime environment creation" $LASTEXITCODE
+    }
+    & $runtimePython -m pip install -r "requirements/engines/$engineRuntime.txt" -q
+    Assert-NativeSuccess "$engineRuntime dependency installation" $LASTEXITCODE
+    & $runtimePython -m pip check
+    Assert-NativeSuccess "$engineRuntime dependency integrity validation" $LASTEXITCODE
+    & $runtimePython -m engine_runtimes.manifest $engineRuntime --include-optional --presets-dir model_presets
+    Assert-NativeSuccess "$engineRuntime runtime validation" $LASTEXITCODE
+}
 Ok "Python dependencies installed and validated"
 
 # -------------------------------------------

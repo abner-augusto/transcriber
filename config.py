@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     whisper_dtw_preset: str = ""  # auto-detected from model if empty
     parakeet_cli_path: str = "../parakeet.cpp/build/examples/cli/Release/parakeet-cli.exe"
 
+    # Dedicated Python interpreters for heavyweight Python Engines.
+    qwen3_asr_python: str = "./venv-engines/qwen3-asr/Scripts/python.exe"
+    vibevoice_python: str = "./venv-engines/vibevoice/Scripts/python.exe"
+    engine_runtime_timeout_seconds: float = 7200.0
+    engine_runtime_debug_directory: str = ""
+
     storage_path: str = "./storage"
     hf_auth_token: str = ""
     cors_origins: str = ""  # Comma-separated, e.g. "http://localhost:3000,http://myapp.com"

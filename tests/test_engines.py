@@ -401,9 +401,8 @@ def test_qwen3_asr_and_vibevoice_satisfy_transcriber_protocol():
 
 
 def test_make_transcriber_supports_qwen3_and_vibevoice():
-    """make_transcriber must instantiate the correct adapter from preset dicts."""
-    from engines.qwen3_asr import Qwen3AsrTranscriber
-    from engines.vibevoice import VibeVoiceTranscriber
+    """Core constructs thin adapters without importing either Engine runtime."""
+    from engines.isolated_python import IsolatedPythonTranscriber
 
     qwen = make_transcriber({
         "id": "test-qwen",
@@ -411,16 +410,18 @@ def test_make_transcriber_supports_qwen3_and_vibevoice():
         "model_path": "models/qwen",
         "language": "Portuguese",
     })
-    assert isinstance(qwen, Qwen3AsrTranscriber)
+    assert isinstance(qwen, IsolatedPythonTranscriber)
+    assert qwen.engine_id == "qwen3-asr"
     assert qwen.model_path == "models/qwen"
-    assert qwen.language == "Portuguese"
+    assert qwen.options["language"] == "Portuguese"
 
     vibe = make_transcriber({
         "id": "test-vibe",
         "engine": "vibevoice",
         "model_path": "models/vibe",
     })
-    assert isinstance(vibe, VibeVoiceTranscriber)
+    assert isinstance(vibe, IsolatedPythonTranscriber)
+    assert vibe.engine_id == "vibevoice"
     assert vibe.model_path == "models/vibe"
 
 

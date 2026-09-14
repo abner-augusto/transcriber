@@ -8,8 +8,6 @@ Imports of the adapters are deferred: the API process lists Presets without payi
 for torch, and a machine with no parakeet build can still run whisper.
 """
 
-from config import settings
-
 from .ports import DiarizationResult, Aligner, Diarizer, Transcriber, Turn, Word
 from .overlap import compute_overlaps
 
@@ -29,6 +27,8 @@ DIARIZER_ENGINE = "pyannote"
 
 def validate_alignment_engine(engine: str | None) -> str:
     """Return a supported alignment engine or fail with an actionable message."""
+    from config import settings
+
     selected = engine or settings.forced_alignment_model
     if selected not in ALIGNMENT_ENGINES:
         raise ValueError(f"Unknown alignment engine '{selected}'. Known: {', '.join(ALIGNMENT_ENGINES)}")
@@ -37,6 +37,8 @@ def validate_alignment_engine(engine: str | None) -> str:
 
 def make_transcriber(preset: dict) -> Transcriber:
     """The Transcriber a Preset asks for."""
+    from config import settings
+
     engine = preset.get("engine")
     model_path = preset.get("model_path")
     if not model_path:
@@ -94,26 +96,23 @@ def make_transcriber(preset: dict) -> Transcriber:
         )
 
     if engine == "qwen3-asr":
-        from .qwen3_asr import Qwen3AsrTranscriber
+        from .isolated_python import IsolatedPythonTranscriber
 
-        return Qwen3AsrTranscriber(
+        return IsolatedPythonTranscriber(engine_id=engine,
             model_path=model_path,
             aligner_path=preset.get("aligner_path"),
-            language=preset.get("language", "Portuguese"),
             device=preset.get("device", "cuda"),
-            chunk_seconds=float(preset.get("chunk_seconds", 300.0)),
-            overlap_seconds=float(preset.get("overlap_seconds", 30.0)),
+            options={"language": preset.get("language", "Portuguese"), "chunk_seconds": float(preset.get("chunk_seconds", 300.0)), "overlap_seconds": float(preset.get("overlap_seconds", 30.0))},
         )
 
     if engine == "vibevoice":
-        from .vibevoice import VibeVoiceTranscriber
+        from .isolated_python import IsolatedPythonTranscriber
 
-        return VibeVoiceTranscriber(
+        return IsolatedPythonTranscriber(engine_id=engine,
             model_path=model_path,
             aligner_path=preset.get("aligner_path"),
             device=preset.get("device", "cuda"),
-            window_seconds=float(preset.get("window_seconds", 600.0)),
-            overlap_seconds=float(preset.get("overlap_seconds", 45.0)),
+            options={"window_seconds": float(preset.get("window_seconds", 600.0)), "overlap_seconds": float(preset.get("overlap_seconds", 45.0))},
         )
 
     raise ValueError(f"Unknown transcription engine '{engine}'. Known: {TRANSCRIBER_ENGINES}")
