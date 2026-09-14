@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from services.audio_service import AudioService
 
 
@@ -124,9 +126,9 @@ def test_extract_dual_audio_extracts_separate_files_when_different():
     assert len(calls) == 3
     # No -map channel splitting for separate files.
     assert not any("-map" in c for c in calls[:2])
-    # Both inputs are present in the mix command (as full paths).
-    assert any("mic.wav" in x for x in calls[2])
-    assert any("system.wav" in x for x in calls[2])
+    # Both processed inputs are present in the mix command (as full paths).
+    assert any("mic_processed.wav" in x for x in calls[2])
+    assert any("system_processed.wav" in x for x in calls[2])
     assert out.endswith("audio.wav")
 
 
@@ -149,3 +151,34 @@ def test_extract_dual_audio_output_paths_are_in_meeting_dir():
     # The mixed output lives in the meeting's storage directory.
     assert Path(out).name == "audio.wav"
     assert "m1" in out
+
+
+def test_extract_dual_audio_never_overwrites_source_artifacts(tmp_path):
+    """Legacy dual-track rows may point at mic.wav/system.wav source files."""
+    meeting_dir = tmp_path / "m1"
+    meeting_dir.mkdir()
+    run, calls = _fake_run()
+
+    with patch("services.audio_service.get_meeting_path", return_value=meeting_dir):
+        with patch("subprocess.run", side_effect=run):
+            AudioService().extract_dual_audio(
+                str(meeting_dir / "mic.wav"),
+                str(meeting_dir / "system.wav"),
+                "m1",
+            )
+
+    assert calls[0][-1] == str(meeting_dir / "mic_processed.wav")
+    assert calls[1][-1] == str(meeting_dir / "system_processed.wav")
+
+
+def test_ffmpeg_failure_preserves_stderr():
+    expected_stderr = "Output same as Input - exiting"
+    failure = subprocess.CalledProcessError(
+        returncode=4294967274,
+        cmd=["ffmpeg", "-i", "input.wav", "output.wav"],
+        stderr=expected_stderr,
+    )
+
+    with patch("subprocess.run", side_effect=failure):
+        with pytest.raises(RuntimeError, match=expected_stderr):
+            AudioService()._extract_mono("input.wav", "output.wav")

@@ -119,8 +119,10 @@ async def create_meeting(
 
     if system_file is not None:
         # Explicit dual-track: mic + system files.
-        mic_path = await _save_upload(file, str(meeting_dir / f"mic{ext}"))
-        system_path = await _save_upload(system_file, str(meeting_dir / f"system{ext}"))
+        # Keep raw sources separate from the processed mic/system artifacts generated
+        # by AudioService. This also avoids FFmpeg input/output path collisions.
+        mic_path = await _save_upload(file, str(meeting_dir / f"mic_source{ext}"))
+        system_path = await _save_upload(system_file, str(meeting_dir / f"system_source{ext}"))
         meeting.mic_audio_filepath = mic_path
         meeting.system_audio_filepath = system_path
         meeting.is_dual_track = True
@@ -288,7 +290,10 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
 
     dest_dir = get_meeting_path(copy.id)
     if source.is_dual_track:
-        for attr, prefix in (("mic_audio_filepath", "mic"), ("system_audio_filepath", "system")):
+        for attr, prefix in (
+            ("mic_audio_filepath", "mic_source"),
+            ("system_audio_filepath", "system_source"),
+        ):
             src = Path(getattr(source, attr))
             dest = dest_dir / f"{prefix}{src.suffix}"
             shutil.copyfile(src, dest)

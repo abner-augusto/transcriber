@@ -13,7 +13,7 @@ from .shared import (
 )
 from engines import DIARIZER_ENGINE, make_aligner, make_diarizer, make_transcriber
 from presets import resolve_preset
-from services.audio_service import AudioService
+from services.audio_service import AudioService, DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
 from tasks.dual_track import HOST_SPEAKER, build_dual_diarization, host_turns_from_vad
@@ -93,8 +93,8 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                 from config import get_meeting_path
 
                 meeting_dir = get_meeting_path(meeting.id)
-                mic_path = str(meeting_dir / "mic.wav")
-                system_path = str(meeting_dir / "system.wav")
+                mic_path = str(meeting_dir / DUAL_MIC_OUTPUT)
+                system_path = str(meeting_dir / DUAL_SYSTEM_OUTPUT)
 
                 # Host: deterministic VAD on the mic track — every speech region is the host.
                 host_vad = vad_service.compute_vad_segments(mic_path)

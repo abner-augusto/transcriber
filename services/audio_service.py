@@ -5,6 +5,15 @@ from pathlib import Path
 from config import get_meeting_path
 
 LOUDNORM = "loudnorm=I=-16:TP=-1.5:LRA=11"
+DUAL_MIC_OUTPUT = "mic_processed.wav"
+DUAL_SYSTEM_OUTPUT = "system_processed.wav"
+
+
+def _stderr_text(stderr) -> str:
+    """Return subprocess stderr as readable text for error reporting."""
+    if isinstance(stderr, bytes):
+        return stderr.decode(errors="replace").strip()
+    return str(stderr or "").strip()
 
 
 class AudioService:
@@ -27,8 +36,30 @@ class AudioService:
             "-ac", "1",
             output_path,
         ]
-        subprocess.run(cmd, capture_output=True, check=True, timeout=600)  # 10 min
+        self._run_ffmpeg(cmd, timeout=600)  # 10 min
         return output_path
+
+    @staticmethod
+    def _run_ffmpeg(cmd: list[str], timeout: int):
+        """Run FFmpeg and retain its diagnostic stderr when it fails."""
+        try:
+            return subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=timeout,
+            )
+        except subprocess.CalledProcessError as exc:
+            stderr = _stderr_text(exc.stderr) or "(no stderr output)"
+            raise RuntimeError(
+                f"ffmpeg failed with exit code {exc.returncode}: {stderr}"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            stderr = _stderr_text(exc.stderr) or "(no stderr output)"
+            raise RuntimeError(
+                f"ffmpeg timed out after {timeout}s: {stderr}"
+            ) from exc
 
     def probe_audio(self, filepath: str) -> dict:
         """Probe a file's audio layout via ffprobe.
@@ -62,19 +93,21 @@ class AudioService:
         }
 
     def extract_dual_audio(self, mic_path: str, system_path: str, meeting_id: str) -> str:
-        """Produce the three dual-track artifacts: mic.wav, system.wav, audio.wav.
+        """Produce the three dual-track artifacts: processed mic, processed system, audio.
 
-        - mic.wav: 16kHz mono, loudnorm, from the mic source.
-        - system.wav: 16kHz mono, loudnorm, from the system source.
+        - mic_processed.wav: 16kHz mono, loudnorm, from the mic source.
+        - system_processed.wav: 16kHz mono, loudnorm, from the system source.
         - audio.wav: a balanced 16kHz mono mix of both, for the frontend player and
           unified ASR transcription.
 
-        When mic_path and system_path resolve to the same file, the file is stereo
-        and is split: channel 0 -> mic, channel 1 -> system.
+        When mic_path and system_path resolve to the same file, the file is split:
+        channel 0 -> mic, channel 1 -> system. Processed outputs deliberately use
+        different names from uploaded source files so legacy rows pointing at
+        ``mic.wav``/``system.wav`` cannot trigger an in-place FFmpeg conversion.
         """
         output_dir = get_meeting_path(meeting_id)
-        mic_out = str(output_dir / "mic.wav")
-        system_out = str(output_dir / "system.wav")
+        mic_out = str(output_dir / DUAL_MIC_OUTPUT)
+        system_out = str(output_dir / DUAL_SYSTEM_OUTPUT)
         mixed_out = str(output_dir / "audio.wav")
 
         same_file = Path(mic_path).resolve() == Path(system_path).resolve()
@@ -100,7 +133,7 @@ class AudioService:
             "-ac", "1",
             output_path,
         ]
-        subprocess.run(cmd, capture_output=True, check=True, timeout=600)
+        self._run_ffmpeg(cmd, timeout=600)
 
     def _split_dual(self, input_path: str, mic_out: str, system_out: str) -> None:
         """Split a single dual-track file into mic and system mono tracks.
@@ -156,8 +189,8 @@ class AudioService:
                 system_out,
             ]
 
-        subprocess.run(cmd_mic, capture_output=True, check=True, timeout=600)
-        subprocess.run(cmd_system, capture_output=True, check=True, timeout=600)
+        self._run_ffmpeg(cmd_mic, timeout=600)
+        self._run_ffmpeg(cmd_system, timeout=600)
 
     def _mix(self, mic_path: str, system_path: str, output_path: str) -> None:
         """Mix the two mono tracks into a balanced 16kHz mono WAV.
@@ -175,7 +208,7 @@ class AudioService:
             "-ac", "1",
             output_path,
         ]
-        subprocess.run(cmd, capture_output=True, check=True, timeout=600)
+        self._run_ffmpeg(cmd, timeout=600)
 
     def get_duration(self, filepath: str) -> float:
         """Get audio/video duration in seconds via ffprobe."""
@@ -202,5 +235,5 @@ class AudioService:
             "-ac", "1",
             output_path,
         ]
-        subprocess.run(cmd, capture_output=True, check=True, timeout=300)  # 5 min
+        self._run_ffmpeg(cmd, timeout=300)  # 5 min
         return output_path
