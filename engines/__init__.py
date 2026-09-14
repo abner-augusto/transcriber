@@ -8,8 +8,6 @@ Imports of the adapters are deferred: the API process lists Presets without payi
 for torch, and a machine with no parakeet build can still run whisper.
 """
 
-from pathlib import Path
-
 from config import settings
 
 from .ports import DiarizationResult, Aligner, Diarizer, Transcriber, Turn, Word
@@ -19,7 +17,7 @@ from .overlap import compute_overlaps
 __all__ = [
     "Word", "Turn", "DiarizationResult", "Transcriber", "Diarizer", "Aligner",
     "make_transcriber", "make_diarizer", "make_aligner", "align_words",
-    "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "compute_overlaps", "engine_status", "alignment_engine_status",
+    "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "compute_overlaps", "probe_engine", "engine_status", "alignment_engine_status",
 ]
 
 TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp", "qwen3-asr", "vibevoice"]
@@ -129,66 +127,14 @@ def make_diarizer() -> Diarizer:
 
 
 def engine_status(preset: dict) -> dict:
-    """Whether a Preset can actually run here — its CLI and its model must both exist.
+    """Return structured Engine health plus the legacy availability fields."""
+    return probe_engine(preset).to_dict()
 
-    The UI greys out what it cannot run rather than letting the user queue a Job that
-    is going to die in the worker.
-    """
-    engine = preset.get("engine")
 
-    if engine == "faster-whisper":
-        try:
-            import faster_whisper  # noqa: F401
-        except ImportError:
-            return {"available": False, "reason": "faster-whisper is not installed"}
+def probe_engine(preset: dict, deep: bool = False):
+    from .health import probe_engine as _probe
 
-        model_path = preset.get("model_path") or ""
-        if not model_path:
-            return {"available": False, "reason": "Missing model_path"}
-
-        # If it is a local relative or absolute path, verify existence
-        if (
-            model_path.startswith(".")
-            or model_path.startswith("/")
-            or model_path.startswith("\\")
-            or (len(model_path) > 1 and model_path[1] == ":")
-        ):
-            if not Path(model_path).exists():
-                return {"available": False, "reason": f"Model not found at {model_path}"}
-
-        return {"available": True, "reason": None}
-
-    if engine in ("qwen3-asr", "vibevoice"):
-        try:
-            import torch  # noqa: F401
-            import transformers  # noqa: F401
-        except ImportError:
-            return {"available": False, "reason": f"{engine} requires torch and transformers"}
-
-        model_path = preset.get("model_path") or ""
-        if not model_path:
-            return {"available": False, "reason": "Missing model_path"}
-
-        if not Path(model_path).exists():
-            return {"available": False, "reason": f"Model not found at {model_path}"}
-
-        return {"available": True, "reason": None}
-
-    cli = {
-        "whisper.cpp": settings.whisper_cli_path,
-        "parakeet.cpp": settings.parakeet_cli_path,
-    }.get(engine)
-
-    if cli is None:
-        return {"available": False, "reason": f"Unknown engine '{engine}'"}
-    if not Path(cli).exists():
-        return {"available": False, "reason": f"{engine} binary not found at {cli}"}
-
-    model_path = preset.get("model_path") or ""
-    if not Path(model_path).exists():
-        return {"available": False, "reason": f"Model not found at {model_path}"}
-
-    return {"available": True, "reason": None}
+    return _probe(preset, deep=deep)
 
 
 def make_aligner(config: dict | None = None) -> Aligner:

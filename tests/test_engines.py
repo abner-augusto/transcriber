@@ -467,20 +467,27 @@ def test_qwen3_word_overlap_stitching():
 
 
 def test_engine_status_for_new_engines(tmp_path):
-    """engine_status checks torch/transformers and model_path existence."""
+    """engine_status rejects missing and metadata-free checkpoints."""
     from engines import engine_status
 
     model_dir = tmp_path / "model"
     model_dir.mkdir()
 
-    valid_qwen = {"engine": "qwen3-asr", "model_path": str(model_dir)}
-    status = engine_status(valid_qwen)
-    assert status["available"] is True
+    incomplete_qwen = {"engine": "qwen3-asr", "model_path": str(model_dir)}
+    status = engine_status(incomplete_qwen)
+    assert status["available"] is False
+    assert status["state"] == "blocked"
+    assert any(check["code"] == "checkpoint.primary.config" for check in status["checks"])
 
     missing_qwen = {"engine": "qwen3-asr", "model_path": str(tmp_path / "nonexistent")}
     status_miss = engine_status(missing_qwen)
     assert status_miss["available"] is False
-    assert "not found" in status_miss["reason"].lower()
+    directory_check = next(
+        check for check in status_miss["checks"]
+        if check["code"] == "checkpoint.primary.directory"
+    )
+    assert directory_check["passed"] is False
+    assert "not found" in directory_check["message"].lower()
 
 
 @pytest.mark.parametrize(

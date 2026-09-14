@@ -16,6 +16,7 @@ from models.job import Job, JobType, JobStatus
 from config import get_meeting_path
 from services.audio_service import AudioService
 from tasks.process_meeting import process_meeting_task
+from engines import probe_engine
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -23,6 +24,13 @@ router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024 * 1024  # 5 GB
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".flac", ".aac", ".wma", ".mov", ".avi", ".mkv"}
 MAX_TITLE_LENGTH = 500
+
+
+def _require_usable_preset(preset: dict) -> dict:
+    health = probe_engine(preset).to_dict()
+    if health["state"] == "blocked":
+        raise HTTPException(409, {"message": health["summary"], "health": health})
+    return health
 
 
 @router.get("")
@@ -240,6 +248,9 @@ def start_processing(meeting_id: str, db: Session = Depends(get_db)):
     if meeting.status == MeetingStatus.PROCESSING:
         raise HTTPException(400, "Already processing")
 
+    preset = presets.resolve_preset(meeting.preset_id)
+    health = _require_usable_preset(preset)
+
     # Atomic status transition to prevent duplicate processing
     rows = db.execute(
         update(Meeting)
@@ -252,7 +263,7 @@ def start_processing(meeting_id: str, db: Session = Depends(get_db)):
         raise HTTPException(409, "Meeting is already being processed")
 
     job = _queue_full_processing(db, meeting)
-    return job.to_dict()
+    return {**job.to_dict(), "engine_health": health}
 
 
 class DuplicateMeetingRequest(BaseModel):
@@ -275,6 +286,7 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
     preset = presets.get_preset(req.preset_id)
     if not preset:
         raise HTTPException(400, f"Unknown preset '{req.preset_id}'")
+    health = _require_usable_preset(preset)
 
     copy = Meeting(
         title=f"{source.title} (copy · {preset['name']})"[:MAX_TITLE_LENGTH],
@@ -307,7 +319,7 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
     db.commit()
 
     _queue_full_processing(db, copy)
-    return copy.to_dict()
+    return {**copy.to_dict(), "engine_health": health}
 
 
 @router.post("/{meeting_id}/rediarize")

@@ -276,7 +276,8 @@ export default function SettingsDialog({ onClose }: Props) {
       const data = await getModelSettings();
       setSettings(data);
     } catch (err: any) {
-      setAddError(err?.response?.data?.detail || "Failed to save preset");
+      const detail = err?.response?.data?.detail;
+      setAddError(detail?.message || detail || "Failed to save preset");
     }
   }
 
@@ -300,7 +301,8 @@ export default function SettingsDialog({ onClose }: Props) {
       const { default_preset } = await setDefaultPreset(id);
       setSettings({ ...settings, default_preset });
     } catch (err: any) {
-      alert(err?.response?.data?.detail || "Failed to set default preset");
+      const detail = err?.response?.data?.detail;
+      alert(detail?.message || detail || "Failed to set default preset");
     } finally {
       setDefaultSaving(null);
     }
@@ -378,19 +380,19 @@ export default function SettingsDialog({ onClose }: Props) {
                     >
                       <label
                         className="flex items-start gap-3 min-w-0 flex-1 cursor-pointer"
-                        title={p.available ? undefined : p.reason || "Unavailable"}
+                        title={p.state === "ready" ? undefined : p.summary}
                       >
                         <input
                           type="radio"
                           name="default-preset"
                           checked={settings.default_preset === p.id}
-                          disabled={!p.available || defaultSaving === p.id}
+                          disabled={p.state === "blocked" || defaultSaving === p.id}
                           onChange={() => handleSetDefault(p.id)}
                           className="accent-violet-600 mt-1"
                         />
                         <span
                           className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                            p.available ? "bg-emerald-400 ring-2 ring-emerald-400/20" : "bg-red-400 ring-2 ring-red-400/20"
+                            p.state === "ready" ? "bg-emerald-400 ring-2 ring-emerald-400/20" : p.state === "degraded" ? "bg-amber-400 ring-2 ring-amber-400/20" : "bg-red-400 ring-2 ring-red-400/20"
                           }`}
                         />
                         <div className="min-w-0 flex-1">
@@ -441,10 +443,22 @@ export default function SettingsDialog({ onClose }: Props) {
                             )}
                           </div>
 
-                          {!p.available && p.reason && (
+                          {p.state !== "ready" && (
                             <p className="text-[11px] text-amber-400/90 mt-1 flex items-center gap-1">
-                              <span>⚠️</span> {p.reason}
+                              <span>⚠️</span> {p.summary}
                             </p>
+                          )}
+                          {p.checks.length > 0 && (
+                            <details className="text-[10px] text-slate-500 mt-1">
+                              <summary className="cursor-pointer">Health checks</summary>
+                              <ul className="mt-1 space-y-0.5">
+                                {p.checks.map((check) => (
+                                  <li key={check.code} className={check.passed ? "text-slate-500" : "text-amber-400/90"}>
+                                    {check.passed ? "✓" : "×"} {check.message}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
                           )}
                         </div>
                       </label>
@@ -479,7 +493,7 @@ export default function SettingsDialog({ onClose }: Props) {
                 )}
               </div>
               <p className="text-[10px] text-slate-600 mt-2">
-                Select the radio to make a preset the default. Unavailable presets are missing their engine binary or model file.
+                Select the radio to make a Preset the default. Blocked Presets cannot process Meetings; degraded Presets use the stated fallback.
               </p>
 
               {/* Add / Edit preset form */}

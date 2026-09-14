@@ -7,6 +7,7 @@ import { useStore } from "../store";
 import { formatVocabulary, cleanParticipants } from "../utils/vocabulary";
 import { listVocabularyProfiles, createVocabularyProfile } from "../api";
 import type { VocabularyProfile } from "../types";
+import { firstUsablePreset } from "../utils/engineHealth";
 
 const STATUS_LABELS: Record<string, { text: string; color: string; dot: string }> = {
   uploaded: { text: "Ready", color: "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20", dot: "bg-sky-400" },
@@ -103,6 +104,10 @@ export default function HomePage() {
     try {
       const data = await getModelSettings();
       setModelSettings(data);
+      const defaultPreset = data.presets.find((p) => p.id === data.default_preset);
+      if (defaultPreset?.state === "blocked") {
+        setPresetId(firstUsablePreset(data.presets)?.id || "");
+      }
     } catch {
       setModelSettings(null);
     }
@@ -143,7 +148,8 @@ export default function HomePage() {
       resetDialog();
       navigate(`/meetings/${meeting.id}`);
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.message || "Upload failed";
+      const detail = err?.response?.data?.detail;
+      const msg = detail?.message || detail || err?.message || "Upload failed";
       setError(msg);
     } finally {
       setUploading(false);
@@ -431,16 +437,22 @@ export default function HomePage() {
                 onChange={(e) => setPresetId(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
               >
-                <option value="">
+                <option value="" disabled={modelSettings?.presets.find((p) => p.id === modelSettings.default_preset)?.state === "blocked"}>
                   Default{modelSettings ? ` (${modelSettings.presets.find((p) => p.id === modelSettings.default_preset)?.name || modelSettings.default_preset})` : ""}
                 </option>
                 {modelSettings?.presets.map((p) => (
-                  <option key={p.id} value={p.id} disabled={!p.available} title={p.available ? undefined : p.reason || undefined}>
+                  <option key={p.id} value={p.id} disabled={p.state === "blocked"} title={p.state === "ready" ? undefined : p.summary}>
                     {p.name} — {p.engine}
-                    {!p.available ? ` (unavailable)` : ""}
+                    {p.state === "blocked" ? " (blocked)" : p.state === "degraded" ? " (degraded)" : ""}
                   </option>
                 ))}
               </select>
+              {(() => {
+                const selectedPreset = modelSettings?.presets.find((p) => p.id === (presetId || modelSettings.default_preset));
+                return selectedPreset?.state === "degraded" ? (
+                  <p className="text-xs text-amber-400 mt-1.5">{selectedPreset.summary}</p>
+                ) : null;
+              })()}
               <p className="text-xs text-slate-600 mt-1.5">
                 Choose which Engine transcribes this file. Useful for comparing results across Presets.
               </p>

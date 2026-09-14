@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getModelSettings, duplicateMeeting } from "../api";
 import type { Preset } from "../types";
+import { firstUsablePreset } from "../utils/engineHealth";
 
 interface Props {
   meetingId: string;
@@ -18,7 +19,7 @@ export default function DuplicateReprocessDialog({ meetingId, currentPresetId, o
   useEffect(() => {
     getModelSettings().then((data) => {
       setPresets(data.presets);
-      const fallback = data.presets.find((p) => p.id !== currentPresetId) || data.presets[0];
+      const fallback = firstUsablePreset(data.presets, currentPresetId);
       setSelected(fallback?.id || "");
     });
   }, [currentPresetId]);
@@ -48,11 +49,13 @@ export default function DuplicateReprocessDialog({ meetingId, currentPresetId, o
           {presets.map((p) => (
             <button
               key={p.id}
+              disabled={p.state === "blocked"}
               onClick={() => setSelected(p.id)}
               className={`w-full text-left p-4 rounded-xl border transition-all ${
                 selected === p.id
                   ? "border-violet-500/50 bg-violet-500/10"
                   : "border-slate-800/50 hover:bg-slate-800/50 hover:border-slate-700/50"
+              } ${p.state === "blocked" ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
               <div className="flex items-center gap-2">
@@ -60,11 +63,12 @@ export default function DuplicateReprocessDialog({ meetingId, currentPresetId, o
                 {p.id === currentPresetId && (
                   <span className="text-[10px] uppercase tracking-wide text-slate-500 bg-slate-800 rounded px-1.5 py-0.5">current</span>
                 )}
-                {!p.available && (
-                  <span className="text-[10px] uppercase tracking-wide text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">unavailable</span>
+                {p.state !== "ready" && (
+                  <span className="text-[10px] uppercase tracking-wide text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">{p.state}</span>
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">{p.engine}</p>
+              {p.state !== "ready" && <p className="text-xs text-amber-400/90 mt-1">{p.summary}</p>}
             </button>
           ))}
           {presets.length === 0 && (

@@ -7,6 +7,15 @@ from sqlalchemy.pool import StaticPool
 from database import Base, get_db
 from main import app
 from models import Meeting, MeetingStatus
+from models.job import Job
+
+
+class FakeHealth:
+    def to_dict(self):
+        return {
+            "state": "blocked", "summary": "runtime mismatch", "checks": [],
+            "fingerprint": "fixture", "available": False, "reason": "runtime mismatch",
+        }
 
 
 @pytest.fixture
@@ -85,3 +94,26 @@ def test_update_nonexistent_meeting(db_session):
     client = TestClient(app)
     resp = client.put("/api/meetings/nonexistent-id", json={"title": "New Title"})
     assert resp.status_code == 404
+
+
+def test_blocked_preset_cannot_create_or_queue_job(db_session, monkeypatch):
+    client = TestClient(app)
+    meeting = Meeting(title="Blocked", status=MeetingStatus.UPLOADED, preset_id="blocked")
+    db_session.add(meeting)
+    db_session.commit()
+    meeting_id = meeting.id
+    monkeypatch.setattr("api.meetings.presets.resolve_preset", lambda _preset_id: {
+        "id": "blocked", "name": "Blocked", "engine": "vibevoice", "model_path": "missing"
+    })
+    monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: FakeHealth())
+    queued = []
+    monkeypatch.setattr("api.meetings.process_meeting_task.delay", lambda *_args: queued.append(True))
+
+    response = client.post(f"/api/meetings/{meeting_id}/process")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["health"]["state"] == "blocked"
+    db_session.refresh(meeting)
+    assert meeting.status == MeetingStatus.UPLOADED
+    assert db_session.query(Job).count() == 0
+    assert queued == []

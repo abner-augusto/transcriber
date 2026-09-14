@@ -9,13 +9,16 @@ Enforce blocked health at every API boundary that can queue a Job.
 
 **Blocked by:** 03 - Pin Reproducible Engine Runtime Dependencies.
 
-**Status:** blocked
+**Status:** done
 
-- [ ] Every Preset has structured health with stable check codes and a runtime fingerprint.
-- [ ] Required failures are `blocked`; optional failures are `degraded`.
-- [ ] Fast probes do not load weights, allocate GPU memory, use the network, or mutate the environment.
-- [ ] Blocked Presets cannot be made default, duplicated for processing, or queued through direct API calls.
-- [ ] Degraded Presets remain selectable with a visible warning.
-- [ ] Frontend selectors never auto-select a blocked Preset.
-- [ ] Backend and frontend tests cover all states and queue enforcement.
+- [x] Every Preset has structured health with stable check codes and a runtime fingerprint.
+- [x] Required failures are `blocked`; optional failures are `degraded`.
+- [x] Fast probes do not load weights, allocate GPU memory, use the network, or mutate the environment.
+- [x] Blocked Presets cannot be made default, duplicated for processing, or queued through direct API calls.
+- [x] Degraded Presets remain selectable with a visible warning.
+- [x] Frontend selectors never auto-select a blocked Preset.
+- [x] Backend and frontend tests cover all states and queue enforcement.
 
+**Verification:** Health/API tests pass (11 tests), frontend tests pass (25 tests),
+the production frontend build succeeds, and the resource-limited backend suite
+passes (190 tests). Validation ran sequentially with GPU disabled.

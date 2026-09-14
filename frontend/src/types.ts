@@ -82,6 +82,17 @@ export interface Preset {
   vad_filter?: boolean | null;
   available: boolean;
   reason: string | null;
+  state: "ready" | "degraded" | "blocked";
+  summary: string;
+  fingerprint: string;
+  checks: EngineCheck[];
+}
+
+export interface EngineCheck {
+  code: string;
+  required: boolean;
+  passed: boolean;
+  message: string;
 }
 
 export interface ModelSettings {
