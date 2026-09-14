@@ -48,10 +48,51 @@ if (-not (Test-DockerRunning)) {
 }
 
 # Bring up Postgres + Redis
-try {
-    docker compose --project-directory "$ProjectRoot" up -d 2>$null
-} catch {
-    Write-Host "Docker compose already running or provided status output." -ForegroundColor Yellow
+if (Test-DockerRunning) {
+    Write-Host "Checking Docker containers..." -ForegroundColor Cyan
+
+    $definedServices = @(& docker compose --project-directory "$ProjectRoot" config --services 2>$null)
+    if (-not $definedServices -or $definedServices.Count -eq 0) {
+        $definedServices = @("postgres", "redis")
+    }
+
+    $existingServices = @(& docker compose --project-directory "$ProjectRoot" ps -a --format "{{.Service}}" 2>$null)
+    $missingServices = @($definedServices | Where-Object { $_ -and ($existingServices -notcontains $_) })
+
+    if ($missingServices.Count -gt 0) {
+        Write-Host "Container(s) not found for: $($missingServices -join ', '). Creating new instance(s)..." -ForegroundColor Yellow
+        docker compose --project-directory "$ProjectRoot" up -d
+    } else {
+        $runningServices = @(& docker compose --project-directory "$ProjectRoot" ps --status running --format "{{.Service}}" 2>$null)
+        $stoppedServices = @($definedServices | Where-Object { $_ -and ($runningServices -notcontains $_) })
+
+        if ($stoppedServices.Count -gt 0) {
+            Write-Host "Container(s) exist but are stopped ($($stoppedServices -join ', ')). Starting existing instance(s)..." -ForegroundColor Yellow
+            docker compose --project-directory "$ProjectRoot" start
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Starting existing containers failed. Retrying with 'docker compose up -d'..." -ForegroundColor Yellow
+                docker compose --project-directory "$ProjectRoot" up -d
+            }
+        } else {
+            Write-Host "Docker container(s) already exist and are running." -ForegroundColor Green
+        }
+    }
+
+    # Wait for database container to be ready
+    Write-Host "Waiting for database to be ready..." -ForegroundColor Cyan
+    $waitTimeout = 15
+    $waitElapsed = 0
+    while ($waitElapsed -lt $waitTimeout) {
+        $pgStatus = (& docker compose --project-directory "$ProjectRoot" ps postgres --format "{{.Status}}" 2>$null)
+        if ($pgStatus -match "healthy") {
+            Write-Host "Database is ready." -ForegroundColor Green
+            break
+        }
+        Start-Sleep -Seconds 1
+        $waitElapsed += 1
+    }
+} else {
+    Write-Host "Docker engine is not responding. Continuing - backend or services may fail to connect." -ForegroundColor Red
 }
 
 # Backend
