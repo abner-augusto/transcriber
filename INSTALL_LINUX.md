@@ -179,7 +179,7 @@ venv-engines/vibevoice/bin/python -m engine_runtimes.manifest vibevoice --checkp
 
 On a compatibility error, recreate the affected Engine runtime and reinstall its
 requirement file. Qwen3-ASR uses Transformers 5.16.1 with native forced alignment;
-VibeVoice uses Transformers 4.57.6 and proportional Word timestamps. Do not mix
+VibeVoice uses Transformers 4.57.6, BitsAndBytes NF4, and proportional Word timestamps. Do not mix
 their dependency sets.
 
 **Note**: First install downloads several GB of model files for pyannote.audio and SpeechBrain.

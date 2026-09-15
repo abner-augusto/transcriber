@@ -423,6 +423,53 @@ def test_make_transcriber_supports_qwen3_and_vibevoice():
     assert isinstance(vibe, IsolatedPythonTranscriber)
     assert vibe.engine_id == "vibevoice"
     assert vibe.model_path == "models/vibe"
+    assert vibe.options["quantization"] == "nf4"
+
+
+def test_vibevoice_cuda_loader_uses_nf4_quantization(monkeypatch):
+    import engines.vibevoice as module
+
+    captured = {}
+
+    class ProcessorLoader:
+        @staticmethod
+        def from_pretrained(path):
+            assert path == "primary"
+            return object()
+
+    class Model:
+        def eval(self):
+            return self
+
+    class ModelLoader:
+        @staticmethod
+        def from_pretrained(path, **kwargs):
+            captured.update(kwargs)
+            return Model()
+
+    class QuantizationConfig:
+        def __init__(self, **kwargs):
+            self.options = kwargs
+
+    monkeypatch.setitem(sys.modules, "vibevoice.modular.modeling_vibevoice_asr",
+        types.SimpleNamespace(VibeVoiceASRForConditionalGeneration=ModelLoader))
+    monkeypatch.setitem(sys.modules, "vibevoice.processor.vibevoice_asr_processor",
+        types.SimpleNamespace(VibeVoiceASRProcessor=ProcessorLoader))
+    monkeypatch.setattr(module, "BitsAndBytesConfig", QuantizationConfig, raising=False)
+    monkeypatch.setattr(sys.modules["transformers"], "BitsAndBytesConfig", QuantizationConfig, raising=False)
+
+    transcriber = module.VibeVoiceTranscriber(model_path="primary", device="cuda", quantization="nf4")
+    transcriber._ensure_model_loaded()
+
+    config = captured["quantization_config"]
+    assert config.options == {
+        "load_in_4bit": True,
+        "bnb_4bit_compute_dtype": module.torch.bfloat16,
+        "bnb_4bit_quant_type": "nf4",
+    }
+    assert captured["device_map"] == "cuda"
+    assert captured["attn_implementation"] == "sdpa"
+    assert "torch_dtype" not in captured
 
 
 def test_vibevoice_segment_parsing_and_labels():

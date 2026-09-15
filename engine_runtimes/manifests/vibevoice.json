@@ -1,10 +1,11 @@
 {
   "schema_version": 1,
-  "runtime_id": "vibevoice-v1",
+  "runtime_id": "vibevoice-v2",
   "python": ">=3.10,<3.15",
   "packages": {
     "vibevoice": "==1.0.0",
     "transformers": "==4.57.6",
+    "bitsandbytes": "==0.50.0",
     "torch": ">=2.11,<2.12",
     "torchaudio": "==2.11.0"
   },
@@ -12,7 +13,7 @@
     "vibevoice": {"url": "https://github.com/microsoft/VibeVoice.git", "commit": "1541f590c7099820f10ea012f48d2399282df69f"}
   },
   "transformers": "==4.57.6",
-  "torch": {"version": ">=2.11,<2.12", "cuda": "CUDA 12.8 wheel tested; CPU loading supported"},
+  "torch": {"version": ">=2.11,<2.12", "cuda": "CUDA 12.8 with BitsAndBytes NF4 tested; CPU loading uses float32"},
   "model_types": ["vibevoice"],
   "capabilities": {
     "forced-alignment": {

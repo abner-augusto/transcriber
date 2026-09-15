@@ -31,7 +31,7 @@ def _compatible_runtime(tmp_path, monkeypatch):
     runtime.parent.mkdir(parents=True)
     runtime.touch()
     monkeypatch.setattr("engines.health.settings.vibevoice_python", str(runtime))
-    versions = {"vibevoice": "1.0.0", "transformers": "4.57.6", "torch": "2.11.0", "torchaudio": "2.11.0"}
+    versions = {"vibevoice": "1.0.0", "transformers": "4.57.6", "bitsandbytes": "0.50.0", "torch": "2.11.0", "torchaudio": "2.11.0"}
     monkeypatch.setattr("engines.health._module_source", lambda *_args: __file__)
     monkeypatch.setattr("engines.health._source_defines", lambda _path, _attribute: True)
     monkeypatch.setattr("engines.health._cuda_available", lambda: True)

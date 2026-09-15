@@ -14,7 +14,7 @@ SCHEMA_VERSION = 1
 _REQUEST_FIELDS = {"schema_version", "operation", "engine_id", "audio_path", "vocabulary", "model_path", "aligner_path", "device", "options"}
 _RESPONSE_FIELDS = {"schema_version", "words", "native_diarization", "diagnostics", "runtime_fingerprint", "error"}
 _ERROR_FIELDS = {"code", "message", "retryable", "degraded_capabilities"}
-_OPTION_FIELDS = {"language", "chunk_seconds", "window_seconds", "overlap_seconds"}
+_OPTION_FIELDS = {"language", "chunk_seconds", "window_seconds", "overlap_seconds", "quantization"}
 
 
 class ProtocolError(ValueError):

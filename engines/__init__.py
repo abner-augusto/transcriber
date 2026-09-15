@@ -112,7 +112,7 @@ def make_transcriber(preset: dict) -> Transcriber:
             model_path=model_path,
             aligner_path=preset.get("aligner_path"),
             device=preset.get("device", "cuda"),
-            options={"window_seconds": float(preset.get("window_seconds", 600.0)), "overlap_seconds": float(preset.get("overlap_seconds", 45.0))},
+            options={"window_seconds": float(preset.get("window_seconds", 600.0)), "overlap_seconds": float(preset.get("overlap_seconds", 45.0)), "quantization": preset.get("quantization", "nf4")},
         )
 
     raise ValueError(f"Unknown transcription engine '{engine}'. Known: {TRANSCRIBER_ENGINES}")

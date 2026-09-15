@@ -104,7 +104,7 @@ def test_editable_install_cannot_satisfy_immutable_source(monkeypatch):
             return json.dumps({"dir_info": {"editable": True}, "url": "file:///local/clone"})
 
     monkeypatch.setattr("engine_runtimes.manifest.importlib.metadata.version", lambda name: {
-        "vibevoice": "1.0.0", "transformers": "4.57.6", "torch": "2.11.0",
+        "vibevoice": "1.0.0", "transformers": "4.57.6", "bitsandbytes": "0.50.0", "torch": "2.11.0",
         "torchaudio": "2.11.0",
     }[name])
     monkeypatch.setattr("engine_runtimes.manifest.importlib.metadata.distribution", lambda name: Distribution())

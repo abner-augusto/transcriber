@@ -5,8 +5,8 @@ speakers and transcribes speech in a single unified pass. This adapter satisfies
 the Transcriber protocol while also providing native DiarizationResult turns,
 allowing pipeline tasks to bypass external diarization (PyAnnote) with 99.44% precision.
 
-Sliding window chunking (10 minutes with 45s overlap) is applied to keep peak VRAM
-bounded below 7 GB and eliminate cross-window speaker identity drift.
+NF4 quantization and sliding windows (10 minutes with 45s overlap) bound peak
+VRAM while preserving bfloat16 compute and cross-window speaker identity.
 """
 
 import difflib
@@ -229,12 +229,14 @@ class VibeVoiceTranscriber:
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         window_seconds: float = WINDOW_SECONDS,
         overlap_seconds: float = OVERLAP_SECONDS,
+        quantization: str = "nf4",
     ):
         self.model_path = model_path
         self.aligner_path = aligner_path
         self.device = device
         self.window_seconds = window_seconds
         self.overlap_seconds = overlap_seconds
+        self.quantization = quantization
 
         self._model = None
         self._processor = None
@@ -257,10 +259,21 @@ class VibeVoiceTranscriber:
 
             log.info(f"[vibevoice] Loading model from {self.model_path} onto {self.device}")
             self._processor = VibeVoiceASRProcessor.from_pretrained(self.model_path)
+            load_options = {"device_map": self.device, "attn_implementation": "sdpa"}
+            if self.quantization == "nf4" and "cuda" in self.device:
+                from transformers import BitsAndBytesConfig
+
+                load_options["quantization_config"] = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                    bnb_4bit_quant_type="nf4",
+                )
+            elif self.quantization not in {"nf4", "none"}:
+                raise ValueError(f"Unsupported VibeVoice quantization: {self.quantization!r}")
+            else:
+                load_options["torch_dtype"] = torch.float32 if "cpu" in self.device else torch.bfloat16
             self._model = VibeVoiceASRForConditionalGeneration.from_pretrained(
-                self.model_path,
-                torch_dtype=torch.bfloat16 if "cuda" in self.device else torch.float32,
-                device_map=self.device,
+                self.model_path, **load_options
             )
             self._model.eval()
 

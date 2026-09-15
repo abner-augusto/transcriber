@@ -192,7 +192,7 @@ done
 Each Engine has an independent compatibility contract and tested
 Python/Torch/CUDA/Transformers matrix in `engine_runtimes/manifests/`. Qwen3-ASR uses native Transformers
 5.16.1 support, including the Qwen3 ForcedAligner; VibeVoice remains isolated on
-Transformers 4.57.6 because its pinned upstream package requires `<5.0`. Do not
+Transformers 4.57.6 and uses BitsAndBytes NF4 quantization. Do not
 upgrade either runtime independently of its manifest.
 
 To verify downloaded checkpoint metadata, configure its path and run, for example:
