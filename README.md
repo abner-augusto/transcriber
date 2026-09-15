@@ -179,19 +179,21 @@ Edit the file and fill in your actual paths and tokens.
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt
 python -m pip check
-python -m engine_runtimes.manifest qwen3-asr --include-optional --presets-dir model_presets
-python -m engine_runtimes.manifest vibevoice --include-optional --presets-dir model_presets
+
+for engine in qwen3-asr vibevoice; do
+  python3 -m venv "venv-engines/$engine"
+  "venv-engines/$engine/bin/python" -m pip install torch==2.11.0 torchaudio==2.11.0
+  "venv-engines/$engine/bin/python" -m pip install -r "requirements/engines/$engine.txt"
+  "venv-engines/$engine/bin/python" -m engine_runtimes.manifest "$engine" --include-optional --presets-dir model_presets
+done
 ```
 
-The Engine files pin Qwen3-ASR and VibeVoice to immutable Git commits. Their
-independent compatibility contracts and tested Python/Torch/CUDA/Transformers
-matrix are in `engine_runtimes/manifests/`. The current matrix uses Transformers
-4.57.6 for both Engines; do not upgrade it independently of those manifests.
-The Qwen forced-aligner capability is explicitly unsupported by this pinned
-runtime and the Engines use proportional timestamps when no supported aligner is
-configured.
+Each Engine has an independent compatibility contract and tested
+Python/Torch/CUDA/Transformers matrix in `engine_runtimes/manifests/`. Qwen3-ASR uses native Transformers
+5.16.1 support, including the Qwen3 ForcedAligner; VibeVoice remains isolated on
+Transformers 4.57.6 because its pinned upstream package requires `<5.0`. Do not
+upgrade either runtime independently of its manifest.
 
 To verify downloaded checkpoint metadata, configure its path and run, for example:
 

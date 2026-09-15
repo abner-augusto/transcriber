@@ -18,7 +18,7 @@
     "forced-alignment": {
       "required": false,
       "supported": false,
-      "reason": "The pinned Qwen3-ASR commit does not export Qwen3ASRForTokenClassification and Transformers 4.57.6 cannot load qwen3_asr through the Auto token-classification API.",
+      "reason": "Native Qwen3 forced alignment requires Transformers 5.13+, while the pinned VibeVoice source requires Transformers <5.0; VibeVoice uses proportional Word timestamps in its isolated runtime.",
       "packages": {},
       "model_types": ["qwen3_asr"],
       "required_imports": []

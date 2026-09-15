@@ -190,6 +190,13 @@ foreach ($engineRuntime in @("qwen3-asr", "vibevoice")) {
         python -m venv $runtimeDir
         Assert-NativeSuccess "$engineRuntime environment creation" $LASTEXITCODE
     }
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        & $runtimePython -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128 -q
+        Assert-NativeSuccess "$engineRuntime CUDA PyTorch installation" $LASTEXITCODE
+    } else {
+        & $runtimePython -m pip install torch==2.11.0 torchaudio==2.11.0 -q
+        Assert-NativeSuccess "$engineRuntime CPU PyTorch installation" $LASTEXITCODE
+    }
     & $runtimePython -m pip install -r "requirements/engines/$engineRuntime.txt" -q
     Assert-NativeSuccess "$engineRuntime dependency installation" $LASTEXITCODE
     & $runtimePython -m pip check

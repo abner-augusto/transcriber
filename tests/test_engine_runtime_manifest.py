@@ -29,8 +29,9 @@ def write_manifest(tmp_path: Path, data: dict) -> Path:
 def test_checked_in_manifests_are_valid_and_portable(runtime):
     manifest = load_manifest(runtime)
 
-    assert manifest.runtime_id.endswith("-v1")
-    assert manifest.transformers == "==4.57.6"
+    assert manifest.runtime_id.rsplit("-v", 1)[-1].isdigit()
+    expected_transformers = "==5.16.1" if runtime == "qwen3-asr" else "==4.57.6"
+    assert manifest.transformers == expected_transformers
     raw = (MANIFEST_DIR / f"{runtime}.json").read_text(encoding="utf-8")
     assert "C:/Users/" not in raw
     assert "C:\\Users\\" not in raw
@@ -65,8 +66,7 @@ def test_package_version_mismatch_is_reported(monkeypatch):
     monkeypatch.setattr("engine_runtimes.manifest.importlib.import_module", lambda name: object())
 
     errors = validate_environment(manifest)
-    assert any("qwen-asr 99.0.0 does not satisfy ==0.0.6" in error for error in errors)
-    assert any("transformers 99.0.0 does not satisfy ==4.57.6" in error for error in errors)
+    assert any("transformers 99.0.0 does not satisfy ==5.16.1" in error for error in errors)
 
 
 def test_unsupported_checkpoint_model_type_is_rejected(tmp_path):
@@ -77,7 +77,7 @@ def test_unsupported_checkpoint_model_type_is_rejected(tmp_path):
     assert errors == ["checkpoint model_type 'wrong-model' is incompatible; expected one of vibevoice"]
 
 
-def test_optional_aligner_mismatch_is_reported_separately(tmp_path):
+def test_unsupported_vibevoice_aligner_is_reported_separately(tmp_path):
     (tmp_path / "config.json").write_text(json.dumps({"model_type": "vibevoice"}), encoding="utf-8")
 
     errors = validate_checkpoint(load_manifest("vibevoice"), tmp_path, capability="forced-alignment")
@@ -86,9 +86,8 @@ def test_optional_aligner_mismatch_is_reported_separately(tmp_path):
     assert "optional capability 'forced-alignment' is unsupported" in errors[0]
 
 
-@pytest.mark.parametrize("runtime", ["qwen3-asr", "vibevoice"])
-def test_unsupported_aligner_does_not_require_nonexistent_runtime_classes(runtime):
-    capability = load_manifest(runtime).capabilities["forced-alignment"]
+def test_unsupported_vibevoice_aligner_does_not_require_nonexistent_runtime_classes():
+    capability = load_manifest("vibevoice").capabilities["forced-alignment"]
 
     assert capability["required"] is False
     assert capability["supported"] is False
@@ -97,7 +96,7 @@ def test_unsupported_aligner_does_not_require_nonexistent_runtime_classes(runtim
 
 
 def test_editable_install_cannot_satisfy_immutable_source(monkeypatch):
-    manifest = load_manifest("qwen3-asr")
+    manifest = load_manifest("vibevoice")
 
     class Distribution:
         def read_text(self, name):
@@ -105,7 +104,7 @@ def test_editable_install_cannot_satisfy_immutable_source(monkeypatch):
             return json.dumps({"dir_info": {"editable": True}, "url": "file:///local/clone"})
 
     monkeypatch.setattr("engine_runtimes.manifest.importlib.metadata.version", lambda name: {
-        "qwen-asr": "0.0.6", "transformers": "4.57.6", "torch": "2.11.0",
+        "vibevoice": "1.0.0", "transformers": "4.57.6", "torch": "2.11.0",
         "torchaudio": "2.11.0",
     }[name])
     monkeypatch.setattr("engine_runtimes.manifest.importlib.metadata.distribution", lambda name: Distribution())
@@ -113,7 +112,7 @@ def test_editable_install_cannot_satisfy_immutable_source(monkeypatch):
 
     errors = validate_environment(manifest)
 
-    assert any("qwen-asr is not installed from immutable commit" in error for error in errors)
+    assert any("vibevoice is not installed from immutable commit" in error for error in errors)
 
 
 def test_preset_checkpoint_validation_uses_configured_paths(tmp_path):
@@ -168,5 +167,23 @@ def test_git_requirements_use_full_immutable_commits():
             line for line in path.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.lstrip().startswith("#") and "git+" in line
         ]
-        assert len(git_lines) == 1
-        assert requirement.fullmatch(git_lines[0])
+        expected_count = 0 if path.name == "qwen3-asr.txt" else 1
+        assert len(git_lines) == expected_count
+        assert all(requirement.fullmatch(line) for line in git_lines)
+
+
+def test_installers_install_cuda_torch_inside_each_engine_runtime():
+    root = Path(__file__).parents[1]
+    for requirements in (root / "requirements" / "engines").glob("*.txt"):
+        names = {
+            line.split("=", 1)[0].strip().lower()
+            for line in requirements.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        }
+        assert "torch" not in names
+        assert "torchaudio" not in names
+
+    windows = (root / "install.ps1").read_text(encoding="utf-8")
+    linux = (root / "install.sh").read_text(encoding="utf-8")
+    assert '& $runtimePython -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url' in windows
+    assert '"$runtime_python" -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url' in linux

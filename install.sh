@@ -198,6 +198,11 @@ for engine_runtime in qwen3-asr vibevoice; do
   runtime_dir="venv-engines/$engine_runtime"
   runtime_python="$runtime_dir/bin/python"
   [ -x "$runtime_python" ] || python3 -m venv "$runtime_dir"
+  if [ "$PLATFORM" = "linux" ] && command -v nvidia-smi >/dev/null 2>&1; then
+    "$runtime_python" -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128 -q
+  else
+    "$runtime_python" -m pip install torch==2.11.0 torchaudio==2.11.0 -q
+  fi
   "$runtime_python" -m pip install -r "requirements/engines/$engine_runtime.txt" -q
   "$runtime_python" -m pip check
   "$runtime_python" -m engine_runtimes.manifest "$engine_runtime" --include-optional --presets-dir model_presets

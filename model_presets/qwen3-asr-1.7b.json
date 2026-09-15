@@ -3,6 +3,7 @@
   "name": "Qwen3-ASR 1.7B (PT SOTA + Hotwords)",
   "engine": "qwen3-asr",
   "model_path": "C:/Users/abner/_repos/_local-ai/models/Qwen3-ASR-1.7B-hf",
+  "aligner_path": "C:/Users/abner/_repos/_local-ai/models/Qwen3-ForcedAligner-0.6B-hf",
   "language": "Portuguese",
   "device": "cuda"
 }

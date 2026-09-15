@@ -632,8 +632,6 @@ def test_primary_model_load_failures_still_propagate(
 
 
 def test_qwen3_primary_loader_uses_the_supported_qwen_asr_runtime(monkeypatch):
-    import qwen_asr.core.transformers_backend as backend
-
     from engines.qwen3_asr import Qwen3AsrTranscriber
 
     processor = object()
@@ -652,8 +650,14 @@ def test_qwen3_primary_loader_uses_the_supported_qwen_asr_runtime(monkeypatch):
             assert kwargs["device_map"] == "cpu"
             return model
 
-    monkeypatch.setattr(backend, "Qwen3ASRProcessor", ProcessorLoader)
-    monkeypatch.setattr(backend, "Qwen3ASRForConditionalGeneration", ModelLoader)
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        types.SimpleNamespace(
+            AutoProcessor=ProcessorLoader,
+            AutoModelForMultimodalLM=ModelLoader,
+        ),
+    )
     transcriber = Qwen3AsrTranscriber(model_path="primary", aligner_path=None, device="cpu")
 
     transcriber._ensure_asr_loaded()

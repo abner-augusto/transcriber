@@ -11,7 +11,7 @@ from engine_runtimes.protocol import EngineRequest
 def _request(tmp_path):
     audio = tmp_path / "áudio com espaço.wav"; audio.touch()
     model = tmp_path / "modelo ç"; model.mkdir(exist_ok=True)
-    return EngineRequest("qwen3-asr", str(audio.resolve()), "Garrah", str(model.resolve()), None, "cpu", {})
+    return EngineRequest("transcribe", "qwen3-asr", str(audio.resolve()), "Garrah", str(model.resolve()), None, "cpu", {})
 
 
 def _response(error=None):

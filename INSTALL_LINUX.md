@@ -150,33 +150,37 @@ Edit the file and fill in your actual paths and tokens.
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt
 python -m pip check
-python -m engine_runtimes.manifest qwen3-asr --include-optional --presets-dir model_presets
-python -m engine_runtimes.manifest vibevoice --include-optional --presets-dir model_presets
+
+for engine in qwen3-asr vibevoice; do
+  python3 -m venv "venv-engines/$engine"
+  "venv-engines/$engine/bin/python" -m pip install torch==2.11.0 torchaudio==2.11.0
+  "venv-engines/$engine/bin/python" -m pip install -r "requirements/engines/$engine.txt"
+  "venv-engines/$engine/bin/python" -m engine_runtimes.manifest "$engine" --include-optional --presets-dir model_presets
+done
 ```
 
 If you have an NVIDIA GPU, install the CUDA version of PyTorch first:
 
 ```bash
-pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
-pip install -r requirements.txt
-pip install -r requirements/engines/qwen3-asr.txt -r requirements/engines/vibevoice.txt
+for engine in qwen3-asr vibevoice; do
+  "venv-engines/$engine/bin/python" -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+  "venv-engines/$engine/bin/python" -m pip install -r "requirements/engines/$engine.txt"
+done
 ```
 
-The Engine requirement files use immutable source commits. Compatibility is
-recorded separately in `engine_runtimes/manifests`. Validate model metadata with:
+The VibeVoice requirement uses an immutable source commit. Compatibility is
+recorded in `engine_runtimes/manifests`. Validate model metadata with:
 
 ```bash
-python -m engine_runtimes.manifest qwen3-asr --checkpoint /path/to/Qwen3-ASR-1.7B-hf
-python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/VibeVoice-ASR-Streaming-7B
-python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/Qwen3-ForcedAligner-0.6B-hf --capability forced-alignment
+venv-engines/qwen3-asr/bin/python -m engine_runtimes.manifest qwen3-asr --checkpoint /path/to/Qwen3-ASR-1.7B-hf
+venv-engines/vibevoice/bin/python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/VibeVoice-ASR-Streaming-7B
 ```
 
-On a compatibility error, recreate `venv` and reinstall these files. Do not
-upgrade Transformers independently; the tested version is 4.57.6.
-The pinned runtime does not support the optional Qwen forced aligner; leave
-`aligner_path` unset to use the proportional timestamp fallback.
+On a compatibility error, recreate the affected Engine runtime and reinstall its
+requirement file. Qwen3-ASR uses Transformers 5.16.1 with native forced alignment;
+VibeVoice uses Transformers 4.57.6 and proportional Word timestamps. Do not mix
+their dependency sets.
 
 **Note**: First install downloads several GB of model files for pyannote.audio and SpeechBrain.
 

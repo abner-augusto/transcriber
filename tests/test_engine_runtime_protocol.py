@@ -25,6 +25,12 @@ def test_protocol_round_trip_preserves_unicode_words_and_turns():
     assert EngineResponse.from_dict(response.to_dict()) == response
 
 
+def test_protocol_defaults_legacy_request_to_transcribe_and_accepts_load():
+    assert EngineRequest.from_dict(request_dict()).operation == "transcribe"
+    value = request_dict(); value["operation"] = "load"
+    assert EngineRequest.from_dict(value).operation == "load"
+
+
 @pytest.mark.parametrize("mutation", [
     lambda d: d.update(schema_version=2),
     lambda d: d.update(extra=True),
@@ -56,3 +62,19 @@ def test_isolated_adapter_preserves_native_turns_and_fingerprint(monkeypatch, tm
     assert words[0].text == " Olá"
     assert adapter.get_native_diarization().turns[0].speaker == "SPEAKER_00"
     assert adapter.runtime_fingerprint == "abc"
+
+
+def test_isolated_adapter_sends_load_operation(monkeypatch, tmp_path):
+    model = tmp_path / "modelo"; model.mkdir()
+    response = EngineResponse((), None, {}, "abc")
+    captured = {}
+
+    def launch(**kwargs):
+        captured["request"] = kwargs["request"]
+        return response
+
+    monkeypatch.setattr("engines.isolated_python.launch_engine", launch)
+    adapter = IsolatedPythonTranscriber(engine_id="qwen3-asr", model_path=str(model), aligner_path=None,
+        device="cpu", options={})
+    adapter.load()
+    assert captured["request"].operation == "load"

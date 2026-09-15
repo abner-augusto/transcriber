@@ -20,14 +20,14 @@ def _checkpoint(root, name, model_type):
     return path
 
 
-def _qwen_runtime(tmp_path, monkeypatch, transformers_version="4.57.6"):
+def _qwen_runtime(tmp_path, monkeypatch, transformers_version="5.16.1"):
     runtime = tmp_path / "qwen-runtime" / "Scripts" / "python.exe"
     runtime.parent.mkdir(parents=True)
     runtime.touch()
     monkeypatch.setattr("engines.health.settings.qwen3_asr_python", str(runtime))
     versions = {
-        "qwen-asr": "0.0.6",
         "transformers": transformers_version,
+        "accelerate": "1.12.0",
         "torch": "2.11.0",
         "torchaudio": "2.11.0",
     }
@@ -37,10 +37,7 @@ def _qwen_runtime(tmp_path, monkeypatch, transformers_version="4.57.6"):
 
     class Distribution:
         def __init__(self, version): self.version = version
-        def read_text(self, _name):
-            return json.dumps(
-                {"vcs_info": {"commit_id": "7c6daf77a2421100f5fb066495372c00129d39ff"}}
-            )
+        def read_text(self, _name): return None
 
     monkeypatch.setattr("engines.health._runtime_distributions", lambda _runtime: {
         name: Distribution(version) for name, version in versions.items()
@@ -58,7 +55,7 @@ def test_every_shipped_preset_is_independently_selectable():
 def test_qwen3_asr_primary_checkpoint_is_blocked_on_unsupported_runtime(
     tmp_path, monkeypatch
 ):
-    _qwen_runtime(tmp_path, monkeypatch, transformers_version="4.56.0")
+    _qwen_runtime(tmp_path, monkeypatch, transformers_version="5.15.1")
     primary = _checkpoint(tmp_path, "primary", "qwen3_asr")
     health = probe_engine(
         {"engine": "qwen3-asr", "model_path": str(primary), "device": "cuda"}
@@ -72,7 +69,7 @@ def test_qwen3_asr_primary_checkpoint_is_blocked_on_unsupported_runtime(
     )
 
 
-def test_qwen3_asr_optional_aligner_is_degraded_not_blocked(tmp_path, monkeypatch):
+def test_qwen3_asr_optional_aligner_is_supported(tmp_path, monkeypatch):
     _qwen_runtime(tmp_path, monkeypatch)
     primary = _checkpoint(tmp_path, "primary", "qwen3_asr")
     aligner = _checkpoint(tmp_path, "aligner", "qwen3_asr")
@@ -84,11 +81,11 @@ def test_qwen3_asr_optional_aligner_is_degraded_not_blocked(tmp_path, monkeypatc
             "device": "cuda",
         }
     )
-    assert health.state == "degraded"
+    assert health.state == "ready"
     assert any(
-        check.code == "capability.forced-alignment.runtime"
+        check.code == "capability.forced-alignment.model_type"
         and not check.required
-        and not check.passed
+        and check.passed
         for check in health.checks
     )
 

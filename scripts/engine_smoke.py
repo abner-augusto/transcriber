@@ -33,7 +33,9 @@ def load_preset(preset: dict) -> dict:
 
     transcriber = make_transcriber(preset)
     engine = preset["engine"]
-    if engine == "qwen3-asr":
+    if hasattr(transcriber, "load"):
+        transcriber.load()
+    elif engine == "qwen3-asr":
         transcriber._ensure_asr_loaded()
         transcriber._ensure_aligner_loaded()
     elif engine == "vibevoice":

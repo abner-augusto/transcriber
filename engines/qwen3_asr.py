@@ -101,15 +101,12 @@ class Qwen3AsrTranscriber:
         if self._asr_model is None:
             if not self.model_path:
                 raise RuntimeError("Qwen3-ASR model_path must be configured in the selected Preset")
-            from qwen_asr.core.transformers_backend import (
-                Qwen3ASRForConditionalGeneration,
-                Qwen3ASRProcessor,
-            )
+            from transformers import AutoModelForMultimodalLM, AutoProcessor
 
             log.info(f"[qwen3-asr] Loading ASR model from {self.model_path} onto {self.device}")
-            self._asr_processor = Qwen3ASRProcessor.from_pretrained(self.model_path)
+            self._asr_processor = AutoProcessor.from_pretrained(self.model_path)
             model_dtype = torch.bfloat16 if "cuda" in self.device else torch.float32
-            self._asr_model = Qwen3ASRForConditionalGeneration.from_pretrained(
+            self._asr_model = AutoModelForMultimodalLM.from_pretrained(
                 self.model_path,
                 dtype=model_dtype,
                 device_map=self.device,

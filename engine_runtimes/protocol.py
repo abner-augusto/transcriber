@@ -11,7 +11,7 @@ from typing import Any, Mapping
 from engines.ports import Turn, Word
 
 SCHEMA_VERSION = 1
-_REQUEST_FIELDS = {"schema_version", "engine_id", "audio_path", "vocabulary", "model_path", "aligner_path", "device", "options"}
+_REQUEST_FIELDS = {"schema_version", "operation", "engine_id", "audio_path", "vocabulary", "model_path", "aligner_path", "device", "options"}
 _RESPONSE_FIELDS = {"schema_version", "words", "native_diarization", "diagnostics", "runtime_fingerprint", "error"}
 _ERROR_FIELDS = {"code", "message", "retryable", "degraded_capabilities"}
 _OPTION_FIELDS = {"language", "chunk_seconds", "window_seconds", "overlap_seconds"}
@@ -54,6 +54,7 @@ def _finite(value: Any, where: str) -> float:
 
 @dataclass(frozen=True)
 class EngineRequest:
+    operation: str
     engine_id: str
     audio_path: str
     vocabulary: str | None
@@ -68,11 +69,14 @@ class EngineRequest:
     @classmethod
     def from_dict(cls, raw: Any) -> "EngineRequest":
         data = _object(raw, "request")
-        _fields(data, _REQUEST_FIELDS, _REQUEST_FIELDS, "request")
+        _fields(data, _REQUEST_FIELDS, _REQUEST_FIELDS - {"operation"}, "request")
         if data["schema_version"] != SCHEMA_VERSION:
             raise ProtocolError(f"unsupported schema_version {data['schema_version']!r}")
         if data["engine_id"] not in {"qwen3-asr", "vibevoice"}:
             raise ProtocolError("request.engine_id is unsupported")
+        operation = data.get("operation", "transcribe")
+        if operation not in {"load", "transcribe"}:
+            raise ProtocolError("request.operation is unsupported")
         options = _object(data["options"], "request.options")
         _fields(options, _OPTION_FIELDS, set(), "request.options")
         for key, value in options.items():
@@ -85,7 +89,7 @@ class EngineRequest:
             raise ProtocolError("request.vocabulary must be a string or null")
         if not isinstance(data["device"], str) or not data["device"]:
             raise ProtocolError("request.device must be a non-empty string")
-        return cls(str(data["engine_id"]), _path(data["audio_path"], "request.audio_path"), vocabulary,
+        return cls(operation, str(data["engine_id"]), _path(data["audio_path"], "request.audio_path"), vocabulary,
                    _path(data["model_path"], "request.model_path"), _path(data["aligner_path"], "request.aligner_path", optional=True),
                    data["device"], dict(options))
 

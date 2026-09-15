@@ -18,8 +18,14 @@ def run(engine_id, factory):
         if request.engine_id != engine_id:
             raise ValueError(f"runner {engine_id} cannot execute {request.engine_id}")
         adapter = factory(request)
-        words = adapter.transcribe(request.audio_path, vocabulary=request.vocabulary)
-        native = adapter.get_native_diarization() if getattr(adapter, "has_native_diarization", False) else None
+        if request.operation == "load":
+            primary_loader = adapter._ensure_asr_loaded if engine_id == "qwen3-asr" else adapter._ensure_model_loaded
+            primary_loader()
+            adapter._ensure_aligner_loaded()
+            words, native = (), None
+        else:
+            words = adapter.transcribe(request.audio_path, vocabulary=request.vocabulary)
+            native = adapter.get_native_diarization() if getattr(adapter, "has_native_diarization", False) else None
         turns = None if native is None else tuple(native.turns)
         manifest = load_manifest(engine_id)
         fingerprint = hashlib.sha256((manifest.runtime_id + "\n" + sys.executable + "\n" + sys.version).encode()).hexdigest()
