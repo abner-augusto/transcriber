@@ -71,6 +71,18 @@ class FasterWhisperTranscriber:
             )
         return cls._models[cache_key]
 
+    @classmethod
+    def unload(cls, model_path: str | None = None):
+        """Unload cached WhisperModel instance(s) and free CTranslate2 GPU memory."""
+        if model_path is None:
+            cls._models.clear()
+            log.info("[faster-whisper] Unloaded all models")
+        else:
+            to_remove = [k for k in cls._models if k[0] == model_path]
+            for k in to_remove:
+                cls._models.pop(k, None)
+            log.info(f"[faster-whisper] Unloaded model '{model_path}'")
+
     def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
         model = self.get_model(self.model_path, self.device, self.compute_type)
 

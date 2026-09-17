@@ -109,6 +109,21 @@ class MMSCTCAligner:
 
         return cls._model, cls._aligner, cls._dict, cls._device
 
+    @classmethod
+    def unload(cls):
+        """Unload MMS_FA model from GPU memory and reset state."""
+        if cls._model is not None:
+            try:
+                cls._model.to(torch.device("cpu"))
+            except Exception:
+                pass
+            cls._model = None
+        cls._bundle = None
+        cls._aligner = None
+        cls._dict = None
+        cls._device = None
+        log.info("[alignment] Unloaded MMS_FA model")
+
     def align(self, audio_path: str, words: list[Word]) -> list[Word]:
         """Align existing Words against audio, updating start and end timestamps.
 

@@ -274,6 +274,10 @@ class WhisperCppTranscriber:
 
         return parse_words(data)
 
+    def unload(self) -> None:
+        """No-op: whisper-cli runs in external process and exits on completion."""
+        pass
+
 
 def parse_words(data: dict) -> list[Word]:
     """Words from a whisper-cli full-JSON document."""

@@ -44,3 +44,8 @@ class IsolatedPythonTranscriber:
         if response.native_turns is not None:
             self._native_diarization = DiarizationResult(turns=list(response.native_turns))
         return list(response.words)
+
+    def unload(self) -> None:
+        """No-op: Isolated subprocess exits and frees its memory on completion."""
+        pass
+

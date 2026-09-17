@@ -125,6 +125,12 @@ def meeting_job(meeting_id: str, job_id: str):
         raise
     finally:
         db.close()
+        try:
+            from engines.gpu_memory import unload_all_engines
+
+            unload_all_engines()
+        except Exception as exc:
+            log.warning(f"[meeting_job] GPU cleanup failed: {exc}")
 
 
 def _fail_job(db, meeting_id: str, job_id: str, error_msg: str):

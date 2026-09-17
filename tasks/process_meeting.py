@@ -92,6 +92,15 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             db.commit()
             update_progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
 
+            # Inter-stage cleanup: free transcriber and aligner VRAM before loading diarizer
+            if hasattr(transcriber, "unload"):
+                transcriber.unload()
+            if fa_enabled:
+                from engines.alignment import MMSCTCAligner
+                MMSCTCAligner.unload()
+            from engines.gpu_memory import release_gpu_memory
+            release_gpu_memory()
+
             # Step 3: Diarization & VAD bounding
             vad_service = VadService()
             if meeting.is_dual_track:
@@ -155,6 +164,12 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             db.commit()
             update_progress(db, job, meeting, 70, "Diarization complete")
 
+            # Free diarizer VRAM immediately after turns are extracted and saved
+            if hasattr(diarizer, "unload"):
+                diarizer.unload()
+            from engines.gpu_memory import release_gpu_memory
+            release_gpu_memory()
+
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
             update_progress(db, job, meeting, 75, "Synchronizing speakers with text...")
             attribution_turns = (
@@ -173,6 +188,10 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             speaker_info = speaker_id_service.name_speakers(
                 db, speaker_labels, bounded_turns, audio_path, host_label=host_label
             )
+            if hasattr(speaker_id_service, "unload"):
+                speaker_id_service.unload()
+            from engines.gpu_memory import release_gpu_memory
+            release_gpu_memory()
 
             # Step 6: Save results (preserving edits)
             update_progress(db, job, meeting, 90, "Saving results...")

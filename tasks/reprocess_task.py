@@ -50,6 +50,10 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
         }
         db.commit()
         update_progress(db, job, meeting, 50, "Diarization complete")
+        if hasattr(diarizer, "unload"):
+            diarizer.unload()
+        from engines.gpu_memory import release_gpu_memory
+        release_gpu_memory()
     else:
         bounded_turns = turns_from_stored(meeting.raw_diarization)
         bounded_exclusive_turns = exclusive_turns_from_stored(meeting.raw_diarization)
@@ -84,6 +88,10 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
     speaker_info = speaker_id_service.name_speakers(
         db, speaker_labels, bounded_turns, audio_path
     )
+    if hasattr(speaker_id_service, "unload"):
+        speaker_id_service.unload()
+    from engines.gpu_memory import release_gpu_memory
+    release_gpu_memory()
 
     # Rebuild speakers and segments (preserving edits)
     update_progress(
