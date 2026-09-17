@@ -7,11 +7,18 @@ allowing pipeline tasks to bypass external diarization (PyAnnote) with 99.44% pr
 
 NF4 quantization and sliding windows (10 minutes with 45s overlap) bound peak
 VRAM while preserving bfloat16 compute and cross-window speaker identity.
+
+The streaming loop is geometry-sensitive: audio is decoded at the checkpoint's
+`target_sample_rate` (24 kHz) and `streaming_generate` receives the
+`chunk_frames`/`lookahead_frames` geometry from preprocessor_config.json. Both
+are read from the checkpoint rather than hardcoded, because feeding the model
+16 kHz audio with a 10 s chunk (as this adapter first did) produces fluent text
+in the wrong language instead of an error.
 """
 
 import difflib
+import json
 import logging
-import os
 import re
 import subprocess
 import unicodedata
@@ -39,7 +46,17 @@ except Exception:
 
 WINDOW_SECONDS = 600.0   # 10 minutes
 OVERLAP_SECONDS = 45.0  # 45s overlap
-CHUNK_DURATION = 10.0   # streaming step size
+
+# Frame geometry of VibeVoice-ASR-Streaming-7B, read from preprocessor_config.json.
+# The acoustic tokenizer is fixed at 24 kHz and emits one token per 3200 samples;
+# the streaming loop is trained on chunk_frames of text-relevant audio plus
+# lookahead_frames the next chunk may still consume. Feeding the model a different
+# geometry (or audio rate) makes it transcribe a signal it was never trained on —
+# the failure mode is fluent text in the wrong language, not an exception.
+DEFAULT_SAMPLE_RATE = 24000
+DEFAULT_COMPRESS_RATIO = 3200
+DEFAULT_CHUNK_FRAMES = 22
+DEFAULT_LOOKAHEAD_FRAMES = 4
 
 
 def normalize_text(text: str) -> str:
@@ -49,8 +66,13 @@ def normalize_text(text: str) -> str:
     return re.sub(r"[^\w]", "", cleaned).strip()
 
 
-def load_audio_ffmpeg(audio_path: str, start_sec: float = 0.0, duration_sec: Optional[float] = None) -> np.ndarray:
-    """Load audio as 16kHz float32 mono array via ffmpeg."""
+def load_audio_ffmpeg(
+    audio_path: str,
+    start_sec: float = 0.0,
+    duration_sec: Optional[float] = None,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+) -> np.ndarray:
+    """Load audio as float32 mono array at the checkpoint's sample rate via ffmpeg."""
     cmd = ["ffmpeg", "-v", "error"]
     if start_sec > 0:
         cmd.extend(["-ss", str(start_sec)])
@@ -59,7 +81,7 @@ def load_audio_ffmpeg(audio_path: str, start_sec: float = 0.0, duration_sec: Opt
     cmd.extend([
         "-i", audio_path,
         "-f", "f32le",
-        "-ar", "16000",
+        "-ar", str(sample_rate),
         "-ac", "1",
         "-"
     ])
@@ -83,6 +105,60 @@ def get_audio_duration(audio_path: str) -> float:
     return float(val) if val else 0.0
 
 
+def read_streaming_frame_config(model_path: str) -> dict:
+    """Read the sample rate and streaming geometry the checkpoint was trained on.
+
+    Falls back to the VibeVoice-ASR-Streaming-7B defaults when the checkpoint
+    metadata cannot be read, and warns loudly: a wrong geometry degrades the
+    transcript to fluent nonsense instead of failing.
+    """
+    metadata: dict = {}
+    config_path = Path(model_path) / "preprocessor_config.json"
+    if config_path.is_file():
+        try:
+            metadata = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning("[vibevoice] unreadable %s (%s); using streaming defaults", config_path, exc)
+    else:
+        try:
+            from huggingface_hub import hf_hub_download
+
+            metadata = json.loads(
+                Path(hf_hub_download(model_path, "preprocessor_config.json")).read_text(encoding="utf-8")
+            )
+        except Exception as exc:
+            log.warning(
+                "[vibevoice] no preprocessor_config.json at %s (%s); using streaming defaults",
+                model_path,
+                exc,
+            )
+
+    sample_rate = int(metadata.get("target_sample_rate", DEFAULT_SAMPLE_RATE))
+    compress_ratio = int(metadata.get("speech_tok_compress_ratio", DEFAULT_COMPRESS_RATIO))
+    chunk_frames = int(metadata.get("chunk_frames", DEFAULT_CHUNK_FRAMES))
+    lookahead_frames = int(metadata.get("lookahead_frames", DEFAULT_LOOKAHEAD_FRAMES))
+    frame_seconds = compress_ratio / sample_rate
+    if metadata and any(key not in metadata for key in ("chunk_frames", "lookahead_frames")):
+        log.warning(
+            "[vibevoice] %s is not a streaming checkpoint frame config; "
+            "assuming chunk_frames=%d lookahead_frames=%d",
+            model_path,
+            chunk_frames,
+            lookahead_frames,
+        )
+    return {
+        "sample_rate": sample_rate,
+        "compress_ratio": compress_ratio,
+        "chunk_frames": chunk_frames,
+        "lookahead_frames": lookahead_frames,
+        "chunk_duration": chunk_frames * frame_seconds,
+        "text_audio_delay": lookahead_frames * frame_seconds,
+    }
+
+
+CONTROL_TOKEN_PATTERN = re.compile(r"\[(?:Silence|Beep|Music)\]", re.IGNORECASE)
+
+
 def parse_segments_from_transcript(full_text: str) -> list[dict]:
     """Parse raw VibeVoice transcript text into speaker segments."""
     pattern = re.compile(r"(Speaker\s+\d+):\s*", re.IGNORECASE)
@@ -92,7 +168,7 @@ def parse_segments_from_transcript(full_text: str) -> list[dict]:
         return segments
 
     if parts[0].strip() and not pattern.match(parts[0]):
-        cleaned_first = re.sub(r"\[(Silence|Beep)\]", "", parts[0]).strip()
+        cleaned_first = CONTROL_TOKEN_PATTERN.sub("", parts[0]).strip()
         if cleaned_first:
             segments.append({"speaker": "SPEAKER_00", "text": cleaned_first})
         parts = parts[1:]
@@ -105,8 +181,8 @@ def parse_segments_from_transcript(full_text: str) -> list[dict]:
         spk_label = f"SPEAKER_{int(m.group(1)):02d}" if m else "SPEAKER_00"
 
         text = parts[i + 1].strip()
-        # Clean control tokens
-        text = re.sub(r"\[(Silence|Beep)\]", "", text).strip()
+        # Drop the model's non-speech control tokens; they are not Words.
+        text = CONTROL_TOKEN_PATTERN.sub("", text).strip()
         if text:
             segments.append({"speaker": spk_label, "text": text})
 
@@ -244,6 +320,12 @@ class VibeVoiceTranscriber:
         self._aligner_processor = None
         self._aligner_unavailable_reason: Optional[str] = None
         self._native_diarization: Optional[DiarizationResult] = None
+        self._frame_config: Optional[dict] = None
+
+    def _frames(self) -> dict:
+        if self._frame_config is None:
+            self._frame_config = read_streaming_frame_config(self.model_path or "")
+        return self._frame_config
 
     def _ensure_model_loaded(self):
         if self._model is None:
@@ -276,6 +358,9 @@ class VibeVoiceTranscriber:
                 self.model_path, **load_options
             )
             self._model.eval()
+            # Deliberately no SDPA backend override here: the streaming loop decodes one
+            # token at a time against a short cache, and cuDNN's per-call overhead makes it
+            # ~3x slower than the math fallback (measured 0.90x vs 3.01x RTF on 60s audio).
 
     def _ensure_aligner_loaded(self):
         if (
@@ -327,8 +412,9 @@ class VibeVoiceTranscriber:
         self._ensure_model_loaded()
         self._ensure_aligner_loaded()
 
-        # Build sliding windows
-        sample_rate = 16000
+        # Build sliding windows at the rate the checkpoint was trained on
+        frames = self._frames()
+        sample_rate = frames["sample_rate"]
         total_samples = int(total_duration * sample_rate)
         win_samples = int(self.window_seconds * sample_rate)
         overlap_samples = int(self.overlap_seconds * sample_rate)
@@ -357,7 +443,9 @@ class VibeVoiceTranscriber:
             w_dur_sec = (w_end - w_start) / sample_rate
             log.info(f"[vibevoice] Window {win_idx+1}/{len(windows)}: {w_start_sec:.1f}s - {w_start_sec+w_dur_sec:.1f}s")
 
-            audio_data = load_audio_ffmpeg(audio_path, start_sec=w_start_sec, duration_sec=w_dur_sec)
+            audio_data = load_audio_ffmpeg(
+                audio_path, start_sec=w_start_sec, duration_sec=w_dur_sec, sample_rate=sample_rate
+            )
             audio_tensor = torch.from_numpy(audio_data)
 
             win_chunks = []
@@ -365,8 +453,8 @@ class VibeVoiceTranscriber:
                 for _, _, chunk_text in self._model.streaming_generate(
                     audio_tensor=audio_tensor,
                     tokenizer=self._processor.tokenizer,
-                    chunk_duration=CHUNK_DURATION,
-                    text_audio_delay=0.0,
+                    chunk_duration=frames["chunk_duration"],
+                    text_audio_delay=frames["text_audio_delay"],
                     sample_rate=sample_rate,
                     max_new_tokens_per_chunk=512,
                     temperature=0.0,
@@ -411,7 +499,8 @@ class VibeVoiceTranscriber:
         if full_transcript and self._aligner_model is not None and self._aligner_processor is not None:
             try:
                 # Transcribe-align in manageable slices or full audio
-                full_audio = load_audio_ffmpeg(audio_path, 0.0, total_duration)
+                # (the Qwen3-style aligner always expects 16 kHz)
+                full_audio = load_audio_ffmpeg(audio_path, 0.0, total_duration, sample_rate=16000)
                 aln_inputs, word_lists = self._aligner_processor.prepare_forced_aligner_inputs(
                     audio=full_audio,
                     transcript=full_transcript,

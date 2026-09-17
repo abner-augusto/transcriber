@@ -24,8 +24,15 @@ import numpy as np
 import torch
 
 from .ports import Transcriber, Word
+from .torch_attention import (
+    drop_single_sample_padding_mask,
+    fused_attention_first,
+    fused_attention_unavailable,
+)
 
 log = logging.getLogger(__name__)
+
+MAX_NEW_TOKENS = 4096
 
 CHUNK_SECONDS = 300.0
 OVERLAP_SECONDS = 30.0
@@ -192,6 +199,18 @@ class Qwen3AsrTranscriber:
         log.info(f"[qwen3-asr] Completed transcription: {len(all_words)} words total")
         return all_words
 
+    def _aligner_model_forward(self, aln_inputs):
+        """Align one chunk with the fused kernel, falling back to math if cuDNN rejects it."""
+        try:
+            with torch.no_grad(), fused_attention_first():
+                return self._aligner_model(**aln_inputs)
+        except RuntimeError as exc:
+            if not fused_attention_unavailable(exc):
+                raise
+            log.warning("[qwen3-asr] fused attention rejected alignment (%s); using math fallback", exc)
+            with torch.no_grad():
+                return self._aligner_model(**aln_inputs)
+
     def _transcribe_and_align_chunk(
         self, audio: np.ndarray, offset_sec: float, vocabulary: Optional[str] = None
     ) -> list[Word]:
@@ -205,9 +224,10 @@ class Qwen3AsrTranscriber:
             language=self.language,
             prompt=vocabulary,
         ).to(self._asr_model.device, self._asr_model.dtype)
+        drop_single_sample_padding_mask(inputs)
 
         with torch.no_grad():
-            output_ids = self._asr_model.generate(**inputs, max_new_tokens=4096)
+            output_ids = self._asr_model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS)
 
         gen_ids = output_ids[:, inputs["input_ids"].shape[1]:]
         text = self._asr_processor.decode(gen_ids[0], return_format="transcription_only").strip()
@@ -223,9 +243,9 @@ class Qwen3AsrTranscriber:
                     language=self.language,
                 )
                 aln_inputs = aln_inputs.to(self._aligner_model.device, self._aligner_model.dtype)
+                drop_single_sample_padding_mask(aln_inputs)
 
-                with torch.no_grad():
-                    res = self._aligner_model(**aln_inputs)
+                res = self._aligner_model_forward(aln_inputs)
 
                 timestamps = self._aligner_processor.decode_forced_alignment(
                     logits=res.logits,

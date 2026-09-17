@@ -39,3 +39,34 @@ We introduce two new Engines into the interchangeable engine architecture:
 - **Port Contract Compliance**: Both adapters strictly satisfy `Transcriber` (emitting `Word` objects with leading space and timestamps).
 - **VRAM Safety**: Both engines run one at a time and chunk long audio internally. VibeVoice requires NF4 quantization: the 36-minute benchmark peaked at about 6.94 GB allocated and 7.60 GB reserved, while full bfloat16 inference reached 15.88 GB on the 16 GB target GPU.
 - **Diarization Flexibility**: Meetings using `qwen3-asr` continue to use PyAnnote; meetings using `vibevoice` get native end-to-end speaker attribution without running an external diarizer.
+
+## Addendum (2026-09-15): measured runtime corrections
+
+The first integrated runs of both Engines regressed against these benchmarks. Each
+regression was traced to an adapter assumption, reproduced on `test.mp3`, and fixed:
+
+- **VibeVoice transcribed fluent nonsense** (Catalan-looking text for Portuguese audio).
+  The adapter decoded at 16 kHz and passed `chunk_duration=10 s`/`text_audio_delay=0`,
+  while the checkpoint's `preprocessor_config.json` requires 24 kHz audio and the
+  frame geometry it was trained on (chunk 2.93 s, lookahead 0.53 s). `bench/run_vibevoice.py`
+  had always used the checkpoint geometry; the adapter had not. The adapter now reads
+  the geometry from the checkpoint.
+- **Qwen3-ASR reached 15.6 GB of the 16 GB card.** The forced aligner ran over the whole
+  300 s ASR chunk, materialising attention over ~4900 positions. Running the aligner
+  through the fused cuDNN kernel (scoped, `engines/torch_attention.py`) brings a 300 s
+  Job to ~8.5 GB peak with no change to the transcript; the same kernel is deliberately
+  *not* used for decoding, where it measured ~3x slower per token plus a one-time
+  ~37 s autotune.
+- **Both Engines looked like "CPU inference".** On Windows/sm_120 the CUDA wheels have
+  no Flash-Attention and disable memory-efficient SDPA, so attention falls back to math:
+  ~2000 kernel launches per token. The models were always on CUDA (VRAM and GPU
+  utilisation confirm it); the decode loop was CPU-bound. This is a platform limitation,
+  documented in `docs/engine-runtimes.md`, not an engine defect — and it is why the
+  wall-clock comparison against whisper.cpp (which has its own CUDA kernels) is the
+  honest one to quote.
+
+Baseline on `test.mp3` (60 s, RTX 5070 Ti): whisper.cpp large-v3-turbo 4.9 s
+(12.3x RTF), faster-whisper large-v3 12.3 s (4.9x), Qwen3-ASR ~11 s of inference
+per 60 s chunk, VibeVoice ~55 s per 60 s window at NF4. Whisper remains the
+throughput baseline; the Qwen/VibeVoice value is vocabulary precision and native
+diarization respectively.

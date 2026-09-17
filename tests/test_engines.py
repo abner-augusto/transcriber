@@ -634,6 +634,140 @@ def test_qwen3_proportional_fallback_produces_join_ready_ordered_words():
     assert all(word.alignment_score == 0.5 for word in words)
 
 
+def test_vibevoice_reads_frame_config_from_checkpoint(tmp_path):
+    """The streaming geometry comes from preprocessor_config.json, not from hardcoded values."""
+    from engines.vibevoice import read_streaming_frame_config
+
+    (tmp_path / "preprocessor_config.json").write_text(
+        json.dumps({
+            "speech_tok_compress_ratio": 3200,
+            "target_sample_rate": 24000,
+            "chunk_frames": 22,
+            "lookahead_frames": 4,
+        }),
+        encoding="utf-8",
+    )
+
+    frames = read_streaming_frame_config(str(tmp_path))
+
+    assert frames["sample_rate"] == 24000
+    assert frames["chunk_duration"] == pytest.approx(22 * 3200 / 24000, abs=1e-4)
+    assert frames["text_audio_delay"] == pytest.approx(4 * 3200 / 24000, abs=1e-4)
+
+
+def test_vibevoice_frame_config_defaults_when_metadata_is_absent(tmp_path, caplog):
+    """A checkpoint without frame metadata still gets usable streaming defaults."""
+    from engines.vibevoice import read_streaming_frame_config
+
+    with caplog.at_level(logging.WARNING):
+        frames = read_streaming_frame_config(str(tmp_path))
+
+    assert frames["sample_rate"] == 24000
+    assert frames["chunk_duration"] == pytest.approx(22 * 3200 / 24000, abs=1e-4)
+    assert "preprocessor_config.json" in caplog.text
+
+
+def test_vibevoice_transcribes_at_checkpoint_rate_and_streaming_geometry(monkeypatch, tmp_path):
+    """Regression: 16 kHz audio with a 10 s chunk made the model emit fluent nonsense."""
+    import engines.vibevoice as module
+
+    (tmp_path / "preprocessor_config.json").write_text(
+        json.dumps({
+            "speech_tok_compress_ratio": 3200,
+            "target_sample_rate": 24000,
+            "chunk_frames": 22,
+            "lookahead_frames": 4,
+        }),
+        encoding="utf-8",
+    )
+
+    captured = {}
+
+    class Model:
+        def streaming_generate(self, **kwargs):
+            captured.update(kwargs)
+            yield 0, 1, "Speaker 0: uma palavra"
+
+    transcriber = module.VibeVoiceTranscriber(model_path=str(tmp_path), device="cpu")
+    transcriber._model = Model()
+    transcriber._processor = types.SimpleNamespace(tokenizer=object())
+    monkeypatch.setattr(module, "get_audio_duration", lambda _path: 12.0)
+
+    def fake_load(_path, start_sec=0.0, duration_sec=None, sample_rate=None):
+        captured["sample_rate_arg"] = sample_rate
+        captured["duration_arg"] = duration_sec
+        return np.zeros(int((duration_sec or 0) * sample_rate), dtype=np.float32)
+
+    monkeypatch.setattr(module, "load_audio_ffmpeg", fake_load)
+
+    words = transcriber.transcribe("meeting.mp3")
+
+    assert [word.text for word in words] == [" uma", " palavra"]
+    assert captured["sample_rate"] == 24000
+    assert captured["sample_rate_arg"] == 24000
+    assert captured["chunk_duration"] == pytest.approx(22 * 3200 / 24000, abs=1e-4)
+    assert captured["text_audio_delay"] == pytest.approx(4 * 3200 / 24000, abs=1e-4)
+
+
+def test_vibevoice_control_tokens_never_become_words():
+    """[Music]/[Silence] markers are engine control tokens, not spoken Words."""
+    from engines.vibevoice import parse_segments_from_transcript
+
+    segments = parse_segments_from_transcript("[Music] Speaker 0: texto [Music] limpo [Silence]")
+
+    assert segments == [{"speaker": "SPEAKER_00", "text": "texto  limpo"}]
+
+
+def test_qwen3_drops_the_single_sample_padding_mask(monkeypatch):
+    """Regression: an all-ones mask sent SDPA to the math fallback on Windows."""
+    from engines.qwen3_asr import Qwen3AsrTranscriber
+
+    captured = {}
+
+    class Inputs(dict):
+        def to(self, *_args):
+            return self
+
+    class Processor:
+        def apply_transcription_request(self, **_kwargs):
+            return Inputs(
+                input_ids=np.zeros((1, 1), dtype=np.int64),
+                attention_mask=np.ones((1, 1), dtype=np.int64),
+            )
+
+        def decode(self, *_args, **_kwargs):
+            return "uma palavra"
+
+    class Model:
+        device = "cpu"
+        dtype = None
+
+        def generate(self, **kwargs):
+            captured.update(kwargs)
+            return np.zeros((1, 2), dtype=np.int64)
+
+    transcriber = Qwen3AsrTranscriber(model_path="primary", aligner_path=None, device="cpu")
+    transcriber._asr_processor = Processor()
+    transcriber._asr_model = Model()
+
+    words = transcriber._transcribe_and_align_chunk(np.zeros(48000, dtype=np.float32), 0.0)
+
+    assert "attention_mask" not in captured
+    assert [word.text for word in words] == [" uma", " palavra"]
+
+
+def test_single_sample_padding_mask_is_kept_for_real_batches():
+    from engines.torch_attention import drop_single_sample_padding_mask
+
+    batch = {"input_ids": np.zeros((2, 4), dtype=np.int64), "attention_mask": np.ones((2, 4), dtype=np.int64)}
+    drop_single_sample_padding_mask(batch)
+    assert "attention_mask" in batch
+
+    single = {"input_ids": np.zeros((1, 4), dtype=np.int64), "attention_mask": np.ones((1, 4), dtype=np.int64)}
+    drop_single_sample_padding_mask(single)
+    assert "attention_mask" not in single
+
+
 def test_vibevoice_proportional_fallback_produces_join_ready_ordered_words(monkeypatch):
     import engines.vibevoice as module
 
