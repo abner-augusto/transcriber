@@ -9,7 +9,6 @@ from database import Base
 
 
 class MeetingStatus(str, enum.Enum):
-    UPLOADING = "uploading"
     UPLOADED = "uploaded"
     PROCESSING = "processing"
     COMPLETED = "completed"

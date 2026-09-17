@@ -1,20 +1,15 @@
 TRANSCRIBER - FUNKTIONER
 
-Ladda upp, spela in eller livetranskribera möten och få ett
-komplett transkript med talare identifierade vid namn.
+Ladda upp möten och få ett komplett transkript med talare identifierade vid namn.
 
 TRANSKRIBERING
 - Ladda upp ljud- eller videofiler (MP3, MP4, WAV, WebM, M4A)
-- Spela in direkt i webbläsaren med visuell ljudnivåmätare
-- Välj vilken mikrofon som ska användas, eller fånga datorljud
-- Live-läge: se transkriptet växa fram ord för ord medan du talar
 - Optimerat för svenska med lokalt körande AI-modeller
 
 TALARIDENTIFIERING
 - Upptäcker automatiskt vem som talar och när
 - Identifierar talare vid namn utifrån mötesinledningar
 - Fungerar även utan introduktioner (märker talare som Deltagare 1, 2 osv.)
-- Under liveinspelning identifieras talare successivt
 
 REDIGERING
 - Klicka på valfri rad för att rätta texten
@@ -46,14 +41,7 @@ INSTÄLLNINGAR
 - Stöd för både molnmodeller och lokalt körande modeller
 - Inställningar sparas automatiskt
 
-LIVEINSPELNING
-- Starta en livesession och se transkriberingen i realtid
-- När du stoppar bearbetas inspelningen automatiskt om med en
-  modell av högre kvalitet för bästa möjliga resultat
-- Talarnamn förfinas i bakgrunden allt eftersom mer kontext
-  blir tillgängligt
-
 GRÄNSSNITT
 - Rent mörkt gränssnitt med möteslista och statusöversikt
-- Tre sätt att starta: ladda upp en fil, spela in eller gå live
+- Börja med att ladda upp en ljud- eller videofil
 - Förloppsindikator visar varje steg under bearbetning

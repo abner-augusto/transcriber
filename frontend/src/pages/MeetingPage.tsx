@@ -63,13 +63,6 @@ export default function MeetingPage() {
         setProgress({ type: "progress", progress: active.progress, step: active.current_step || "Processing...", status: "processing" });
       }
     }
-    if (m.status === "finalizing") {
-      const jobs = await getJobs(id);
-      const active = jobs.find((j) => j.status === "running" || j.status === "pending");
-      if (active) {
-        setProgress({ type: "progress", progress: active.progress, step: active.current_step || "Finalizing...", status: "finalizing" });
-      }
-    }
   }
 
   function connectWebSocket() {
@@ -191,7 +184,6 @@ export default function MeetingPage() {
   const isCompleted = currentMeeting.status === "completed";
   const isUploaded = currentMeeting.status === "uploaded";
   const isFailed = currentMeeting.status === "failed";
-  const isFinalizing = currentMeeting.status === "finalizing";
 
   const currentVocabStr = (currentMeeting.vocabulary || "").trim();
   const newVocabStr = (formatVocabulary(cleanParticipants(participants), domainVocab) || "").trim();
@@ -336,8 +328,8 @@ export default function MeetingPage() {
         </div>
       </div>
 
-      {/* Progress (processing or finalizing) */}
-      {(isProcessing || isFinalizing) && progress && (
+      {/* Progress (processing) */}
+      {isProcessing && progress && (
         <ProgressTracker progress={progress} />
       )}
 

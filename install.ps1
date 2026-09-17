@@ -113,24 +113,6 @@ if (Test-Path $whisperBin) {
 Write-Host ""
 if (-not (Test-Path "models")) { New-Item -ItemType Directory -Path "models" | Out-Null }
 
-if (Test-Path "models\ggml-medium.bin") {
-    Ok "Medium model already downloaded"
-} else {
-    Info "Downloading Whisper medium model (~1.5 GB)..."
-    curl.exe -L --progress-bar -o "models\ggml-medium.bin" `
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin"
-    Ok "Medium model downloaded"
-}
-
-if (Test-Path "models\ggml-small.bin") {
-    Ok "Small model already downloaded"
-} else {
-    Info "Downloading Whisper small model (~500 MB)..."
-    curl.exe -L --progress-bar -o "models\ggml-small.bin" `
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
-    Ok "Small model downloaded"
-}
-
 if (Test-Path "models\ggml-large-v3-turbo.bin") {
     Ok "Large-v3-Turbo model already downloaded"
 } else {

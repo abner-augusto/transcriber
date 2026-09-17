@@ -14,49 +14,17 @@ interface Props {
   speakers: Speaker[];
   audioRef: React.RefObject<HTMLAudioElement | null>;
   onUpdate: () => void;
-  isLive?: boolean;
 }
 
-export default function TranscriptView({ segments, speakers, audioRef, onUpdate, isLive }: Props) {
+export default function TranscriptView({ segments, speakers, audioRef, onUpdate }: Props) {
   const { currentTime } = useStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const userScrolledUp = useRef(false);
-  const prevSegmentCount = useRef(segments.length);
 
-  // Auto-scroll for live mode
+  // Auto-scroll for playback mode
   useEffect(() => {
-    if (isLive && segments.length > prevSegmentCount.current && !userScrolledUp.current) {
-      const container = containerRef.current;
-      if (container) {
-        container.scrollTop = container.scrollHeight;
-      }
-    }
-    prevSegmentCount.current = segments.length;
-  }, [segments.length, isLive]);
-
-  // Track user scroll to disable auto-scroll when scrolled up
-  useEffect(() => {
-    if (!isLive) return;
-    const container = containerRef.current;
-    if (!container) return;
-
-    function onScroll() {
-      if (!container) return;
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      // User scrolled up if more than 100px from bottom
-      userScrolledUp.current = scrollHeight - scrollTop - clientHeight > 100;
-    }
-
-    container.addEventListener("scroll", onScroll);
-    return () => container.removeEventListener("scroll", onScroll);
-  }, [isLive]);
-
-  // Auto-scroll for playback mode (non-live)
-  useEffect(() => {
-    if (isLive) return;
     const active = segments.find((s) => currentTime >= s.start_time && currentTime < s.end_time);
     if (active) {
       const el = document.getElementById(`seg-${active.id}`);
@@ -68,7 +36,7 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
         }
       }
     }
-  }, [currentTime, isLive]);
+  }, [currentTime]);
 
   function seekTo(time: number) {
     if (audioRef.current) {
@@ -133,28 +101,22 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
               <span className="text-sm font-semibold text-slate-200 transition-all duration-500">
                 {speaker?.display_name || speaker?.label || "Unknown"}
               </span>
-              {!isLive ? (
-                <button
-                  onClick={() => seekTo(group.segments[0].start_time)}
-                  className="text-xs text-slate-600 font-mono hover:text-violet-400 transition flex items-center gap-1 group/hdr"
-                  title="Play from here"
-                >
-                  <svg className="w-3 h-3 opacity-0 group-hover/hdr:opacity-100 transition" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                  {formatTime(group.segments[0].start_time)}
-                </button>
-              ) : (
-                <span className="text-xs text-slate-600 font-mono">
-                  {formatTime(group.segments[0].start_time)}
-                </span>
-              )}
+              <button
+                onClick={() => seekTo(group.segments[0].start_time)}
+                className="text-xs text-slate-600 font-mono hover:text-violet-400 transition flex items-center gap-1 group/hdr"
+                title="Play from here"
+              >
+                <svg className="w-3 h-3 opacity-0 group-hover/hdr:opacity-100 transition" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                {formatTime(group.segments[0].start_time)}
+              </button>
             </div>
 
             {/* Segments */}
             <div className="pl-5 space-y-1">
               {group.segments.map((seg) => {
-                const isActive = !isLive && currentTime >= seg.start_time && currentTime < seg.end_time;
+                const isActive = currentTime >= seg.start_time && currentTime < seg.end_time;
                 return (
                   <div
                     key={seg.id}
@@ -166,17 +128,15 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
                     }`}
                   >
                     <button
-                      onClick={() => !isLive && seekTo(seg.start_time)}
+                      onClick={() => seekTo(seg.start_time)}
                       className={`text-xs mt-0.5 flex-shrink-0 font-mono transition flex items-center gap-1 ${
                         isActive ? "text-violet-400" : "text-slate-600 hover:text-violet-400"
-                      } ${isLive ? "cursor-default" : "group/play"}`}
-                      title={isLive ? undefined : "Click to play from here"}
+                      } group/play`}
+                      title="Click to play from here"
                     >
-                      {!isLive && (
-                        <svg className="w-3 h-3 opacity-0 group-hover/play:opacity-100 transition" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                      )}
+                      <svg className="w-3 h-3 opacity-0 group-hover/play:opacity-100 transition" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
                       {formatTime(seg.start_time)}
                       {seg.confidence != null && (
                         <span className={`text-[9px] font-mono ${seg.confidence < 0.6 ? "text-amber-500/80" : "text-slate-600"}`}>

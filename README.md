@@ -1,6 +1,6 @@
 # Transcriber
 
-AI-powered local meeting transcription with automatic speaker identification. Upload an audio file, record in the browser, or run a live session - and get a full transcript with speakers identified by name.
+AI-powered local meeting transcription with automatic speaker identification. Upload an audio file and get a full transcript with speakers identified by name.
 
 ![Stack](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
 ![Stack](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black)
@@ -125,7 +125,7 @@ mkdir -p models
 curl -L -o models/kb_whisper_ggml_medium.bin \
   https://huggingface.co/KBLab/kb-whisper-medium/resolve/main/ggml-model.bin
 
-# Small model (live transcription, faster)
+# Small model (faster)
 curl -L -o models/kb_whisper_ggml_small.bin \
   https://huggingface.co/KBLab/kb-whisper-small/resolve/main/ggml-model.bin
 ```
@@ -275,10 +275,9 @@ Open **http://localhost:5174** in your browser.
 ## Usage
 
 1. Click **New transcription** on the home page
-2. Choose **Upload**, **Record**, or **Live**
-   - **Upload**: drag-and-drop or browse for an audio/video file
-   - **Record**: select your microphone (or system audio) and record
-   - **Live**: start a real-time transcription session
+2. Choose **Single file** or **Dual-track / OBS**
+   - **Single file**: drag-and-drop or browse for an audio/video file
+   - **Dual-track / OBS**: provide a microphone track and an optional system-audio track
 3. Enter a title and click **Start**
 4. For uploaded files, click **Start transcription** on the meeting page
 5. Watch real-time progress as the pipeline runs
@@ -345,10 +344,7 @@ transcriber/
         │   ├── ExportDialog.tsx
         │   ├── EncryptDialog.tsx
         │   ├── DecryptDialog.tsx
-        │   ├── LiveRecordingBar.tsx
         │   └── SettingsDialog.tsx
-        └── hooks/
-            └── useLiveRecording.ts
 ```
 
 ## Tech stack
@@ -369,7 +365,6 @@ transcriber/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/meetings` | Upload audio file |
-| `POST` | `/api/meetings/live` | Create live session |
 | `GET` | `/api/meetings` | List meetings |
 | `GET` | `/api/meetings/{id}` | Get meeting with transcript |
 | `DELETE` | `/api/meetings/{id}` | Delete meeting |
@@ -389,7 +384,6 @@ transcriber/
 | `GET` | `/api/model-settings/assignments` | Get model assignments |
 | `PUT` | `/api/model-settings/assignments` | Update model assignments |
 | `WS` | `/ws/meetings/{id}` | Progress updates |
-| `WS` | `/ws/live/{id}` | Live transcription stream |
 
 ## Author
 

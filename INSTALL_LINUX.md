@@ -90,7 +90,7 @@ mkdir -p models
 curl -L -o models/kb_whisper_ggml_medium.bin \
   https://huggingface.co/KBLab/kb-whisper-medium/resolve/main/ggml-model.bin
 
-# Small model (live transcription, faster)
+# Small model (faster)
 curl -L -o models/kb_whisper_ggml_small.bin \
   https://huggingface.co/KBLab/kb-whisper-small/resolve/main/ggml-model.bin
 ```
@@ -263,9 +263,6 @@ Make sure you have Python 3.11+. On Ubuntu 22.04, you may need:
 sudo apt install python3.11 python3.11-venv
 python3.11 -m venv venv
 ```
-
-### No audio in live recording
-Your browser needs microphone permission. If running on a headless server, you'll need to access it via HTTPS or localhost.
 
 ### Slow transcription without GPU
 CPU-only transcription with the medium model can take 2-5x the audio length. Consider using the small model (edit `WHISPER_MODEL_PATH` in `.env`) for faster results, or use a machine with an NVIDIA GPU.

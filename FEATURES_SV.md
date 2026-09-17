@@ -3,9 +3,6 @@
 ## Transkribering
 
 - **Filuppladdning** - Dra och släpp eller bläddra efter ljud-/videofiler (MP3, MP4, WAV, WebM, M4A)
-- **Inspelning i webbläsaren** - Spela in direkt från webbläsaren med visualisering av ljudnivå i realtid
-- **Val av ljudkälla** - Välj mellan tillgängliga mikrofoner eller fånga systemljud/skrivbordsljud via skärmdelning
-- **Livetranskribering** - WebSocket-baserad realtidstranskribering som strömmar segment medan du talar
 - **Svensk taligenkänning** - whisper.cpp med KB-LAB:s svenska modeller, Metal GPU-accelererat på Apple Silicon
 - **Vokabulärpriming** - Ange domänspecifika termer för att förbättra transkriberingsnoggrannheten för namn, facktermer och förkortningar
 - **Standardvokabulär** - Ange globalt vokabulär i inställningar som automatiskt tillämpas på alla nya transkriberingar
@@ -20,7 +17,6 @@
 - **Hantering av röstprofiler** - Lista, radera och aktivera/avaktivera röstprofilmatchning i Inställningar > Preferenser
 - **Löpande medelvärdeinbäddningar** - Profilnoggrannheten förbättras med varje möte allteftersom inbäddningar medelvärdesberäknas
 - **Reservetikettering** - Talare märks som "Deltagare 1", "Deltagare 2" när inga introduktioner upptäcks
-- **Livtilldelning av talare** - Provisorisk centroidbaserad talardetektering under liveinspelning
 - **Poleringspass** - Efterbearbetning med sammanslagning av talare och LLM-driven namngivning
 
 ## Redigering av transkript
@@ -67,19 +63,11 @@
 ## Modellkonfiguration
 
 - **Förinställningssystem** - JSON-baserade modellförinställningar i mappen `model_presets/`
-- **Uppgiftsbaserad tilldelning** - Olika modeller för transkribering, livetranskribering, analys och åtgärder
+- **Uppgiftsbaserad tilldelning** - Olika modeller för transkribering, analys och åtgärder
 - **Flera LLM-leverantörer** - OpenRouter (Claude Sonnet 4 m.fl.) och lokal Ollama (Qwen 3 8B, Gemma 3 m.fl.)
-- **Flera Whisper-modeller** - Medium (högre kvalitet) och small (snabbare, för live) varianter
+- **Flera Whisper-modeller** - Medium (högre kvalitet) och small (snabbare) varianter
 - **Inställnings-UI** - Konfigurera modelltilldelningar från webbgränssnittet
 - **Beständiga inställningar** - Tilldelningar sparas i `storage/settings.json`
-
-## Liveinspelning
-
-- **WebSocket-strömning** - Ljudsnuttar skickas till servern var 4:e sekund som kompletta WebM-filer
-- **Realtidssegment** - Transkriptionsresultat visas medan du talar
-- **Inspelningsrad** - Visar förfluten tid, ljudnivåer och stoppkontroll
-- **Automatisk slutbehandling** - Fullkvalitetsbearbetning startas automatiskt efter att inspelningen stoppats
-- **Progressiv talarförfining** - Talarnamn förbättras i bakgrunden genom poleringspass
 
 ## Sökning
 
@@ -105,7 +93,7 @@
 
 - **Mötesöversikt** - Lista över alla möten med statusmärken, längd och antal talare
 - **Fulltextsökning** - Sök genom alla transkript direkt från startsidan
-- **Tre inmatningslägen** - Flikar för Ladda upp, Spela in och Live i dialogen för ny transkribering
+- **Två inmatningssätt** - Flikar för enstaka fil och dubbelspår (mikrofon + systemljud) i dialogen för ny transkribering
 - **Realtidsförlopp** - Steg-för-steg-förloppsindikator under bearbetning
 - **Ombearbetningsmeny** - Dropdown med omdiarisering, omidentifiering och full ombearbetning
 - **Mörkt tema** - Genomgående mörkt UI i slate/violett

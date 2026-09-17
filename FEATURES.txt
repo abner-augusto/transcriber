@@ -1,20 +1,15 @@
 TRANSCRIBER - FEATURES
 
-Upload, record or live-transcribe meetings and get a complete
-transcript with speakers identified by name.
+Upload meetings and get a complete transcript with speakers identified by name.
 
 TRANSCRIPTION
 - Upload audio or video files (MP3, MP4, WAV, WebM, M4A)
-- Record directly in the browser with a visual audio level meter
-- Choose which microphone to use, or capture computer audio
-- Live mode: see the transcript appear word by word as you speak
 - Optimized for Swedish using locally running AI models
 
 SPEAKER IDENTIFICATION
 - Automatically detects who is speaking and when
 - Identifies speakers by name from meeting introductions
 - Works even without introductions (labels speakers as Participant 1, 2, etc.)
-- During live recording, speakers are identified progressively
 
 EDITING
 - Click any line to correct the text
@@ -46,14 +41,7 @@ SETTINGS
 - Supports both cloud models and locally running models
 - Settings are saved automatically
 
-LIVE RECORDING
-- Start a live session and see transcription in real time
-- After you stop, the system automatically reprocesses with a
-  higher-quality model for the best possible result
-- Speaker names are refined in the background as more context
-  becomes available
-
 INTERFACE
 - Clean dark interface with meeting list and status overview
-- Three ways to start: upload a file, record, or go live
+- Start by uploading an audio or video file
 - Progress bar shows each step during processing

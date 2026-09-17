@@ -12,8 +12,6 @@ import { firstUsablePreset } from "../utils/engineHealth";
 const STATUS_LABELS: Record<string, { text: string; color: string; dot: string }> = {
   uploaded: { text: "Ready", color: "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20", dot: "bg-sky-400" },
   processing: { text: "Processing...", color: "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20", dot: "bg-amber-400 animate-pulse" },
-  recording: { text: "Recording", color: "bg-red-500/10 text-red-400 ring-1 ring-red-500/20", dot: "bg-red-400 animate-pulse" },
-  finalizing: { text: "Finalizing...", color: "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20", dot: "bg-amber-400 animate-pulse" },
   completed: { text: "Done", color: "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20", dot: "bg-emerald-400" },
   failed: { text: "Failed", color: "bg-red-500/10 text-red-400 ring-1 ring-red-500/20", dot: "bg-red-400" },
 };
@@ -752,12 +750,6 @@ export default function HomePage() {
                         <span>{formatDate(m.created_at)}</span>
                         <span className="w-1 h-1 rounded-full bg-slate-700" />
                         <span>{formatDuration(m.duration)}</span>
-                        {m.mode === "live" && (
-                          <>
-                            <span className="w-1 h-1 rounded-full bg-slate-700" />
-                            <span className="text-red-400 text-xs font-medium">LIVE</span>
-                          </>
-                        )}
                         {m.speaker_count > 0 && (
                           <>
                             <span className="w-1 h-1 rounded-full bg-slate-700" />
