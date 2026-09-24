@@ -20,6 +20,7 @@
 - **Depends on**: none
 - **Category**: bug
 - **Planned at**: commit `40b455a`, 2026-09-17
+- **Superseded by**: `plans/012-deepen-diarization-stage.md` (2026-09-24). Do not execute this plan.
 
 ## Why this matters
 
