@@ -31,7 +31,7 @@ flip the ticket to `ready-for-agent`.
 | `issues/04-per-job-child-process.md` | 6 | ready → `plans/019-local-job-runner.md` |
 | `issues/05-stack-simplification.md` | stack | ready → `plans/018-sqlite-and-migration.md`, `plans/020-remove-legacy-infrastructure.md` |
 | `issues/06-vocabulary-for-parakeet.md` | new (ADR-0007) | ready → `plans/014-vocabulary-correction.md` |
-| `issues/07-vibevoice-maturation.md` | new (ADR-0007) | — |
+| `issues/07-vibevoice-maturation.md` | new (ADR-0007) | ready → `plans/021-vibevoice-evaluation.md` |
 | `issues/08-correction-suggestions-ui.md` | from 06 | plan 014 |
 | `issues/09-cancel-job.md` | from 02/04/05 | plan 019 |
 

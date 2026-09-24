@@ -18,7 +18,9 @@ names and technical terms), the Presets used most are:
    names and technical terms in practice.
 2. **faster-whisper `large-v3`** (the full model, not turbo).
 
-qwen3-asr and whisper.cpp are used less. vibevoice is still being matured and
+qwen3-asr and whisper.cpp are used less. Of the two primaries, faster-whisper `large-v3` +
+pyannote is the most stable end to end, so it is the **baseline** every comparison is measured
+against (plan 021); parakeet.cpp is preferred when names and technical terms matter most. vibevoice is still being matured and
 evaluated before it is trusted for real Meetings.
 
 ## Decision

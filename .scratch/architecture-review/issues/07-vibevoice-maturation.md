@@ -14,7 +14,10 @@ NF4 on the RTX 5070 Ti. It has not been trusted for daily use yet.
 **Blocked by:** None. Benefits from plan 012 (native Turns go through the
 same Diarization stage as pyannote, so comparisons are like for like).
 
-**Status:** needs-exploration
+**Status:** ready-for-agent
+
+**Plan:** `plans/021-vibevoice-evaluation.md` (design session 2026-09-24: fix the Words and swap
+only the Turns to isolate the Diarizer; baseline faster-whisper large-v3 + pyannote; numbers only in the repo).
 
 **Open questions for the exploration session:**
 - Which recordings form the evaluation set (length, number of speakers,

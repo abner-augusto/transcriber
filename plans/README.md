@@ -45,6 +45,7 @@ same review are tickets with status `needs-exploration` in
 | 018 | SQLite + FTS5, one-shot migration from Postgres (ticket 05) | P2 | M | — | TODO |
 | 019 | Local Job runner, child process per Job (ticket 04) | P2 | L | 017, 018 | TODO |
 | 020 | Remove Redis/Celery/Postgres/Docker, `uv`, one start command (ticket 05) | P3 | M | 018, 019 | TODO |
+| 021 | Evaluate VibeVoice against the daily stack (ticket 07) | P3 | M | 012, 013 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
