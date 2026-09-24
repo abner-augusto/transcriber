@@ -8,96 +8,11 @@ import {
 } from "../api";
 import type { SpeakerProfile, VocabularyEntry } from "../api";
 import type { VocabularyProfile } from "../types";
+import { engineMeta } from "../engineMetadata";
 
 interface Props {
   onClose: () => void;
 }
-
-interface EngineMetadata {
-  label: string;
-  badgeText: string;
-  badgeStyle: string;
-  badgeDot: string;
-  badgeTitle: string;
-  description?: string;
-  modelPlaceholder: string;
-  alignerPlaceholder?: string;
-  supportsAligner?: boolean;
-  supportsLanguage?: boolean;
-  supportsDecoder?: boolean;
-  supportsDevice?: boolean;
-  defaultLanguage?: string;
-  defaultDevice?: string;
-}
-
-const ENGINE_METADATA: Record<string, EngineMetadata> = {
-  "vibevoice": {
-    label: "VibeVoice 7B",
-    badgeText: "Native Diarization (7B)",
-    badgeStyle: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-    badgeDot: "bg-emerald-400",
-    badgeTitle: "Unified transcription and speaker diarization in a single pass",
-    description: "Performs unified transcription and native speaker diarization with high accuracy, bypassing external diarization.",
-    modelPlaceholder: "./models/VibeVoice-ASR-Streaming-7B or HuggingFace repo",
-    alignerPlaceholder: "./models/Qwen3-ForcedAligner-0.6B-hf",
-    supportsAligner: true,
-    supportsDevice: true,
-    defaultDevice: "cuda",
-  },
-  "qwen3-asr": {
-    label: "Qwen3 1.7B",
-    badgeText: "External Diarization",
-    badgeStyle: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30",
-    badgeDot: "bg-indigo-400",
-    badgeTitle: "Qwen3 transcription with forced alignment, followed by external diarization",
-    description: "Transcribes with Qwen3 1.7B with hotword vocabulary injection; diarization is handled externally.",
-    modelPlaceholder: "./models/Qwen3-ASR-1.7B-hf or HuggingFace repo",
-    alignerPlaceholder: "./models/Qwen3-ForcedAligner-0.6B-hf",
-    supportsAligner: true,
-    supportsLanguage: true,
-    supportsDevice: true,
-    defaultLanguage: "Portuguese",
-    defaultDevice: "cuda",
-  },
-  "faster-whisper": {
-    label: "Faster Whisper",
-    badgeText: "External Diarization",
-    badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
-    badgeDot: "bg-slate-500",
-    badgeTitle: "Transcription followed by external diarization",
-    modelPlaceholder: "Model (e.g. large-v3-turbo, inesc-id/WhisperLv3-X-PT-All)",
-    supportsLanguage: true,
-    supportsDevice: true,
-    defaultDevice: "auto",
-  },
-  "whisper.cpp": {
-    label: "Whisper.cpp",
-    badgeText: "External Diarization",
-    badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
-    badgeDot: "bg-slate-500",
-    badgeTitle: "Transcription followed by external diarization",
-    modelPlaceholder: "Model path (e.g. ./models/ggml-medium.bin)",
-    supportsLanguage: true,
-  },
-  "parakeet.cpp": {
-    label: "Parakeet.cpp",
-    badgeText: "External Diarization",
-    badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
-    badgeDot: "bg-slate-500",
-    badgeTitle: "Transcription followed by external diarization",
-    modelPlaceholder: "Model path (e.g. ./models/parakeet/tdt-0.6b-v3-q4_k.gguf)",
-    supportsDecoder: true,
-  },
-};
-
-const DEFAULT_ENGINE_META: EngineMetadata = {
-  label: "Transcription Engine",
-  badgeText: "External Diarization",
-  badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
-  badgeDot: "bg-slate-500",
-  badgeTitle: "Transcription followed by external diarization",
-  modelPlaceholder: "Model path or identifier",
-};
 
 export default function SettingsDialog({ onClose }: Props) {
   const [settings, setSettings] = useState<ModelSettings | null>(null);
@@ -151,7 +66,7 @@ export default function SettingsDialog({ onClose }: Props) {
   }
 
   function applyEngineDefaults(engine: string) {
-    const meta = ENGINE_METADATA[engine] || DEFAULT_ENGINE_META;
+    const meta = engineMeta(engine);
     setNewDevice(meta.defaultDevice || "cuda");
     setNewLanguage(meta.defaultLanguage || "");
     if (engine === "parakeet.cpp") setNewDecoder("tdt");
@@ -254,7 +169,7 @@ export default function SettingsDialog({ onClose }: Props) {
     }
     setAddError("");
 
-    const meta = ENGINE_METADATA[newEngine] || DEFAULT_ENGINE_META;
+    const meta = engineMeta(newEngine);
 
     const payload = {
       name: trimmedName,
@@ -327,7 +242,7 @@ export default function SettingsDialog({ onClose }: Props) {
     );
   }
 
-  const currentEngineMeta = ENGINE_METADATA[newEngine] || DEFAULT_ENGINE_META;
+  const currentEngineMeta = engineMeta(newEngine);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -371,7 +286,7 @@ export default function SettingsDialog({ onClose }: Props) {
 
               <div className="space-y-2">
                 {settings.presets.map((p) => {
-                  const meta = ENGINE_METADATA[p.engine] || DEFAULT_ENGINE_META;
+                  const meta = engineMeta(p.engine);
 
                   return (
                     <div
@@ -525,7 +440,7 @@ export default function SettingsDialog({ onClose }: Props) {
                       className="w-full bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
                     >
                       {settings.engines.map((e) => {
-                        const meta = ENGINE_METADATA[e] || DEFAULT_ENGINE_META;
+                        const meta = engineMeta(e);
                         return (
                           <option key={e} value={e}>
                             {e} — {meta.label}
