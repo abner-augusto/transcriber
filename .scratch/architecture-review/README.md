@@ -27,7 +27,7 @@ flip the ticket to `ready-for-agent`.
 |--------|-----------|------------|
 | `issues/01-transcriber-returns-transcription.md` | 2 | ready → `plans/015-transcriber-returns-transcription.md` |
 | `issues/02-job-module.md` | 4 | plan 007 |
-| `issues/03-run-config.md` | 5 | — |
+| `issues/03-run-config.md` | 5 | ready → `plans/016-one-place-for-preferences-and-run-config.md` |
 | `issues/04-per-job-child-process.md` | 6 | 02 |
 | `issues/05-stack-simplification.md` | stack | 02, 04 |
 | `issues/06-vocabulary-for-parakeet.md` | new (ADR-0007) | ready → `plans/014-vocabulary-correction.md` |

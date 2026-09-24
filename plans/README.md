@@ -40,6 +40,7 @@ same review are tickets with status `needs-exploration` in
 | 013 | Move Segment derivation out of `tasks/shared.py` | P2 | S | 012 | DONE |
 | 014 | Vocabulary Correction (ticket 06) | P1 | L | 012, 013 | TODO |
 | 015 | The Transcriber returns a Transcription (ticket 01) | P2 | M | 012 | TODO |
+| 016 | One place for Preferences, RunConfig per Job (ticket 03) | P2 | L | 015 (soft) | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
