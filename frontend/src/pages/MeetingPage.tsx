@@ -11,6 +11,7 @@ import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
 import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
 import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
+import { RECONNECT_DELAY_MS, shouldReconnectMeetingSocket } from "../utils/meetingSocket";
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,35 +30,73 @@ export default function MeetingPage() {
   const [sidebarTab, setSidebarTab] = useState<"speakers" | "analytics">("speakers");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
-  const wsRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
+  // The Meeting this page shows. Responses and socket events for any other id are stale.
+  const idRef = useRef(id);
+
   useEffect(() => {
     if (!id) return;
-    loadMeeting();
+    idRef.current = id;
+    // Set on cleanup: once true, nothing from this effect may touch the store again.
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const isCurrent = () => !cancelled;
+
+    fetchMeeting(id, isCurrent);
+
+    function connectWebSocket(meetingId: string) {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const socket = new WebSocket(`${proto}//${window.location.host}/ws/meetings/${meetingId}`);
+      ws = socket;
+      socket.onmessage = (event) => {
+        if (cancelled) return;
+        const data: ProgressUpdate = JSON.parse(event.data);
+        if (data.type === "ping") return;
+        setProgress(data);
+        if ((data.type === "progress" && data.progress === 100) || data.type === "error") {
+          clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(() => {
+            if (!cancelled) fetchMeeting(meetingId, isCurrent);
+          }, 500);
+        }
+      };
+      socket.onclose = (event) => {
+        const reconnect = () =>
+          shouldReconnectMeetingSocket({
+            closeCode: event.code,
+            cancelled,
+            visibilityState: document.visibilityState,
+          });
+        if (!reconnect()) return;
+        reconnectTimer = setTimeout(() => {
+          if (reconnect()) connectWebSocket(meetingId);
+        }, RECONNECT_DELAY_MS);
+      };
+    }
+
+    connectWebSocket(id);
 
     return () => {
-      wsRef.current?.close();
+      cancelled = true;
+      clearTimeout(reconnectTimer);
+      clearTimeout(refreshTimer);
+      ws?.close();
       setCurrentMeeting(null);
       setProgress(null);
     };
   }, [id]);
 
-  useEffect(() => {
-    if (!id) return;
-    connectWebSocket();
-    return () => {
-      wsRef.current?.close();
-    };
-  }, [id]);
-
-  async function loadMeeting() {
-    if (!id) return;
-    const m = await getMeeting(id);
+  async function fetchMeeting(meetingId: string, isCurrent: () => boolean) {
+    const m = await getMeeting(meetingId);
+    if (!isCurrent()) return;
     setCurrentMeeting(m);
     if (m.status === "processing") {
-      const jobs = await getJobs(id);
+      const jobs = await getJobs(meetingId);
+      if (!isCurrent()) return;
       const active = jobs.find((j) => j.status === "running" || j.status === "pending");
       if (active) {
         setProgress({ type: "progress", progress: active.progress, step: active.current_step || "Processing...", status: "processing" });
@@ -65,28 +104,10 @@ export default function MeetingPage() {
     }
   }
 
-  function connectWebSocket() {
+  function loadMeeting() {
     if (!id) return;
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws/meetings/${id}`);
-    wsRef.current = ws;
-    ws.onmessage = (event) => {
-      const data: ProgressUpdate = JSON.parse(event.data);
-      if (data.type === "ping") return;
-      setProgress(data);
-      if (data.type === "progress" && data.progress === 100) {
-        setTimeout(() => loadMeeting(), 500);
-      }
-      if (data.type === "error") {
-        setTimeout(() => loadMeeting(), 500);
-      }
-    };
-    ws.onclose = (event) => {
-      if (event.code === 4004) return; // meeting deleted/not found — stop reconnecting
-      setTimeout(() => {
-        if (document.visibilityState === "visible") connectWebSocket();
-      }, 3000);
-    };
+    const requestedId = id;
+    return fetchMeeting(requestedId, () => idRef.current === requestedId);
   }
 
   useEffect(() => {
