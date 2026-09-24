@@ -38,6 +38,8 @@ def _selected_ids(config):
 
 
 def pytest_configure(config):
+    # Keeps FastAPI startup away from the real storage directory.
+    os.environ["TRANSCRIBER_TESTING"] = "1"
     known = {preset["id"] for preset in list_presets()}
     unknown = sorted(set(_selected_ids(config)) - known)
     if unknown:
