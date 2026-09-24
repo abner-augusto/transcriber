@@ -36,8 +36,8 @@ same review are tickets with status `needs-exploration` in
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 012 | One Diarization stage for full processing and Reprocessing | P1 | M | — | TODO |
-| 013 | Move Segment derivation out of `tasks/shared.py` | P2 | S | 012 | TODO |
+| 012 | One Diarization stage for full processing and Reprocessing | P1 | M | — | DONE |
+| 013 | Move Segment derivation out of `tasks/shared.py` | P2 | S | 012 | DONE |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.

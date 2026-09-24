@@ -11,8 +11,8 @@ as defined by the `codebase-design` skill; domain terms from `CONTEXT.md`.
 
 | Candidate | Where it lives | Status |
 |-----------|----------------|--------|
-| 1. Deepen the Diarization stage | `plans/012-deepen-diarization-stage.md` (supersedes plan 008) | ready — do first |
-| 3. Move Segment derivation out of `tasks/shared.py` | `plans/013-extract-segment-derivation.md` | ready after 012 |
+| 1. Deepen the Diarization stage | `plans/012-deepen-diarization-stage.md` (supersedes plan 008) | done |
+| 3. Move Segment derivation out of `tasks/shared.py` | `plans/013-extract-segment-derivation.md` | done |
 | Primary Engines (parakeet.cpp, faster-whisper large-v3) | `docs/adr/0007-primary-engines-in-daily-use.md` | accepted |
 
 ## Backlog — each needs its own exploration session
@@ -25,8 +25,8 @@ flip the ticket to `ready-for-agent`.
 
 | Ticket | Candidate | Blocked by |
 |--------|-----------|------------|
-| `issues/01-transcriber-returns-transcription.md` | 2 | plan 012 |
-| `issues/02-job-module.md` | 4 | plans 007, 012 |
+| `issues/01-transcriber-returns-transcription.md` | 2 | — (plan 012 done) |
+| `issues/02-job-module.md` | 4 | plan 007 |
 | `issues/03-run-config.md` | 5 | — |
 | `issues/04-per-job-child-process.md` | 6 | 02 |
 | `issues/05-stack-simplification.md` | stack | 02, 04 |

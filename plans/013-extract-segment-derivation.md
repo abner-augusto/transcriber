@@ -23,6 +23,13 @@
 - **Source**: architecture review 2026-09-24, candidate 3
   (`.scratch/architecture-review/README.md`)
 
+## Outcome (2026-09-24)
+
+Done in `8581398`, as one commit instead of two because deleting the stored
+readers and switching `models/meeting.py` had to land together. An AST
+comparison confirmed every moved definition is unchanged; `derive_segments`
+is the only new code.
+
 ## Why this matters
 
 The most-changed domain logic in the repo — Word-to-Speaker attribution

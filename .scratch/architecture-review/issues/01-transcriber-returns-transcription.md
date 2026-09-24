@@ -15,7 +15,8 @@ only after `transcribe()` runs. `engine_runners/_main.py` and
 `scripts/engine_smoke.py` repeat the same probing. The pipeline therefore
 knows which Engine ran, which `CONTEXT.md` says it must not.
 
-**Blocked by:** plan 012 (the Diarization stage takes the native Turns).
+**Blocked by:** None. Plan 012 is done: `tasks.diarization.diarize_meeting` takes
+`native` / `native_engine`, which collapse into the `Transcription` value.
 
 **Status:** needs-exploration
 

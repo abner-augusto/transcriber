@@ -25,6 +25,23 @@
 - **Source**: architecture review 2026-09-24, candidate 1
   (`.scratch/architecture-review/README.md`)
 
+## Outcome (2026-09-24)
+
+Done in `885f791` (characterization tests), `3366167` (stage + full
+processing), `b583ccf` (Reprocessing fix). Deviations from the steps below:
+
+- The "omit when None" rule for `to_stored()` was wrong. Single-track and
+  native shapes always write `exclusive_turns` and
+  `original_exclusive_turns`, as `null` when absent; only the dual-track shape
+  omits the `original_*` keys, and only it writes `host_label`. The
+  characterization snapshots caught this, and `to_stored()` reproduces the
+  real shapes.
+- `prepare_diarization` became `tasks.diarization.bound_to_speech`, which
+  returns a `MeetingDiarization`. Its three tests in
+  `tests/test_pyannote_exclusive.py` were ported, not dropped.
+- The test harness lives in `tests/task_harness.py` and is shared by both new
+  test files.
+
 ## Why this matters
 
 The three ways a Meeting gets its Turns — single-track (Diarizer + VAD mask),

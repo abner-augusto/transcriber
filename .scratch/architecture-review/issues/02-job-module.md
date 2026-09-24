@@ -13,7 +13,9 @@ claim + enqueue), `tasks/shared.py` (`meeting_job`, `_fail_job`,
 `database.py::recover_stale_jobs` called from API startup (fails live Jobs,
 see plan 007), and `api/websocket.py` (knows the Redis channel name).
 
-**Blocked by:** plan 007 (recovery moves to the worker), plan 012.
+**Blocked by:** plan 007 (recovery moves to the worker). Plan 012 is done, and after
+plan 013 `tasks/shared.py` holds only the lifecycle and persistence code this
+module absorbs.
 Plan 010 (dedupe enqueue) should be re-scoped into this ticket rather than
 executed on its own.
 
