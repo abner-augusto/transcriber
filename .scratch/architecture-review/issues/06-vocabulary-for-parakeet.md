@@ -14,7 +14,10 @@ it.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** needs-exploration
+**Status:** ready-for-agent
+
+**Plan:** `plans/014-vocabulary-correction.md` (design session 2026-09-24: post-correction at
+Segment derivation, Misheard Forms learned from edits, Re-apply Vocabulary Reprocessing).
 
 **Options to evaluate:**
 - **Engine-agnostic post-correction**: after transcription, fuzzy-match Words

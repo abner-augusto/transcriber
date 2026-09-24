@@ -30,8 +30,9 @@ flip the ticket to `ready-for-agent`.
 | `issues/03-run-config.md` | 5 | — |
 | `issues/04-per-job-child-process.md` | 6 | 02 |
 | `issues/05-stack-simplification.md` | stack | 02, 04 |
-| `issues/06-vocabulary-for-parakeet.md` | new (ADR-0007) | — |
+| `issues/06-vocabulary-for-parakeet.md` | new (ADR-0007) | ready → `plans/014-vocabulary-correction.md` |
 | `issues/07-vibevoice-maturation.md` | new (ADR-0007) | — |
+| `issues/08-correction-suggestions-ui.md` | from 06 | plan 014 |
 
 ## Explicitly rejected
 

@@ -14,8 +14,20 @@ _Avoid_: session, recording, upload, call
 
 **Vocabulary**:
 Domain-specific words and names — supplied by the user or learned from their corrections — that
-are given to the Transcriber so it spells them correctly.
+are given to the Transcriber so it spells them correctly, and applied afterwards by Vocabulary
+Correction to the Words it still got wrong.
 _Avoid_: prompt, hints, glossary, dictionary
+
+**Misheard Form**:
+A way the Transcriber has been seen to get a Vocabulary term wrong ("Galo" for "Garrah"), learned
+when the user corrects a Segment. Belongs to the term, not to one Meeting.
+_Avoid_: alias, typo, mapping
+
+**Vocabulary Correction**:
+Replacing Words the Transcriber misheard with the Vocabulary term they were meant to be. Applied
+when Segments are derived, so the Words stay as the Transcriber heard them and a Correction can
+be re-applied without transcribing again. Records what it changed, where, and by which rule.
+_Avoid_: autocorrect, post-processing, spell check
 
 ### What the transcript is made of
 
@@ -80,6 +92,7 @@ One unit of background processing over a single Meeting, carrying its own progre
 _Avoid_: task (reserved for the Celery mechanism that runs a Job)
 
 **Reprocessing**:
-Re-running diarization or speaker naming over a Meeting that has already been transcribed, without
-transcribing it again — typically after saving a new Voice Profile.
+Re-running diarization, speaker naming, or Vocabulary Correction over a Meeting that has already
+been transcribed, without transcribing it again — typically after saving a new Voice Profile or
+teaching the tool a new Vocabulary term.
 _Avoid_: rerun, refresh
