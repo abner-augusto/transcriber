@@ -13,7 +13,7 @@ export function usePresetEditor() {
   const [showAddPreset, setShowAddPreset] = useState(false);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
-  const [newEngine, setNewEngine] = useState("vibevoice");
+  const [newEngine, setNewEngine] = useState("parakeet.cpp");
   const [newModelPath, setNewModelPath] = useState("");
   const [newAlignerPath, setNewAlignerPath] = useState("");
   const [newLanguage, setNewLanguage] = useState("");
@@ -30,10 +30,11 @@ export function usePresetEditor() {
     const data = await getModelSettings();
     setSettings(data);
     if (data.engines.length > 0 && !editingPresetId) {
-      const initialEngine = data.engines.includes("vibevoice")
-        ? "vibevoice"
-        : data.engines.includes("qwen3-asr")
-        ? "qwen3-asr"
+      // The primary Engines (ADR-0007) come first.
+      const initialEngine = data.engines.includes("parakeet.cpp")
+        ? "parakeet.cpp"
+        : data.engines.includes("faster-whisper")
+        ? "faster-whisper"
         : data.engines[0];
       setNewEngine(initialEngine);
       applyEngineDefaults(initialEngine);

@@ -50,7 +50,8 @@ def diarize_meeting(
 
 
 def bound_to_speech(result, audio_path: str, vad_service, *, engine: str) -> MeetingDiarization:
-    """Bound a Diarizer's Turns to the speech VAD finds, keeping the originals alongside."""
+    """Bound Turns — from the Diarizer or a Transcriber's native diarization — to the speech
+    VAD finds, keeping the originals alongside."""
     original = _as_result(result)
     vad_segments = vad_service.compute_vad_segments(audio_path)
     if vad_segments:
