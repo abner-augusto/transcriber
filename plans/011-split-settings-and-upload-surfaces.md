@@ -21,6 +21,28 @@
 - **Category**: tech-debt
 - **Planned at**: commit `40b455a`, 2026-09-17
 
+## Outcome (2026-09-24)
+
+Done in `0fdb5e4`, `d3291fe`, `f73bda9`. Verified by capturing 16 UI
+scenarios with Playwright against the real backend (SQLite) before and after
+each step: screenshots, visible text, every field value, and the multipart
+fields of a real upload submission. Deviations from the steps below:
+
+- **State lives in hooks owned by the dialog, not in the tabs.** The footer
+  Save is shared and today's state survives tab switches (an open preset
+  form, unsaved preferences). `settings/usePresetEditor.ts` and
+  `settings/usePreferencesForm.ts` keep that; `PresetTab` / `PreferencesTab`
+  take the hook's value as a prop.
+- **One scroll container in the dialog.** Both tabs used to render the same
+  scrolling `<div>` at the same position, so React reused it and the scroll
+  offset carried across tabs. The tabs now return fragments inside one
+  container in `SettingsDialog`, which keeps that pixel-for-pixel.
+- **`UploadDialog` loads Presets and vocabulary profiles when it opens**
+  and mounts only while open. This changes one behavior on purpose: after
+  Cancel, reopening used to leave the Preset on a blocked default; it now
+  picks the first usable Preset again. A HomePage rename/delete error is no
+  longer shown inside the upload dialog; closing the dialog still clears it.
+
 ## Why this matters
 
 `SettingsDialog.tsx` (~790 lines) owns preset CRUD, engine-specific form

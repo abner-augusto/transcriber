@@ -22,11 +22,11 @@ status here when finished.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 007 | Recover interrupted Jobs on the Celery worker, not the API | P1 | M | — | TODO |
+| 007 | Recover interrupted Jobs on the Celery worker, not the API | P1 | M | — | DONE |
 | 008 | Re-diarize dual-track Meetings through the host/remote path | P1 | M | — | REJECTED: superseded by 012, which fixes the same bug through one Diarization stage |
-| 009 | Stop stale Meeting fetches and zombie WebSocket reconnects | P1 | S | — | TODO |
+| 009 | Stop stale Meeting fetches and zombie WebSocket reconnects | P1 | S | — | DONE |
 | 010 | One helper to claim a Meeting and enqueue its Job | P2 | M | 007, 012 | BLOCKED: re-scope into `.scratch/architecture-review/issues/02-job-module.md` before executing |
-| 011 | Split SettingsDialog and HomePage without changing behavior | P3 | L | — | TODO |
+| 011 | Split SettingsDialog and HomePage without changing behavior | P3 | L | — | DONE |
 
 ### Architecture review (2026-09-24)
 

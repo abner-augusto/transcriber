@@ -21,6 +21,13 @@
 - **Category**: bug
 - **Planned at**: commit `40b455a`, 2026-09-17
 
+## Outcome (2026-09-24)
+
+Done in `ba6c010`, as one commit because the characterization tests encode
+the fixed behavior. Beyond the plan, `tests/test_job_recovery.py` also fires
+Celery's `worker_ready` signal and asserts recovery runs, instead of relying
+only on the source-text checks in step 4.
+
 ## Why this matters
 
 Job recovery currently runs in FastAPI startup. The Celery worker is a
