@@ -38,14 +38,20 @@ def _selected_ids(config):
 
 
 def pytest_configure(config):
-    # Keeps FastAPI startup away from the real storage directory.
-    os.environ["TRANSCRIBER_TESTING"] = "1"
     known = {preset["id"] for preset in list_presets()}
     unknown = sorted(set(_selected_ids(config)) - known)
     if unknown:
         raise pytest.UsageError(
             "unknown Engine smoke Preset(s): " + ", ".join(unknown)
         )
+
+
+@pytest.fixture(autouse=True)
+def _startup_leaves_storage_alone(monkeypatch):
+    """FastAPI startup deletes storage directories with no Meeting row; never in tests."""
+    import main
+
+    monkeypatch.setattr(main, "cleanup_orphaned_storage", lambda: None)
 
 
 @pytest.fixture

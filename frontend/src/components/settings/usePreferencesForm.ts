@@ -14,11 +14,11 @@ import type { VocabularyProfile } from "../../types";
  */
 export function usePreferencesForm() {
   const [defaultVocab, setDefaultVocab] = useState("");
-  const [profilesEnabled, setProfilesEnabled] = useState(true);
+  const [voiceProfilesEnabled, setVoiceProfilesEnabled] = useState(true);
   const [hfToken, setHfToken] = useState("");
   const [clusterThreshold, setClusterThreshold] = useState<number | null>(null);
   const [switchPenalty, setSwitchPenalty] = useState(0.8);
-  const [profiles, setProfiles] = useState<SpeakerProfile[]>([]);
+  const [voiceProfiles, setVoiceProfiles] = useState<SpeakerProfile[]>([]);
   const [learnedVocab, setLearnedVocab] = useState<VocabularyEntry[]>([]);
   const [vocabProfiles, setVocabProfiles] = useState<VocabularyProfile[]>([]);
   const [newProfileName, setNewProfileName] = useState("");
@@ -32,11 +32,11 @@ export function usePreferencesForm() {
   async function loadPreferences() {
     const p = await getPreferences();
     setDefaultVocab(p.default_vocabulary || "");
-    setProfilesEnabled(p.speaker_profiles_enabled);
+    setVoiceProfilesEnabled(p.speaker_profiles_enabled);
     setHfToken(p.hf_auth_token || "");
     setClusterThreshold(p.diarization?.clustering_threshold ?? null);
     setSwitchPenalty(p.speaker_switch_penalty ?? 0.8);
-    setProfiles(await listSpeakerProfiles());
+    setVoiceProfiles(await listSpeakerProfiles());
     setLearnedVocab(await listVocabulary());
     setVocabProfiles(await listVocabularyProfiles());
   }
@@ -65,17 +65,17 @@ export function usePreferencesForm() {
     setVocabProfiles(vocabProfiles.filter((p) => p.id !== id));
   }
 
-  async function handleDeleteProfile(id: string) {
-    const profile = profiles.find((p) => p.id === id);
-    if (!confirm(`Delete voice profile "${profile?.name}"?`)) return;
+  async function handleDeleteVoiceProfile(id: string) {
+    const voiceProfile = voiceProfiles.find((p) => p.id === id);
+    if (!confirm(`Delete voice profile "${voiceProfile?.name}"?`)) return;
     await deleteSpeakerProfile(id);
-    setProfiles(profiles.filter((p) => p.id !== id));
+    setVoiceProfiles(voiceProfiles.filter((p) => p.id !== id));
   }
 
   async function save() {
     await updatePreferences({
       default_vocabulary: defaultVocab,
-      speaker_profiles_enabled: profilesEnabled,
+      speaker_profiles_enabled: voiceProfilesEnabled,
       hf_auth_token: hfToken,
       speaker_switch_penalty: switchPenalty,
       diarization: clusterThreshold == null ? {} : { clustering_threshold: clusterThreshold },
@@ -84,11 +84,11 @@ export function usePreferencesForm() {
 
   return {
     defaultVocab, setDefaultVocab,
-    profilesEnabled, setProfilesEnabled,
+    voiceProfilesEnabled, setVoiceProfilesEnabled,
     hfToken, setHfToken,
     clusterThreshold, setClusterThreshold,
     switchPenalty, setSwitchPenalty,
-    profiles,
+    voiceProfiles,
     learnedVocab, setLearnedVocab,
     vocabProfiles,
     newProfileName, setNewProfileName,
@@ -96,7 +96,7 @@ export function usePreferencesForm() {
     savingVocabProfile,
     handleCreateVocabProfile,
     handleDeleteVocabProfile,
-    handleDeleteProfile,
+    handleDeleteVoiceProfile,
     save,
   };
 }

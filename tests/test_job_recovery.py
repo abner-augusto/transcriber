@@ -94,14 +94,8 @@ def test_each_running_job_is_recovered_independently(monkeypatch, tmp_path):
 
 
 def test_fastapi_startup_does_not_recover_jobs():
-    text = Path("main.py").read_text(encoding="utf-8")
-    assert "recover_stale_jobs()" not in text
-
-
-def test_celery_worker_start_recovers_jobs():
-    text = Path("tasks/celery_app.py").read_text(encoding="utf-8")
-    assert "worker_ready" in text
-    assert "recover_stale_jobs" in text
+    text = (Path(__file__).resolve().parent.parent / "main.py").read_text(encoding="utf-8")
+    assert "recover_stale_jobs" not in text
 
 
 def test_worker_ready_signal_runs_recovery(monkeypatch):

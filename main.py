@@ -1,5 +1,4 @@
 import math
-import os
 import shutil
 from pathlib import Path
 
@@ -46,8 +45,7 @@ def startup():
     init_db()
     # Interrupted Jobs are recovered by the Celery worker when it starts, not here:
     # restarting the API must not fail Jobs a live worker is still running.
-    if not os.environ.get("TRANSCRIBER_TESTING"):
-        cleanup_orphaned_storage()
+    cleanup_orphaned_storage()
     import logging
     _log = logging.getLogger(__name__)
     if not _settings.hf_auth_token or _settings.hf_auth_token == "hf_your_token_here":

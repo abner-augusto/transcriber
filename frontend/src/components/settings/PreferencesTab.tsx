@@ -7,11 +7,11 @@ interface Props {
 
 export default function PreferencesTab({ form }: Props) {
   const {
-    defaultVocab, setDefaultVocab, profilesEnabled, setProfilesEnabled,
+    defaultVocab, setDefaultVocab, voiceProfilesEnabled, setVoiceProfilesEnabled,
     hfToken, setHfToken, clusterThreshold, setClusterThreshold,
-    switchPenalty, setSwitchPenalty, profiles, learnedVocab, setLearnedVocab,
+    switchPenalty, setSwitchPenalty, voiceProfiles, learnedVocab, setLearnedVocab,
     vocabProfiles, newProfileName, setNewProfileName, newProfileTerms, setNewProfileTerms,
-    savingVocabProfile, handleCreateVocabProfile, handleDeleteVocabProfile, handleDeleteProfile,
+    savingVocabProfile, handleCreateVocabProfile, handleDeleteVocabProfile, handleDeleteVoiceProfile,
   } = form;
 
   return (
@@ -184,21 +184,21 @@ export default function PreferencesTab({ form }: Props) {
             <label className="block text-sm font-medium text-slate-300">Speaker voice profiles</label>
             <p className="text-xs text-slate-500 mt-0.5">Save and match voice profiles across meetings.</p>
           </div>
-          <button onClick={() => setProfilesEnabled(!profilesEnabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${profilesEnabled ? "bg-violet-600" : "bg-slate-700"}`}>
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${profilesEnabled ? "translate-x-6" : "translate-x-1"}`} />
+          <button onClick={() => setVoiceProfilesEnabled(!voiceProfilesEnabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${voiceProfilesEnabled ? "bg-violet-600" : "bg-slate-700"}`}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${voiceProfilesEnabled ? "translate-x-6" : "translate-x-1"}`} />
           </button>
         </div>
-        {profiles.length > 0 && (
+        {voiceProfiles.length > 0 && (
           <div className="mt-3 space-y-1.5">
-            <p className="text-xs text-slate-500">{profiles.length} saved voice profile(s)</p>
-            {profiles.map((p) => (
+            <p className="text-xs text-slate-500">{voiceProfiles.length} saved voice profile(s)</p>
+            {voiceProfiles.map((p) => (
               <div key={p.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
                 <div>
                   <span className="text-sm text-slate-300">{p.name}</span>
                   <span className="text-[10px] text-slate-600 ml-2">{p.sample_count} sample(s)</span>
                 </div>
-                <button onClick={() => handleDeleteProfile(p.id)}
+                <button onClick={() => handleDeleteVoiceProfile(p.id)}
                   className="text-slate-600 hover:text-red-400 transition p-1">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
