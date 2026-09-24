@@ -5,7 +5,7 @@ They are separate on purpose: nothing local does both at once, and ADR-0001 rule
 out the cloud services that would be the only reason to fuse them.
 
 Neither port produces Segments. A Segment is what a reader sees, and it is derived
-from Words and Turns together — see tasks.shared.build_segments.
+from Words and Turns together — see transcript.segments.derive_segments.
 """
 
 from dataclasses import dataclass

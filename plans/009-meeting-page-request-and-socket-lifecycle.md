@@ -21,6 +21,15 @@
 - **Category**: bug
 - **Planned at**: commit `40b455a`, 2026-09-17
 
+## Outcome (2026-09-24)
+
+Done in `0d3ffb1`. `loadMeeting()` stays the no-argument callback the child
+panels call; it delegates to `fetchMeeting(id, isCurrent)`, which the
+lifecycle effect calls with its `cancelled` guard. The reconnect timer
+re-evaluates `shouldReconnectMeetingSocket` when it fires, so visibility is
+checked both at close time and at reconnect time, as the old code did.
+`wsRef` was removed; the socket is local to the effect.
+
 ## Why this matters
 
 `MeetingPage` loads a Meeting and opens a progress WebSocket keyed by `id`.

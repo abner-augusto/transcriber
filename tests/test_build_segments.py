@@ -5,16 +5,14 @@ sentences and an interruption is unattributable; ask it for Words and it falls o
 """
 
 from engines import Turn, Word, compute_overlaps
-from tasks.shared import (
+from transcript.diarization import MeetingDiarization
+from transcript.segments import (
     SPEAKER_SWITCH_PENALTY,
-    attribution_turns_from_stored,
     build_segments,
-    exclusive_turns_from_stored,
-    overlaps_from_stored,
+    derive_segments,
     smooth_word_speakers,
-    turns_from_stored,
-    words_from_stored,
 )
+from transcript.words import words_from_stored
 
 from .fakes import spoken
 
@@ -149,9 +147,9 @@ def test_turns_read_from_either_era():
     current = {"engine": "pyannote", "turns": legacy}
 
     expected = [Turn(start=0.0, end=1.0, speaker="SPEAKER_00")]
-    assert turns_from_stored(legacy) == expected
-    assert turns_from_stored(current) == expected
-    assert turns_from_stored(None) == []
+    assert MeetingDiarization.from_stored(legacy).turns == expected
+    assert MeetingDiarization.from_stored(current).turns == expected
+    assert MeetingDiarization.from_stored(None) is None
 
 
 def test_exclusive_turns_and_overlaps_read_from_stored():
@@ -170,15 +168,16 @@ def test_exclusive_turns_and_overlaps_read_from_stored():
         ],
     }
 
-    assert exclusive_turns_from_stored(raw_with_exclusive) == [
+    with_exclusive = MeetingDiarization.from_stored(raw_with_exclusive)
+    assert with_exclusive.exclusive_turns == [
         Turn(start=0.0, end=2.0, speaker="SPEAKER_00"),
         Turn(start=3.0, end=5.0, speaker="SPEAKER_01"),
     ]
-    assert attribution_turns_from_stored(raw_with_exclusive) == [
+    assert with_exclusive.attribution_turns == [
         Turn(start=0.0, end=2.0, speaker="SPEAKER_00"),
         Turn(start=3.0, end=5.0, speaker="SPEAKER_01"),
     ]
-    assert overlaps_from_stored(raw_with_exclusive) == [
+    assert with_exclusive.overlaps == [
         {"start": 2.0, "end": 3.0, "speakers": ["SPEAKER_00", "SPEAKER_01"]},
     ]
 
@@ -189,13 +188,14 @@ def test_exclusive_turns_and_overlaps_read_from_stored():
             {"start": 2.0, "end": 5.0, "speaker": "SPEAKER_01"},
         ],
     }
-    assert exclusive_turns_from_stored(raw_without_exclusive) is None
-    assert attribution_turns_from_stored(raw_without_exclusive) == [
+    without_exclusive = MeetingDiarization.from_stored(raw_without_exclusive)
+    assert without_exclusive.exclusive_turns is None
+    assert without_exclusive.attribution_turns == [
         Turn(start=0.0, end=3.0, speaker="SPEAKER_00"),
         Turn(start=2.0, end=5.0, speaker="SPEAKER_01"),
     ]
     # Computes overlaps dynamically from turns
-    assert overlaps_from_stored(raw_without_exclusive) == [
+    assert without_exclusive.overlaps == [
         {"start": 2.0, "end": 3.0, "speakers": ["SPEAKER_00", "SPEAKER_01"]},
     ]
 
@@ -479,3 +479,32 @@ def test_smoothing_empty_input_and_edge_cases():
     assert smooth_word_speakers([], []) == []
 
 
+
+
+def test_derive_segments_attributes_against_exclusive_turns_when_there_are_any():
+    words = [spoken("sim", 2.2, 2.6)]
+    turns = [
+        Turn(start=0.0, end=3.0, speaker="SPEAKER_00"),
+        Turn(start=2.0, end=5.0, speaker="SPEAKER_01"),
+    ]
+    exclusive = [
+        Turn(start=0.0, end=2.0, speaker="SPEAKER_00"),
+        Turn(start=2.0, end=5.0, speaker="SPEAKER_01"),
+    ]
+
+    with_exclusive = MeetingDiarization(
+        engine="pyannote", turns=turns, exclusive_turns=exclusive, overlaps=compute_overlaps(turns)
+    )
+    empty_exclusive = MeetingDiarization(
+        engine="pyannote", turns=turns, exclusive_turns=[], overlaps=compute_overlaps(turns)
+    )
+
+    assert derive_segments(words, with_exclusive) == build_segments(words, exclusive)
+    assert derive_segments(words, empty_exclusive) == build_segments(words, turns)
+
+
+def test_derive_segments_without_a_diarization_leaves_every_word_unknown():
+    segments = derive_segments([spoken("olá", 0.0, 0.4), spoken("mundo", 0.5, 0.9)], None)
+
+    assert [segment["speaker"] for segment in segments] == ["UNKNOWN"]
+    assert segments[0]["text"] == "olá mundo"

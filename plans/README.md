@@ -22,21 +22,58 @@ status here when finished.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 007 | Recover interrupted Jobs on the Celery worker, not the API | P1 | M | — | TODO |
-| 008 | Re-diarize dual-track Meetings through the host/remote path | P1 | M | — | TODO |
-| 009 | Stop stale Meeting fetches and zombie WebSocket reconnects | P1 | S | — | TODO |
-| 010 | One helper to claim a Meeting and enqueue its Job | P2 | M | 007, 008 | TODO |
-| 011 | Split SettingsDialog and HomePage without changing behavior | P3 | L | — | TODO |
+| 007 | Recover interrupted Jobs on the Celery worker, not the API | P1 | M | — | DONE |
+| 008 | Re-diarize dual-track Meetings through the host/remote path | P1 | M | — | REJECTED: superseded by 012, which fixes the same bug through one Diarization stage |
+| 009 | Stop stale Meeting fetches and zombie WebSocket reconnects | P1 | S | — | DONE |
+| 010 | One helper to claim a Meeting and enqueue its Job | P2 | M | 007, 012 | REJECTED: absorbed into 017 |
+| 011 | Split SettingsDialog and HomePage without changing behavior | P3 | L | — | DONE |
+
+### Architecture review (2026-09-24)
+
+Source: `.scratch/architecture-review/README.md`. Plans 014–021 come from the
+design sessions held the same day on tickets 01–07. Tickets 08 (corrections on
+the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 012 | One Diarization stage for full processing and Reprocessing | P1 | M | — | DONE |
+| 013 | Move Segment derivation out of `tasks/shared.py` | P2 | S | 012 | DONE |
+| 014 | Vocabulary Correction (ticket 06) | P1 | L | 012, 013 | TODO |
+| 015 | The Transcriber returns a Transcription (ticket 01) | P2 | M | 012 | TODO |
+| 016 | One place for Preferences, RunConfig per Job (ticket 03) | P2 | L | 015 (soft) | TODO |
+| 017 | One Job module, Celery as first adapter (ticket 02) | P2 | M | 007 | TODO |
+| 018 | SQLite + FTS5, one-shot migration from Postgres (ticket 05) | P2 | M | — | TODO |
+| 019 | Local Job runner, child process per Job (ticket 04) | P2 | L | 017, 018 | TODO |
+| 020 | Remove Redis/Celery/Postgres/Docker, `uv`, one start command (ticket 05) | P3 | M | 018, 019 | TODO |
+| 021 | Evaluate VibeVoice against the daily stack (ticket 07) | P3 | M | 012, 013 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
 ## Dependency notes
 
+- Suggested order for 014–021: **014** (P1, most daily value) → **015** →
+  **016** → **017** → **018** → **019** → **020**. 014, 015 and 016 all touch
+  `tasks/process_meeting.py`; run them one after another, not in parallel.
+  **021** needs the user's GPU and recordings and can run any time.
+- 018 needs the user to run the migration command on their data before 020.
+- **Run locally by the user, never by an agent**: 014 step 5 (Vocabulary
+  Correction bench on the corrected Meetings), 019 steps 1 and 6 (model load
+  time, VRAM, end-to-end Job), 020's clean Windows install, and **all of plan
+  021** (GPU and private recordings; transcripts stay off the repository).
+  An agent executing 014 or 019 implements everything up to the step that
+  needs the machine and stops there: leave those acceptance boxes unchecked,
+  write in the plan's Outcome note that the step is waiting for a local run,
+  and never write placeholder or estimated numbers. Plan 021 stays `TODO`
+  until the user reports results.
+
 - 007, 008, 009, and 011 can run in parallel.
 - 010 must wait for 007 (the `PROCESSING` claim is only a real lock after
-  recovery leaves the API) and 008 (do not fold dual-track diarization into
-  the API helper).
+  recovery leaves the API) and 012 (do not fold dual-track diarization into
+  the API helper). It is now part of the Job module ticket.
+- 012 replaces 008: do not execute 008. 012 can run in parallel with 007,
+  009, and 011.
+- 013 must wait for 012 (its entry point takes `MeetingDiarization`).
 - 011 must not edit `MeetingPage.tsx` (009 owns it) and must not restore
   live-recording UI.
 
@@ -55,8 +92,11 @@ Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 - Unifying sliding-window chunking across whisper/parakeet/qwen adapters:
   rejected — ADR-0003 and ADR-0004 put chunking inside each adapter on
   purpose.
-- Splitting the Viterbi smoother out of `tasks/shared.py`: rejected for now —
-  well tested, high regression cost, low leverage next to Job lifecycle.
+- Splitting the Viterbi smoother out of `tasks/shared.py`: rejected on
+  2026-09-17, **reopened on 2026-09-24 as plan 013**. The regression cost is
+  contained because 013 moves the code verbatim and keeps every existing
+  assertion. The leverage comes from plan 012: Segment derivation takes a
+  `MeetingDiarization`, and `models/meeting.py` stops importing from `tasks`.
 - Restoring LLM actions/minutes: rejected by ADR-0002.
 - **Dead live/recording/finalizing UI and unused `UPLOADING` /
   `CANCELLED` enums (YAGNI):** executed directly (not a numbered plan).

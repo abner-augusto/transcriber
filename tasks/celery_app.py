@@ -16,6 +16,7 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 sys.path.insert(0, _project_root)
 
 from celery import Celery
+from celery.signals import worker_ready
 from config import settings
 
 celery_app = Celery(
@@ -38,3 +39,12 @@ celery_app.conf.update(
     result_expires=3600,
     worker_redirect_stdouts_level="INFO",
 )
+
+
+@worker_ready.connect
+def _recover_interrupted_jobs(**kwargs):
+    # Assumes the single --pool=solo worker every start script runs: with a second
+    # worker this would fail Jobs that worker is still holding.
+    from database import recover_stale_jobs
+
+    recover_stale_jobs()

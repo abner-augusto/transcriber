@@ -46,6 +46,14 @@ def pytest_configure(config):
         )
 
 
+@pytest.fixture(autouse=True)
+def _startup_leaves_storage_alone(monkeypatch):
+    """FastAPI startup deletes storage directories with no Meeting row; never in tests."""
+    import main
+
+    monkeypatch.setattr(main, "cleanup_orphaned_storage", lambda: None)
+
+
 @pytest.fixture
 def selected_engine_smoke_preset(request):
     if not request.config.getoption("--run-engine-smoke"):

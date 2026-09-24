@@ -69,6 +69,7 @@ class Meeting(Base):
         if include_segments:
             d["speakers"] = [s.to_dict() for s in self.speakers]
             d["segments"] = [s.to_dict() for s in self.segments]
-            from tasks.shared import overlaps_from_stored
-            d["overlaps"] = overlaps_from_stored(self.raw_diarization)
+            from transcript.diarization import MeetingDiarization
+            diarization = MeetingDiarization.from_stored(self.raw_diarization)
+            d["overlaps"] = diarization.overlaps if diarization is not None else []
         return d

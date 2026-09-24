@@ -55,22 +55,21 @@ def init_db():
 
 
 def recover_stale_jobs():
-    """Mark any jobs stuck in RUNNING/PENDING as FAILED on startup.
+    """Fail every RUNNING Job; called when the Celery worker starts.
 
-    If the server restarts while a Celery task was running, the job
-    status is stuck. This cleans them up so the user can retry.
+    A Job is RUNNING only while a worker holds it, and this deployment runs a single
+    worker, so at worker start every RUNNING Job was interrupted. PENDING Jobs are
+    still queued for this worker and are left alone.
     """
     from models.job import Job, JobStatus
     from models import Meeting, MeetingStatus
 
     db = SessionLocal()
     try:
-        stale_jobs = db.query(Job).filter(
-            Job.status.in_([JobStatus.RUNNING, JobStatus.PENDING])
-        ).all()
+        stale_jobs = db.query(Job).filter(Job.status == JobStatus.RUNNING).all()
         for job in stale_jobs:
             job.status = JobStatus.FAILED
-            job.error = "Task interrupted by server restart. Please retry."
+            job.error = "Job interrupted by worker restart. Please retry."
             job.completed_at = datetime.utcnow()
             # Also reset the meeting status if it was stuck in PROCESSING
             meeting = db.query(Meeting).filter(Meeting.id == job.meeting_id).first()

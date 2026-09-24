@@ -3,20 +3,19 @@ import logging
 log = logging.getLogger(__name__)
 
 from .celery_app import celery_app
+from .diarization import diarize_meeting
 from .shared import (
     MeetingNotFoundError,
     meeting_job,
     update_progress,
-    build_segments,
-    prepare_diarization,
     rebuild_speakers_and_segments,
 )
-from engines import DIARIZER_ENGINE, make_aligner, make_diarizer, make_transcriber
+from engines import make_aligner, make_diarizer, make_transcriber
 from presets import resolve_preset
-from services.audio_service import AudioService, DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT
+from services.audio_service import AudioService
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
-from tasks.dual_track import HOST_SPEAKER, build_dual_diarization, host_turns_from_vad
+from transcript.segments import derive_segments
 
 
 @celery_app.task(bind=True)
@@ -102,65 +101,25 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             release_gpu_memory()
 
             # Step 3: Diarization & VAD bounding
-            vad_service = VadService()
+            native = None
+            native_engine = None
             if meeting.is_dual_track:
                 update_progress(db, job, meeting, 50, "Identifying speakers (dual-track)...")
-                from config import get_meeting_path
-
-                meeting_dir = get_meeting_path(meeting.id)
-                mic_path = str(meeting_dir / DUAL_MIC_OUTPUT)
-                system_path = str(meeting_dir / DUAL_SYSTEM_OUTPUT)
-
-                # Host: deterministic VAD on the mic track — every speech region is the host.
-                host_vad = vad_service.compute_vad_segments(mic_path)
-                host_turns = host_turns_from_vad(host_vad)
-
-                # Remote: Diarizer on the system track, bounded by VAD on that track.
-                diar_result = diarizer.diarize(
-                    system_path,
-                    min_speakers=meeting.min_speakers,
-                    max_speakers=meeting.max_speakers,
-                )
-                remote_turns = diar_result.turns
-                system_vad = vad_service.compute_vad_segments(system_path)
-                remote_turns = vad_service.mask_turns_to_vad(remote_turns, system_vad)
-
-                diar_result = build_dual_diarization(host_turns, remote_turns)
-                diar_engine_name = DIARIZER_ENGINE
-                bounded_turns = diar_result.turns
-                bounded_exclusive_turns = diar_result.exclusive_turns
-                meeting.raw_diarization = {
-                    "engine": diar_engine_name,
-                    "turns": [t.to_dict() for t in bounded_turns],
-                    "exclusive_turns": (
-                        [t.to_dict() for t in bounded_exclusive_turns]
-                        if bounded_exclusive_turns is not None
-                        else None
-                    ),
-                    "overlaps": diar_result.overlaps,
-                    "host_label": HOST_SPEAKER,
-                }
+            elif getattr(transcriber, "has_native_diarization", False):
+                update_progress(db, job, meeting, 50, "Extracting native speaker diarization...")
+                native = transcriber.get_native_diarization()
+                native_engine = preset.get("engine", "vibevoice")
             else:
-                if getattr(transcriber, "has_native_diarization", False):
-                    update_progress(db, job, meeting, 50, "Extracting native speaker diarization...")
-                    diar_result = transcriber.get_native_diarization()
-                    diar_engine_name = preset.get("engine", "vibevoice")
-                else:
-                    update_progress(db, job, meeting, 50, "Identifying speakers (diarization)...")
-                    diar_result = diarizer.diarize(
-                        audio_path,
-                        min_speakers=meeting.min_speakers,
-                        max_speakers=meeting.max_speakers,
-                    )
-                    diar_engine_name = DIARIZER_ENGINE
-
-                diarization_data, bounded_turns, bounded_exclusive_turns = prepare_diarization(
-                    diar_result, audio_path, vad_service
-                )
-                meeting.raw_diarization = {
-                    "engine": diar_engine_name,
-                    **diarization_data,
-                }
+                update_progress(db, job, meeting, 50, "Identifying speakers (diarization)...")
+            diarization = diarize_meeting(
+                meeting,
+                audio_path,
+                diarizer=diarizer,
+                vad_service=VadService(),
+                native=native,
+                native_engine=native_engine,
+            )
+            meeting.raw_diarization = diarization.to_stored()
             db.commit()
             update_progress(db, job, meeting, 70, "Diarization complete")
 
@@ -172,21 +131,17 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
 
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
             update_progress(db, job, meeting, 75, "Synchronizing speakers with text...")
-            attribution_turns = (
-                bounded_exclusive_turns
-                if (bounded_exclusive_turns is not None and len(bounded_exclusive_turns) > 0)
-                else bounded_turns
-            )
-            aligned = build_segments(words, attribution_turns, switch_penalty=switch_penalty)
+            aligned = derive_segments(words, diarization, switch_penalty=switch_penalty)
             update_progress(db, job, meeting, 80, "Synchronization complete")
 
             # Step 5: Speaker naming (Participant N, overridden by voice profile matches)
             update_progress(db, job, meeting, 85, "Matching against saved voice profiles...")
-            all_turns = bounded_turns + (bounded_exclusive_turns or [])
-            speaker_labels = sorted({t.speaker for t in all_turns})
-            host_label = HOST_SPEAKER if meeting.is_dual_track else None
             speaker_info = speaker_id_service.name_speakers(
-                db, speaker_labels, bounded_turns, audio_path, host_label=host_label
+                db,
+                diarization.speaker_labels,
+                diarization.turns,
+                audio_path,
+                host_label=diarization.host_label,
             )
             if hasattr(speaker_id_service, "unload"):
                 speaker_id_service.unload()
