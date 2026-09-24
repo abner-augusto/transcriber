@@ -25,7 +25,7 @@ status here when finished.
 | 007 | Recover interrupted Jobs on the Celery worker, not the API | P1 | M | — | DONE |
 | 008 | Re-diarize dual-track Meetings through the host/remote path | P1 | M | — | REJECTED: superseded by 012, which fixes the same bug through one Diarization stage |
 | 009 | Stop stale Meeting fetches and zombie WebSocket reconnects | P1 | S | — | DONE |
-| 010 | One helper to claim a Meeting and enqueue its Job | P2 | M | 007, 012 | BLOCKED: re-scope into `.scratch/architecture-review/issues/02-job-module.md` before executing |
+| 010 | One helper to claim a Meeting and enqueue its Job | P2 | M | 007, 012 | REJECTED: absorbed into 017 |
 | 011 | Split SettingsDialog and HomePage without changing behavior | P3 | L | — | DONE |
 
 ### Architecture review (2026-09-24)
@@ -41,6 +41,10 @@ same review are tickets with status `needs-exploration` in
 | 014 | Vocabulary Correction (ticket 06) | P1 | L | 012, 013 | TODO |
 | 015 | The Transcriber returns a Transcription (ticket 01) | P2 | M | 012 | TODO |
 | 016 | One place for Preferences, RunConfig per Job (ticket 03) | P2 | L | 015 (soft) | TODO |
+| 017 | One Job module, Celery as first adapter (ticket 02) | P2 | M | 007 | TODO |
+| 018 | SQLite + FTS5, one-shot migration from Postgres (ticket 05) | P2 | M | — | TODO |
+| 019 | Local Job runner, child process per Job (ticket 04) | P2 | L | 017, 018 | TODO |
+| 020 | Remove Redis/Celery/Postgres/Docker, `uv`, one start command (ticket 05) | P3 | M | 018, 019 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.

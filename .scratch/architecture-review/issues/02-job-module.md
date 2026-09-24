@@ -19,7 +19,9 @@ module absorbs.
 Plan 010 (dedupe enqueue) should be re-scoped into this ticket rather than
 executed on its own.
 
-**Status:** needs-exploration
+**Status:** ready-for-agent
+
+**Plan:** `plans/017-job-module.md` (design session 2026-09-24 on 02/04/05).
 
 **Open questions for the exploration session:**
 - Which adapters are real? Proposed: Celery+Redis (today), local worker with

@@ -25,7 +25,11 @@ not.
 **Blocked by:** 02 (Job module), 04 (child process). The SQLite + FTS5 swap
 can be done independently and first.
 
-**Status:** needs-exploration
+**Status:** ready-for-agent
+
+**Plans:** `plans/018-sqlite-and-migration.md` (SQLite + FTS5, manual migration command)
+and `plans/020-remove-legacy-infrastructure.md` (remove Redis/Celery/Postgres/Docker, `uv`,
+one start command). Decided 2026-09-24: Windows native, single user, one GPU.
 
 **Constraints:**
 - ADR-0001: everything stays local.

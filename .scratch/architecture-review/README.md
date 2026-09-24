@@ -26,13 +26,14 @@ flip the ticket to `ready-for-agent`.
 | Ticket | Candidate | Blocked by |
 |--------|-----------|------------|
 | `issues/01-transcriber-returns-transcription.md` | 2 | ready → `plans/015-transcriber-returns-transcription.md` |
-| `issues/02-job-module.md` | 4 | plan 007 |
+| `issues/02-job-module.md` | 4 | ready → `plans/017-job-module.md` |
 | `issues/03-run-config.md` | 5 | ready → `plans/016-one-place-for-preferences-and-run-config.md` |
-| `issues/04-per-job-child-process.md` | 6 | 02 |
-| `issues/05-stack-simplification.md` | stack | 02, 04 |
+| `issues/04-per-job-child-process.md` | 6 | ready → `plans/019-local-job-runner.md` |
+| `issues/05-stack-simplification.md` | stack | ready → `plans/018-sqlite-and-migration.md`, `plans/020-remove-legacy-infrastructure.md` |
 | `issues/06-vocabulary-for-parakeet.md` | new (ADR-0007) | ready → `plans/014-vocabulary-correction.md` |
 | `issues/07-vibevoice-maturation.md` | new (ADR-0007) | — |
 | `issues/08-correction-suggestions-ui.md` | from 06 | plan 014 |
+| `issues/09-cancel-job.md` | from 02/04/05 | plan 019 |
 
 ## Explicitly rejected
 

@@ -16,7 +16,10 @@ binding) takes the worker down.
 
 **Blocked by:** 02 (the child process is the local-worker adapter of the Job module).
 
-**Status:** needs-exploration
+**Status:** ready-for-agent
+
+**Plan:** `plans/019-local-job-runner.md` (one Python process, child process per Job,
+progress over a queue, timeout = max(60 min, 3× audio), PENDING Jobs resume on restart).
 
 **Open questions for the exploration session:**
 - `ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1)` vs an explicit
