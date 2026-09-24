@@ -129,7 +129,7 @@ export default function HomePage() {
       {/* Upload dialog */}
       {showUpload && (
         <UploadDialog
-          onClose={() => { setShowUpload(false); setError(null); }}
+          onClose={() => setShowUpload(false)}
           onCreated={(meetingId) => { setShowUpload(false); navigate(`/meetings/${meetingId}`); }}
         />
       )}

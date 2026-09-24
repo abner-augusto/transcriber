@@ -12,6 +12,7 @@ import ExportDialog from "../components/ExportDialog";
 import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
 import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
 import { RECONNECT_DELAY_MS, shouldReconnectMeetingSocket } from "../utils/meetingSocket";
+import { ActiveView } from "../utils/activeView";
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -33,18 +34,16 @@ export default function MeetingPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  // The Meeting this page shows. Responses and socket events for any other id are stale.
-  const idRef = useRef(id);
+  // Any fetch, socket event, or timer started for a Meeting the page no longer shows is
+  // stale and must not touch the store.
+  const [activeView] = useState(() => new ActiveView());
 
   useEffect(() => {
     if (!id) return;
-    idRef.current = id;
-    // Set on cleanup: once true, nothing from this effect may touch the store again.
-    let cancelled = false;
+    const isCurrent = activeView.show();
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-    const isCurrent = () => !cancelled;
 
     fetchMeeting(id, isCurrent);
 
@@ -53,14 +52,14 @@ export default function MeetingPage() {
       const socket = new WebSocket(`${proto}//${window.location.host}/ws/meetings/${meetingId}`);
       ws = socket;
       socket.onmessage = (event) => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         const data: ProgressUpdate = JSON.parse(event.data);
         if (data.type === "ping") return;
         setProgress(data);
         if ((data.type === "progress" && data.progress === 100) || data.type === "error") {
           clearTimeout(refreshTimer);
           refreshTimer = setTimeout(() => {
-            if (!cancelled) fetchMeeting(meetingId, isCurrent);
+            if (isCurrent()) fetchMeeting(meetingId, isCurrent);
           }, 500);
         }
       };
@@ -68,7 +67,7 @@ export default function MeetingPage() {
         const reconnect = () =>
           shouldReconnectMeetingSocket({
             closeCode: event.code,
-            cancelled,
+            cancelled: !isCurrent(),
             visibilityState: document.visibilityState,
           });
         if (!reconnect()) return;
@@ -81,7 +80,7 @@ export default function MeetingPage() {
     connectWebSocket(id);
 
     return () => {
-      cancelled = true;
+      activeView.hide(isCurrent);
       clearTimeout(reconnectTimer);
       clearTimeout(refreshTimer);
       ws?.close();
@@ -105,9 +104,9 @@ export default function MeetingPage() {
   }
 
   function loadMeeting() {
-    if (!id) return;
-    const requestedId = id;
-    return fetchMeeting(requestedId, () => idRef.current === requestedId);
+    const isCurrent = activeView.capture();
+    if (!id || !isCurrent) return;
+    return fetchMeeting(id, isCurrent);
   }
 
   useEffect(() => {
