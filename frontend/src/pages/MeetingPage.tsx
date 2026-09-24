@@ -40,7 +40,7 @@ export default function MeetingPage() {
 
   useEffect(() => {
     if (!id) return;
-    const isCurrent = activeView.show();
+    const isCurrent = activeView.show(id);
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -104,8 +104,9 @@ export default function MeetingPage() {
   }
 
   function loadMeeting() {
-    const isCurrent = activeView.capture();
-    if (!id || !isCurrent) return;
+    if (!id) return;
+    const isCurrent = activeView.capture(id);
+    if (!isCurrent) return;
     return fetchMeeting(id, isCurrent);
   }
 
