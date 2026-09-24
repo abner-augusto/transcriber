@@ -18,7 +18,10 @@ knows which Engine ran, which `CONTEXT.md` says it must not.
 **Blocked by:** None. Plan 012 is done: `tasks.diarization.diarize_meeting` takes
 `native` / `native_engine`, which collapse into the `Transcription` value.
 
-**Status:** needs-exploration
+**Status:** ready-for-agent
+
+**Plan:** `plans/015-transcriber-returns-transcription.md` (design session 2026-09-24:
+provenance dict, `load`/`unload` on the port, Aligner stays separate, RunConfig stays out).
 
 **Constraints:**
 - ADR-0006: the JSON protocol v1 between core and isolated runners does not

@@ -25,7 +25,7 @@ flip the ticket to `ready-for-agent`.
 
 | Ticket | Candidate | Blocked by |
 |--------|-----------|------------|
-| `issues/01-transcriber-returns-transcription.md` | 2 | — (plan 012 done) |
+| `issues/01-transcriber-returns-transcription.md` | 2 | ready → `plans/015-transcriber-returns-transcription.md` |
 | `issues/02-job-module.md` | 4 | plan 007 |
 | `issues/03-run-config.md` | 5 | — |
 | `issues/04-per-job-child-process.md` | 6 | 02 |
