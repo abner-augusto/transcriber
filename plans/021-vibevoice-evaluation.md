@@ -8,6 +8,9 @@
 >
 > **Drift check (run first)**: `git diff --stat 6ee29ea..HEAD -- bench/ engines/vibevoice.py engine_runners/ tasks/diarization.py transcript/`
 
+> **Local-only steps**: see "Run locally by the user" in `plans/README.md`. An agent
+> stops before them, leaves their boxes unchecked, and never writes estimated numbers.
+
 ## Status
 
 - **Priority**: P3

@@ -5,6 +5,9 @@
 > STOP condition, stop and report. When done, update `plans/README.md` and
 > `.scratch/architecture-review/issues/05-stack-simplification.md`.
 
+> **Local-only steps**: see "Run locally by the user" in `plans/README.md`. An agent
+> stops before them, leaves their boxes unchecked, and never writes estimated numbers.
+
 ## Status
 
 - **Priority**: P3

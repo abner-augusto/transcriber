@@ -148,6 +148,10 @@ become thin calls into `preferences.py`.
 - [ ] Existing preferences API tests and frontend unchanged and passing
 - [ ] `plans/README.md` row and ticket 03 status updated
 
+## Carried over from the PR #1 review
+
+- Add **Preferences** and **RunConfig** to `CONTEXT.md` when this plan lands.
+
 ## STOP conditions
 
 - The migration would drop a value the user set that the new model rejects

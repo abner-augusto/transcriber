@@ -8,6 +8,9 @@
 > **Drift check (run first)**: compare `jobs/`, `tasks/`, `engines/gpu_memory.py`,
 > `main.py`, `api/websocket.py` against the end state of plans 017 and 018.
 
+> **Local-only steps**: see "Run locally by the user" in `plans/README.md`. An agent
+> stops before them, leaves their boxes unchecked, and never writes estimated numbers.
+
 ## Status
 
 - **Priority**: P2

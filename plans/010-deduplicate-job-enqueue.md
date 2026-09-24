@@ -20,6 +20,7 @@
 - **Depends on**: plans/007-move-job-recovery-off-api-startup.md, plans/008-rediarize-dual-track-meetings.md
 - **Category**: tech-debt
 - **Planned at**: commit `40b455a`, 2026-09-17
+- **Absorbed into**: `plans/017-job-module.md` (2026-09-24). Do not execute this plan.
 
 ## Why this matters
 

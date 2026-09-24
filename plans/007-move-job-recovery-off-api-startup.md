@@ -28,6 +28,15 @@ the fixed behavior. Beyond the plan, `tests/test_job_recovery.py` also fires
 Celery's `worker_ready` signal and asserts recovery runs, instead of relying
 only on the source-text checks in step 4.
 
+After review, the `TRANSCRIBER_TESTING` switch in FastAPI startup was replaced
+by an autouse fixture in `tests/conftest.py` that stubs
+`cleanup_orphaned_storage`, and the `celery_app` text check was dropped (the
+signal test covers it).
+
+The deferred lost-PENDING case (see "Maintenance notes") is tracked in
+`.scratch/architecture-review/issues/10-lost-pending-jobs.md`; plan 019
+removes it for good.
+
 ## Why this matters
 
 Job recovery currently runs in FastAPI startup. The Celery worker is a

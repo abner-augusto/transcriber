@@ -155,6 +155,16 @@ returns nothing.
 - [ ] Smoke tiers run on the user's machine for parakeet.cpp and faster-whisper large-v3 (ADR-0007): `model_load` and `model_inference`
 - [ ] `plans/README.md` row and ticket 01 status updated
 
+## Carried over from the PR #1 review
+
+- `tasks/process_meeting.py` Step 3 repeats the dual → native → Diarizer
+  branch of `diarize_meeting` only to choose a progress message and pull out
+  `native`. When Step 4 of this plan rewrites that block, let
+  `diarize_meeting` report which path it took, and carry the Engine name with
+  the native Turns so the `native_engine or "native"` fallback in
+  `tasks/diarization.py` disappears.
+- Add **Transcription** to `CONTEXT.md` when this plan lands.
+
 ## STOP conditions
 
 - A snapshot needs its expected dict edited to pass.

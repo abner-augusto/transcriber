@@ -30,6 +30,12 @@ readers and switching `models/meeting.py` had to land together. An AST
 comparison confirmed every moved definition is unchanged; `derive_segments`
 is the only new code.
 
+One ported assertion changed its expected value, which the STOP conditions
+would flag: `turns_from_stored(None) == []` became
+`MeetingDiarization.from_stored(None) is None`. The meaning is the same (no
+stored diarization); `from_stored` returns `None` instead of an empty list so
+callers can tell "never diarized" from "diarized, no Turns".
+
 ## Why this matters
 
 The most-changed domain logic in the repo — Word-to-Speaker attribution

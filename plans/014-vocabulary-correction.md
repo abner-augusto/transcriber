@@ -12,6 +12,9 @@
 > "Current state" notes against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
 
+> **Local-only steps**: see "Run locally by the user" in `plans/README.md`. An agent
+> stops before them, leaves their boxes unchecked, and never writes estimated numbers.
+
 ## Status
 
 - **Priority**: P1 (the most-used Engine gets no Vocabulary today)
@@ -235,6 +238,7 @@ Outcome section.
 - [ ] Re-apply Vocabulary keeps Speaker names
 - [ ] Bench numbers from the user's Meetings recorded in this plan
 - [ ] `plans/README.md` row and ticket 06 status updated
+- [ ] `CONTEXT.md`: drop the "(planned, plan 014)" markers and the "once plan 014 lands" wording
 
 ## STOP conditions
 

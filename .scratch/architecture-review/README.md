@@ -34,6 +34,7 @@ flip the ticket to `ready-for-agent`.
 | `issues/07-vibevoice-maturation.md` | new (ADR-0007) | ready → `plans/021-vibevoice-evaluation.md` |
 | `issues/08-correction-suggestions-ui.md` | from 06 | plan 014 |
 | `issues/09-cancel-job.md` | from 02/04/05 | plan 019 |
+| `issues/10-lost-pending-jobs.md` | PR #1 review of plan 007 | — (plan 019 removes the cause) |
 
 ## Explicitly rejected
 

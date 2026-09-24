@@ -57,9 +57,15 @@ Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
   `tasks/process_meeting.py`; run them one after another, not in parallel.
   **021** needs the user's GPU and recordings and can run any time.
 - 018 needs the user to run the migration command on their data before 020.
-- Steps that need the user's machine: 014 step 5 (bench on ~8 corrected
-  Meetings), 019 steps 1 and 6 (load-time and VRAM measurements), 020 (clean
-  Windows install), 021 steps 3–4.
+- **Run locally by the user, never by an agent**: 014 step 5 (Vocabulary
+  Correction bench on the corrected Meetings), 019 steps 1 and 6 (model load
+  time, VRAM, end-to-end Job), 020's clean Windows install, and **all of plan
+  021** (GPU and private recordings; transcripts stay off the repository).
+  An agent executing 014 or 019 implements everything up to the step that
+  needs the machine and stops there: leave those acceptance boxes unchecked,
+  write in the plan's Outcome note that the step is waiting for a local run,
+  and never write placeholder or estimated numbers. Plan 021 stays `TODO`
+  until the user reports results.
 
 - 007, 008, 009, and 011 can run in parallel.
 - 010 must wait for 007 (the `PROCESSING` claim is only a real lock after

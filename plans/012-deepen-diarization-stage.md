@@ -41,6 +41,12 @@ processing), `b583ccf` (Reprocessing fix). Deviations from the steps below:
   `tests/test_pyannote_exclusive.py` were ported, not dropped.
 - The test harness lives in `tests/task_harness.py` and is shared by both new
   test files.
+- The dual-track Reprocessing tests (`tests/test_reprocess_dual_track.py`)
+  were run against the unchanged tasks first and **seen red**: 3 of 4 failed
+  (the diarize path, "You", and the missing-track error; the single-track
+  test passed). They were committed together with the fix in `b583ccf` rather
+  than in the characterization commit, so no commit on the branch has a
+  failing suite.
 
 ## Why this matters
 
