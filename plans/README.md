@@ -30,9 +30,9 @@ status here when finished.
 
 ### Architecture review (2026-09-24)
 
-Source: `.scratch/architecture-review/README.md`. Larger explorations from the
-same review are tickets with status `needs-exploration` in
-`.scratch/architecture-review/issues/`, not plans yet.
+Source: `.scratch/architecture-review/README.md`. Plans 014–021 come from the
+design sessions held the same day on tickets 01–07. Tickets 08 (corrections on
+the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
@@ -51,6 +51,15 @@ Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
 ## Dependency notes
+
+- Suggested order for 014–021: **014** (P1, most daily value) → **015** →
+  **016** → **017** → **018** → **019** → **020**. 014, 015 and 016 all touch
+  `tasks/process_meeting.py`; run them one after another, not in parallel.
+  **021** needs the user's GPU and recordings and can run any time.
+- 018 needs the user to run the migration command on their data before 020.
+- Steps that need the user's machine: 014 step 5 (bench on ~8 corrected
+  Meetings), 019 steps 1 and 6 (load-time and VRAM measurements), 020 (clean
+  Windows install), 021 steps 3–4.
 
 - 007, 008, 009, and 011 can run in parallel.
 - 010 must wait for 007 (the `PROCESSING` claim is only a real lock after
