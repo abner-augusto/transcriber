@@ -9,12 +9,7 @@ import numpy as np
 from engines import DiarizationResult, Turn, Word, compute_overlaps
 from engines.pyannote import PyannoteDiarizer, _UNSET
 from models import Meeting, MeetingStatus
-from tasks.shared import (
-    attribution_turns_from_stored,
-    build_segments,
-    exclusive_turns_from_stored,
-    overlaps_from_stored,
-)
+from transcript.segments import build_segments
 
 
 class MockTrack:

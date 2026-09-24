@@ -8,7 +8,6 @@ from .shared import (
     MeetingNotFoundError,
     meeting_job,
     update_progress,
-    build_segments,
     rebuild_speakers_and_segments,
 )
 from engines import make_aligner, make_diarizer, make_transcriber
@@ -16,6 +15,7 @@ from presets import resolve_preset
 from services.audio_service import AudioService
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
+from transcript.segments import derive_segments
 
 
 @celery_app.task(bind=True)
@@ -131,7 +131,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
 
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
             update_progress(db, job, meeting, 75, "Synchronizing speakers with text...")
-            aligned = build_segments(words, diarization.attribution_turns, switch_penalty=switch_penalty)
+            aligned = derive_segments(words, diarization, switch_penalty=switch_penalty)
             update_progress(db, job, meeting, 80, "Synchronization complete")
 
             # Step 5: Speaker naming (Participant N, overridden by voice profile matches)

@@ -5,7 +5,7 @@ import pytest
 
 from engines import Turn, Word
 from services.vad_service import VadService, mask_turns_to_vad, merge_intervals
-from tasks.shared import build_segments
+from transcript.segments import build_segments
 
 
 def spoken(text: str, start: float, end: float, confidence: float | None = None) -> Word:

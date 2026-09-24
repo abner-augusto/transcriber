@@ -4,7 +4,7 @@ from pathlib import Path
 from config import settings
 
 _PREFS_FILE = Path("preferences.json")
-DEFAULT_SPEAKER_SWITCH_PENALTY = 0.8
+from transcript.segments import SPEAKER_SWITCH_PENALTY as DEFAULT_SPEAKER_SWITCH_PENALTY
 MIN_SPEAKER_SWITCH_PENALTY = 0.0
 MAX_SPEAKER_SWITCH_PENALTY = 2.0
 

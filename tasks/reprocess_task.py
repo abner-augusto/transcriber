@@ -4,15 +4,15 @@ from .shared import (
     MeetingNotFoundError,
     meeting_job,
     update_progress,
-    build_segments,
     rebuild_speakers_and_segments,
-    words_from_stored,
 )
 from engines import make_diarizer
 from preferences import get_speaker_switch_penalty
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
 from transcript.diarization import MeetingDiarization
+from transcript.segments import derive_segments
+from transcript.words import words_from_stored
 
 
 def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
@@ -53,11 +53,7 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
         55 if rerun_diarization else 20,
         "Synchronizing speakers with text...",
     )
-    aligned = build_segments(
-        words,
-        diarization.attribution_turns,
-        switch_penalty=get_speaker_switch_penalty(),
-    )
+    aligned = derive_segments(words, diarization, switch_penalty=get_speaker_switch_penalty())
 
     # Speaker naming (Participant N, overridden by voice profile matches)
     update_progress(
