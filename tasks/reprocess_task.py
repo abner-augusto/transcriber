@@ -1,25 +1,25 @@
 from .celery_app import celery_app
+from .diarization import diarize_meeting
 from .shared import (
     MeetingNotFoundError,
     meeting_job,
     update_progress,
     build_segments,
-    prepare_diarization,
     rebuild_speakers_and_segments,
     words_from_stored,
-    turns_from_stored,
-    exclusive_turns_from_stored,
 )
-from engines import DIARIZER_ENGINE, make_diarizer
+from engines import make_diarizer
 from preferences import get_speaker_switch_penalty
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
+from transcript.diarization import MeetingDiarization
 
 
 def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
     """Shared execution logic for re-diarization and re-identification.
 
-    When rerun_diarization is True, runs the Diarizer again for fresh Turns.
+    When rerun_diarization is True, runs the Diarization stage again for fresh Turns —
+    always through the Diarizer, never a Transcriber's native Turns.
     When False, reuses the Meeting's existing Turns and only re-names Speakers.
     """
     words = words_from_stored(meeting.raw_transcription)
@@ -35,19 +35,8 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
     if rerun_diarization:
         diarizer = make_diarizer()
         update_progress(db, job, meeting, 10, "Running new speaker identification...")
-        diar_result = diarizer.diarize(
-            audio_path,
-            min_speakers=meeting.min_speakers,
-            max_speakers=meeting.max_speakers,
-        )
-        vad_service = VadService()
-        diarization_data, bounded_turns, bounded_exclusive_turns = prepare_diarization(
-            diar_result, audio_path, vad_service
-        )
-        meeting.raw_diarization = {
-            "engine": DIARIZER_ENGINE,
-            **diarization_data,
-        }
+        diarization = diarize_meeting(meeting, audio_path, diarizer=diarizer, vad_service=VadService())
+        meeting.raw_diarization = diarization.to_stored()
         db.commit()
         update_progress(db, job, meeting, 50, "Diarization complete")
         if hasattr(diarizer, "unload"):
@@ -55,17 +44,10 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
         from engines.gpu_memory import release_gpu_memory
         release_gpu_memory()
     else:
-        bounded_turns = turns_from_stored(meeting.raw_diarization)
-        bounded_exclusive_turns = exclusive_turns_from_stored(meeting.raw_diarization)
-        if not bounded_turns:
+        diarization = MeetingDiarization.from_stored(meeting.raw_diarization)
+        if diarization is None or not diarization.turns:
             raise RuntimeError("No existing diarization found. Run full processing first.")
 
-    # Build segments from Words and Turns
-    attribution_turns = (
-        bounded_exclusive_turns
-        if (bounded_exclusive_turns is not None and len(bounded_exclusive_turns) > 0)
-        else bounded_turns
-    )
     update_progress(
         db, job, meeting,
         55 if rerun_diarization else 20,
@@ -73,7 +55,7 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
     )
     aligned = build_segments(
         words,
-        attribution_turns,
+        diarization.attribution_turns,
         switch_penalty=get_speaker_switch_penalty(),
     )
 
@@ -83,10 +65,12 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
         65 if rerun_diarization else 40,
         "Matching against saved voice profiles...",
     )
-    all_turns = bounded_turns + (bounded_exclusive_turns or [])
-    speaker_labels = sorted({t.speaker for t in all_turns})
     speaker_info = speaker_id_service.name_speakers(
-        db, speaker_labels, bounded_turns, audio_path
+        db,
+        diarization.speaker_labels,
+        diarization.turns,
+        audio_path,
+        host_label=diarization.host_label,
     )
     if hasattr(speaker_id_service, "unload"):
         speaker_id_service.unload()

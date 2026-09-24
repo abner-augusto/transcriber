@@ -388,7 +388,7 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
 
 
 def test_tasks_keep_original_turns_separate_from_vad_bounded_turns():
-    from tasks.shared import prepare_diarization
+    from tasks.diarization import bound_to_speech
 
     original = [Turn(start=0.0, end=10.0, speaker="SPEAKER_00")]
     exclusive = [Turn(start=0.0, end=10.0, speaker="SPEAKER_00")]
@@ -400,9 +400,10 @@ def test_tasks_keep_original_turns_separate_from_vad_bounded_turns():
         def mask_turns_to_vad(self, turns, segments):
             return [Turn(start=2.0, end=4.0, speaker=turns[0].speaker)] if turns else []
 
-    data, bounded, bounded_exclusive = prepare_diarization(
-        DiarizationResult(turns=original, exclusive_turns=exclusive), "audio.wav", FakeVad()
+    diarization = bound_to_speech(
+        DiarizationResult(turns=original, exclusive_turns=exclusive), "audio.wav", FakeVad(), engine="pyannote"
     )
+    data, bounded, bounded_exclusive = diarization.to_stored(), diarization.turns, diarization.exclusive_turns
     assert data["original_turns"] == [original[0].to_dict()]
     assert data["original_exclusive_turns"] == [exclusive[0].to_dict()]
     assert data["turns"] == [bounded[0].to_dict()]
@@ -410,8 +411,8 @@ def test_tasks_keep_original_turns_separate_from_vad_bounded_turns():
     assert data["overlaps"] == []
 
 
-def test_prepare_diarization_keeps_turns_when_vad_returns_no_bounds(caplog):
-    from tasks.shared import prepare_diarization
+def test_bound_to_speech_keeps_turns_when_vad_returns_no_bounds(caplog):
+    from tasks.diarization import bound_to_speech
 
     original = [Turn(start=0.0, end=10.0, speaker="SPEAKER_00")]
     exclusive = [Turn(start=0.0, end=10.0, speaker="SPEAKER_00")]
@@ -423,9 +424,10 @@ def test_prepare_diarization_keeps_turns_when_vad_returns_no_bounds(caplog):
         def mask_turns_to_vad(self, turns, segments):
             raise AssertionError("empty VAD must fail open before masking")
 
-    data, bounded, bounded_exclusive = prepare_diarization(
-        DiarizationResult(turns=original, exclusive_turns=exclusive), "audio.wav", EmptyVad()
+    diarization = bound_to_speech(
+        DiarizationResult(turns=original, exclusive_turns=exclusive), "audio.wav", EmptyVad(), engine="pyannote"
     )
+    data, bounded, bounded_exclusive = diarization.to_stored(), diarization.turns, diarization.exclusive_turns
 
     assert bounded == original
     assert bounded_exclusive == exclusive
@@ -434,8 +436,8 @@ def test_prepare_diarization_keeps_turns_when_vad_returns_no_bounds(caplog):
     assert "VAD returned no speech bounds; keeping original diarization Turns" in caplog.text
 
 
-def test_prepare_diarization_stores_overlaps_for_the_bounded_snapshot():
-    from tasks.shared import prepare_diarization
+def test_bound_to_speech_stores_overlaps_for_the_bounded_snapshot():
+    from tasks.diarization import bound_to_speech
 
     original = [
         Turn(start=0.0, end=5.0, speaker="SPEAKER_00"),
@@ -453,14 +455,15 @@ def test_prepare_diarization_stores_overlaps_for_the_bounded_snapshot():
                 if min(turn.end, 4.5) > max(turn.start, 3.0)
             ]
 
-    data, _, _ = prepare_diarization(
+    data = bound_to_speech(
         DiarizationResult(
             turns=original,
             overlaps=[{"start": 4.0, "end": 5.0, "speakers": ["SPEAKER_00", "SPEAKER_01"]}],
         ),
         "audio.wav",
         ClippingVad(),
-    )
+        engine="pyannote",
+    ).to_stored()
 
     assert data["overlaps"] == [
         {"start": 4.0, "end": 4.5, "speakers": ["SPEAKER_00", "SPEAKER_01"]},

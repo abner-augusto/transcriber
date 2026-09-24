@@ -11,7 +11,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 
 from config import settings
 from database import SessionLocal
-from engines import DiarizationResult, Turn, Word, compute_overlaps
+from engines import Turn, Word, compute_overlaps
 from models import Job, Meeting, MeetingStatus, Speaker, Segment
 from models.job import JobStatus
 
@@ -486,52 +486,6 @@ def turns_from_stored(raw) -> list[Turn]:
     if isinstance(raw, dict):
         return [Turn.from_dict(t) for t in raw.get("turns", [])]
     return [Turn.from_dict(t) for t in raw]
-
-
-def prepare_diarization(result, audio_path: str, vad_service) -> tuple[dict, list[Turn], list[Turn] | None]:
-    """Normalize a diarizer result and retain both original and VAD-bounded Turns."""
-    if isinstance(result, DiarizationResult):
-        original_turns = result.turns
-        original_exclusive = result.exclusive_turns
-        supplied_overlaps = result.overlaps
-    elif isinstance(result, dict):
-        original_turns = [Turn.from_dict(t) for t in result.get("turns", [])]
-        original_exclusive = (
-            [Turn.from_dict(t) for t in result["exclusive_turns"]]
-            if result.get("exclusive_turns") is not None
-            else None
-        )
-        supplied_overlaps = result.get("overlaps")
-    else:
-        original_turns = list(result)
-        original_exclusive = None
-        supplied_overlaps = None
-
-    vad_segments = vad_service.compute_vad_segments(audio_path)
-    if vad_segments:
-        bounded_turns = vad_service.mask_turns_to_vad(original_turns, vad_segments)
-        bounded_exclusive = (
-            vad_service.mask_turns_to_vad(original_exclusive, vad_segments)
-            if original_exclusive is not None
-            else None
-        )
-    else:
-        log.warning("VAD returned no speech bounds; keeping original diarization Turns")
-        bounded_turns = list(original_turns)
-        bounded_exclusive = list(original_exclusive) if original_exclusive is not None else None
-    data = {
-        "turns": [t.to_dict() for t in bounded_turns],
-        "exclusive_turns": [t.to_dict() for t in bounded_exclusive] if bounded_exclusive is not None else None,
-        "original_turns": [t.to_dict() for t in original_turns],
-        "original_exclusive_turns": (
-            [t.to_dict() for t in original_exclusive] if original_exclusive is not None else None
-        ),
-        "overlaps": compute_overlaps(bounded_turns),
-        "original_overlaps": (
-            supplied_overlaps if supplied_overlaps is not None else compute_overlaps(original_turns)
-        ),
-    }
-    return data, bounded_turns, bounded_exclusive
 
 
 def exclusive_turns_from_stored(raw) -> list[Turn] | None:
