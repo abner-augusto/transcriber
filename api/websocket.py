@@ -1,42 +1,29 @@
 import asyncio
-import json
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
 
-import redis.asyncio as aioredis
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-
-from config import settings
-from database import SessionLocal
+from database import get_db
 from models import Meeting
+from jobs import subscribe
 
 router = APIRouter()
 
 
 @router.websocket("/ws/meetings/{meeting_id}")
-async def meeting_websocket(websocket: WebSocket, meeting_id: str):
+async def meeting_websocket(websocket: WebSocket, meeting_id: str, db: Session = Depends(get_db)):
     # Validate meeting exists before accepting connection
-    db = SessionLocal()
-    try:
-        meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
-        if not meeting:
-            await websocket.close(code=4004, reason="Meeting not found")
-            return
-    finally:
-        db.close()
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        await websocket.close(code=4004, reason="Meeting not found")
+        return
 
     await websocket.accept()
 
-    # Subscribe to Redis pub/sub for this meeting
-    r = aioredis.from_url(settings.redis_url)
-    pubsub = r.pubsub()
-    await pubsub.subscribe(f"meeting:{meeting_id}")
-
     try:
-        # Forward Redis messages to WebSocket
+        # Forward the configured progress stream without knowing its transport.
         async def relay():
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    data = json.loads(message["data"])
-                    await websocket.send_json(data)
+            async for event in subscribe(meeting_id):
+                await websocket.send_json(event)
 
         relay_task = asyncio.create_task(relay())
 
@@ -53,13 +40,5 @@ async def meeting_websocket(websocket: WebSocket, meeting_id: str):
     except Exception:
         pass
     finally:
-        relay_task.cancel()
-        try:
-            await pubsub.unsubscribe(f"meeting:{meeting_id}")
-            await pubsub.close()
-        except Exception:
-            pass
-        try:
-            await r.aclose()
-        except Exception:
-            pass
+        if "relay_task" in locals():
+            relay_task.cancel()

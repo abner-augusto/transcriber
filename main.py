@@ -1,7 +1,6 @@
 import shutil
 from pathlib import Path
 
-import redis
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -42,6 +41,9 @@ app.include_router(preferences.router)
 @app.on_event("startup")
 def startup():
     init_db()
+    from jobs import configure
+    from jobs.runners import CeleryJobRunner, RedisProgressBus
+    configure(runner=CeleryJobRunner(), progress_bus=RedisProgressBus(_settings.redis_url))
     # Interrupted Jobs are recovered by the Celery worker when it starts, not here:
     # restarting the API must not fail Jobs a live worker is still running.
     cleanup_orphaned_storage()
@@ -85,9 +87,8 @@ def health():
 
     # Redis
     try:
-        r = redis.Redis.from_url(_settings.redis_url)
-        r.ping()
-        r.close()
+        from jobs import check_progress_bus
+        check_progress_bus()
         checks["redis"] = "ok"
     except Exception as e:
         checks["redis"] = f"error: {e}"

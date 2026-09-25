@@ -11,11 +11,12 @@ from sqlalchemy import func
 
 import presets
 from database import get_db
+import jobs
+from jobs import JobAlreadyRunning, MeetingNotFoundError
 from models import Meeting, MeetingStatus, Speaker, Segment
-from models.job import Job, JobType, JobStatus
+from models.job import Job, JobType
 from config import get_meeting_path
 from services.audio_service import AudioService
-from tasks.process_meeting import process_meeting_task
 from engines import probe_engine
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
@@ -220,48 +221,32 @@ def delete_meeting(meeting_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-def _queue_full_processing(db: Session, meeting: Meeting) -> Job:
-    """Create a PROCESS_MEETING job and hand it to Celery. Caller owns the status transition."""
-    job = Job(
-        meeting_id=meeting.id,
-        job_type=JobType.PROCESS_MEETING,
-        status=JobStatus.PENDING,
-    )
-    db.add(job)
-    db.commit()
+def _enqueue(db: Session, meeting_id: str, kind: JobType) -> Job:
+    try:
+        return jobs.enqueue(db, meeting_id, kind)
+    except MeetingNotFoundError:
+        raise HTTPException(404, "Meeting not found")
+    except JobAlreadyRunning:
+        raise HTTPException(409, "Meeting is already being processed")
 
-    result = process_meeting_task.delay(meeting.id, job.id)
-    job.celery_task_id = result.id
-    db.commit()
-    return job
+
+def _reject_processing(meeting: Meeting) -> None:
+    """Preserve the immediate 400 for a Meeting already processing on entry."""
+    if meeting.status == MeetingStatus.PROCESSING:
+        raise HTTPException(400, "Already processing")
 
 
 @router.post("/{meeting_id}/process")
 def start_processing(meeting_id: str, db: Session = Depends(get_db)):
-    from sqlalchemy import update
-
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(404, "Meeting not found")
-
-    if meeting.status == MeetingStatus.PROCESSING:
-        raise HTTPException(400, "Already processing")
+    _reject_processing(meeting)
 
     preset = presets.resolve_preset(meeting.preset_id)
     health = _require_usable_preset(preset)
 
-    # Atomic status transition to prevent duplicate processing
-    rows = db.execute(
-        update(Meeting)
-        .where(Meeting.id == meeting_id)
-        .where(Meeting.status != MeetingStatus.PROCESSING)
-        .values(status=MeetingStatus.PROCESSING)
-    )
-    if rows.rowcount == 0:
-        db.rollback()
-        raise HTTPException(409, "Meeting is already being processed")
-
-    job = _queue_full_processing(db, meeting)
+    job = _enqueue(db, meeting.id, JobType.PROCESS_MEETING)
     return {**job.to_dict(), "engine_health": health}
 
 
@@ -314,120 +299,48 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
         dest_path = dest_dir / f"original{src_path.suffix}"
         shutil.copyfile(src_path, dest_path)
         copy.audio_filepath = str(dest_path)
-    copy.status = MeetingStatus.PROCESSING
     db.commit()
 
-    _queue_full_processing(db, copy)
+    _enqueue(db, copy.id, JobType.PROCESS_MEETING)
     return {**copy.to_dict(), "engine_health": health}
 
 
 @router.post("/{meeting_id}/rediarize")
 def rediarize_meeting(meeting_id: str, db: Session = Depends(get_db)):
     """Re-run diarization without re-transcribing."""
-    from sqlalchemy import update as sql_update
-    from tasks.reprocess_task import rediarize_task
-
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(404, "Meeting not found")
-    if meeting.status == MeetingStatus.PROCESSING:
-        raise HTTPException(400, "Already processing")
+    _reject_processing(meeting)
     if not meeting.raw_transcription:
         raise HTTPException(400, "No transcription data. Run full processing first.")
-
-    rows = db.execute(
-        sql_update(Meeting)
-        .where(Meeting.id == meeting_id)
-        .where(Meeting.status != MeetingStatus.PROCESSING)
-        .values(status=MeetingStatus.PROCESSING)
-    )
-    if rows.rowcount == 0:
-        db.rollback()
-        raise HTTPException(409, "Meeting is already being processed")
-
-    job = Job(
-        meeting_id=meeting.id,
-        job_type=JobType.REDIARIZE,
-        status=JobStatus.PENDING,
-    )
-    db.add(job)
-    db.commit()
-
-    result = rediarize_task.delay(meeting.id, job.id)
-    job.celery_task_id = result.id
-    db.commit()
+    job = _enqueue(db, meeting.id, JobType.REDIARIZE)
     return job.to_dict()
 
 
 @router.post("/{meeting_id}/reidentify")
 def reidentify_meeting(meeting_id: str, db: Session = Depends(get_db)):
     """Re-run speaker identification without re-transcribing or re-diarizing."""
-    from sqlalchemy import update as sql_update
-    from tasks.reprocess_task import reidentify_task
-
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(404, "Meeting not found")
-    if meeting.status == MeetingStatus.PROCESSING:
-        raise HTTPException(400, "Already processing")
+    _reject_processing(meeting)
     if not meeting.raw_transcription or not meeting.raw_diarization:
         raise HTTPException(400, "No transcription/diarization data. Run full processing first.")
-
-    rows = db.execute(
-        sql_update(Meeting)
-        .where(Meeting.id == meeting_id)
-        .where(Meeting.status != MeetingStatus.PROCESSING)
-        .values(status=MeetingStatus.PROCESSING)
-    )
-    if rows.rowcount == 0:
-        db.rollback()
-        raise HTTPException(409, "Meeting is already being processed")
-
-    job = Job(
-        meeting_id=meeting.id,
-        job_type=JobType.REIDENTIFY,
-        status=JobStatus.PENDING,
-    )
-    db.add(job)
-    db.commit()
-
-    result = reidentify_task.delay(meeting.id, job.id)
-    job.celery_task_id = result.id
-    db.commit()
+    job = _enqueue(db, meeting.id, JobType.REIDENTIFY)
     return job.to_dict()
 
 
 @router.post("/{meeting_id}/reapply-vocabulary")
 def reapply_vocabulary(meeting_id: str, db: Session = Depends(get_db)):
     """Re-derive Segments from stored Words and Turns using current Vocabulary."""
-    from sqlalchemy import update as sql_update
-    from tasks.reprocess_task import reapply_vocabulary_task
-
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(404, "Meeting not found")
-    if meeting.status == MeetingStatus.PROCESSING:
-        raise HTTPException(400, "Already processing")
+    _reject_processing(meeting)
     if not meeting.raw_transcription or not meeting.raw_diarization:
         raise HTTPException(400, "No transcription/diarization data. Run full processing first.")
-
-    rows = db.execute(
-        sql_update(Meeting)
-        .where(Meeting.id == meeting_id)
-        .where(Meeting.status != MeetingStatus.PROCESSING)
-        .values(status=MeetingStatus.PROCESSING)
-    )
-    if rows.rowcount == 0:
-        db.rollback()
-        raise HTTPException(409, "Meeting is already being processed")
-
-    job = Job(meeting_id=meeting.id, job_type=JobType.REAPPLY_VOCABULARY, status=JobStatus.PENDING)
-    db.add(job)
-    db.commit()
-
-    result = reapply_vocabulary_task.delay(meeting.id, job.id)
-    job.celery_task_id = result.id
-    db.commit()
+    job = _enqueue(db, meeting.id, JobType.REAPPLY_VOCABULARY)
     return job.to_dict()
 
 

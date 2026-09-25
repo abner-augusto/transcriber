@@ -18,12 +18,29 @@ sys.path.insert(0, _project_root)
 from celery import Celery
 from celery.signals import worker_ready
 from config import settings
+from jobs import configure
+from jobs.runners import CeleryJobRunner, RedisProgressBus, TASK_NAMES
+from models.job import JobType
 
 celery_app = Celery(
     "transcriber",
     broker=settings.redis_url,
     backend=settings.redis_url,
     include=["tasks.process_meeting", "tasks.reprocess_task"],
+)
+
+from celery.exceptions import SoftTimeLimitExceeded
+from tasks.process_meeting import process_meeting_task
+from tasks.reprocess_task import reapply_vocabulary_task, rediarize_task, reidentify_task
+
+celery_app.task(name=TASK_NAMES[JobType.PROCESS_MEETING])(process_meeting_task)
+celery_app.task(name=TASK_NAMES[JobType.REDIARIZE])(rediarize_task)
+celery_app.task(name=TASK_NAMES[JobType.REIDENTIFY])(reidentify_task)
+celery_app.task(name=TASK_NAMES[JobType.REAPPLY_VOCABULARY])(reapply_vocabulary_task)
+configure(
+    runner=CeleryJobRunner(),
+    progress_bus=RedisProgressBus(settings.redis_url),
+    soft_time_limit_errors=(SoftTimeLimitExceeded,),
 )
 
 celery_app.conf.update(
@@ -45,6 +62,6 @@ celery_app.conf.update(
 def _recover_interrupted_jobs(**kwargs):
     # Assumes the single --pool=solo worker every start script runs: with a second
     # worker this would fail Jobs that worker is still holding.
-    from database import recover_stale_jobs
+    from jobs import recover
 
-    recover_stale_jobs()
+    recover()

@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
+import jobs
 from models import Job, Meeting, MeetingStatus
 from models.job import JobStatus, JobType
 
@@ -22,8 +23,19 @@ def _database(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'tasks.db'}")
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine)
-    monkeypatch.setattr("tasks.shared.SessionLocal", session_factory)
+    jobs.configure(session_factory=session_factory)
     return session_factory
+
+
+def _install_events(monkeypatch, events):
+    class Bus:
+        def publish(self, meeting_id, data):
+            events.append((meeting_id, data))
+
+        async def subscribe(self, meeting_id):
+            if False:
+                yield {}
+    jobs.configure(progress_bus=Bus())
 
 
 def _meeting_and_job(session_factory, job_type):
@@ -66,8 +78,9 @@ def test_processing_failure_propagates_after_persisting_failure(monkeypatch, tmp
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_and_job(session_factory, JobType.PROCESS_MEETING)
     events = []
+    _install_events(monkeypatch, events)
 
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
     monkeypatch.setattr("preferences.hf_token", lambda: "")
     monkeypatch.setattr(
         "tasks.process_meeting.make_transcriber", lambda run_config: FailingTranscriber()
@@ -79,9 +92,6 @@ def test_processing_failure_propagates_after_persisting_failure(monkeypatch, tmp
     )
     monkeypatch.setattr(
         "services.audio_service.AudioService.get_duration", lambda self, filepath: 1.0
-    )
-    monkeypatch.setattr(
-        "tasks.shared.publish_event", lambda current_meeting_id, data: events.append((current_meeting_id, data))
     )
 
     with pytest.raises(RuntimeError, match="engine failed"):
@@ -106,17 +116,15 @@ def test_reprocessing_failure_propagates_after_persisting_failure(
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_and_job(session_factory, job_type)
     events = []
+    _install_events(monkeypatch, events)
 
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
     monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")
 
     def fail_reprocessing(db, meeting, job, run_config, rerun_diarization):
         raise RuntimeError("engine failed")
 
     monkeypatch.setattr(reprocess_module, "_reprocess_meeting", fail_reprocessing)
-    monkeypatch.setattr(
-        "tasks.shared.publish_event", lambda current_meeting_id, data: events.append((current_meeting_id, data))
-    )
 
     with pytest.raises(RuntimeError, match="engine failed"):
         getattr(reprocess_module, task_name)(meeting_id, job_id)
@@ -133,18 +141,15 @@ def test_successful_reprocessing_return_and_lifecycle_are_unchanged(
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_and_job(session_factory, JobType.REIDENTIFY)
     events = []
+    _install_events(monkeypatch, events)
 
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
     monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")
 
     monkeypatch.setattr(
         reprocess_module,
         "_reprocess_meeting",
         lambda db, meeting, job, run_config, rerun_diarization: None,
-    )
-    monkeypatch.setattr(
-        "tasks.shared.publish_event",
-        lambda current_meeting_id, data: events.append((current_meeting_id, data)),
     )
 
     assert reprocess_module.reidentify_task(meeting_id, job_id) == {

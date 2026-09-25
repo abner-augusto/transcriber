@@ -109,13 +109,14 @@ def test_meeting_job_finally_calls_unload_all_engines(tmp_path, monkeypatch):
     from database import Base
     from models import Meeting, Job
     from models.job import JobType
-    from tasks.shared import meeting_job
+    from jobs import running
+    from jobs.runners import InMemoryProgressBus
+    import jobs
 
     engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}")
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine)
-    monkeypatch.setattr("tasks.shared.SessionLocal", session_factory)
-    monkeypatch.setattr("tasks.shared.publish_event", lambda *args, **kwargs: None)
+    jobs.configure(session_factory=session_factory, progress_bus=InMemoryProgressBus())
 
     with session_factory() as db:
         meeting = Meeting(title="Test Cleanup", duration=10.0, audio_filepath="dummy.wav")
@@ -128,13 +129,13 @@ def test_meeting_job_finally_calls_unload_all_engines(tmp_path, monkeypatch):
 
     with patch("engines.gpu_memory.unload_all_engines") as mock_unload:
         # Success path
-        with meeting_job(m_id, j_id):
+        with running(m_id, j_id):
             pass
         mock_unload.assert_called_once()
 
     with patch("engines.gpu_memory.unload_all_engines") as mock_unload:
         # Failure path
         with pytest.raises(RuntimeError):
-            with meeting_job(m_id, j_id):
+            with running(m_id, j_id):
                 raise RuntimeError("Simulated pipeline failure")
         mock_unload.assert_called_once()

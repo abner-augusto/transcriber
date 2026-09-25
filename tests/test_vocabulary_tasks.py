@@ -17,7 +17,7 @@ def test_process_applies_and_persists_vocabulary_without_changing_raw_words(
         transcriber=FakeTranscriber(words),
         diarization=DiarizationResult(turns=[Turn(0, 1, "SPEAKER_00")]),
     )
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
         update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
     ))
     meeting_id = harness.meeting(vocabulary="Vocabulary: Garrah")
@@ -39,7 +39,7 @@ def test_disabled_preference_keeps_transcription_and_segments_uncorrected(monkey
         transcriber=FakeTranscriber(words),
         diarization=DiarizationResult(turns=[Turn(0, 1, "SPEAKER_00")]),
     )
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
         update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=False)}
     ))
     meeting_id = harness.meeting(vocabulary="Vocabulary: Garrah")
@@ -60,7 +60,7 @@ def test_reapply_vocabulary_updates_segments_and_keeps_existing_speakers(
         transcriber=FakeTranscriber(words),
         diarization=DiarizationResult(turns=[Turn(0, 1, "SPEAKER_00")]),
     )
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
         update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=False)}
     ))
     meeting_id = harness.meeting()
@@ -77,7 +77,7 @@ def test_reapply_vocabulary_updates_segments_and_keeps_existing_speakers(
         db.add(VocabularyEntry(term="Garrah", misheard_as=[{"form": "Galo", "count": 2}]))
         db.commit()
 
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
         update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
     ))
     job_id = harness.job(meeting_id, JobType.REAPPLY_VOCABULARY)

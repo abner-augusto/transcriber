@@ -268,8 +268,10 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
     Base.metadata.create_all(bind=test_engine)
     TestingSessionLocal = sessionmaker(bind=test_engine)
 
-    monkeypatch.setattr("tasks.shared.SessionLocal", TestingSessionLocal)
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
+    from jobs.runners import InMemoryProgressBus
+    import jobs
+    jobs.configure(session_factory=TestingSessionLocal, progress_bus=InMemoryProgressBus())
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
     monkeypatch.setattr("preferences.hf_token", lambda: "")
     monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")
 
@@ -315,7 +317,6 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
     monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid: fp)
     monkeypatch.setattr("services.audio_service.AudioService.get_duration", lambda self, fp: 10.0)
     monkeypatch.setattr("services.vad_service.VadService.compute_vad_segments", lambda self, fp: [(0.0, 4.0)])
-    monkeypatch.setattr("tasks.shared.publish_event", lambda mid, data: None)
 
     # 1. Run process_meeting_task
     res = process_meeting_task(meeting.id, job.id)

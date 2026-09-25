@@ -76,13 +76,14 @@ def test_run_config_uses_preference_dtw_when_preset_does_not_override(monkeypatc
 
 @pytest.mark.parametrize("job_type", list(JobType))
 def test_every_job_persists_its_run_config_when_it_starts(monkeypatch, tmp_path, job_type):
-    from tasks.shared import meeting_job
+    from jobs import running
+    from jobs.runners import InMemoryProgressBus
+    import jobs
 
     engine = create_engine(f"sqlite:///{tmp_path / 'jobs.db'}")
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine)
-    monkeypatch.setattr("tasks.shared.SessionLocal", session_factory)
-    monkeypatch.setattr("tasks.shared.publish_event", lambda meeting_id, data: None)
+    jobs.configure(session_factory=session_factory, progress_bus=InMemoryProgressBus())
 
     config = RunConfig(
         preset={"id": "p", "engine": "test", "model_path": "model.bin"},
@@ -92,7 +93,7 @@ def test_every_job_persists_its_run_config_when_it_starts(monkeypatch, tmp_path,
         speaker_profiles_enabled=False,
         vocabulary_correction=VocabularyCorrectionPrefs(),
     )
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: config)
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: config)
     with session_factory() as db:
         meeting = Meeting(title="RunConfig", status=MeetingStatus.UPLOADED)
         db.add(meeting)
@@ -102,7 +103,7 @@ def test_every_job_persists_its_run_config_when_it_starts(monkeypatch, tmp_path,
         db.commit()
         meeting_id, job_id = meeting.id, job.id
 
-    with meeting_job(meeting_id, job_id) as (db, meeting, job):
+    with running(meeting_id, job_id) as (db, meeting, job):
         assert job.run_config == config.model_dump(mode="json", exclude_none=True)
 
     with session_factory() as db:

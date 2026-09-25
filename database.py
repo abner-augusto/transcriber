@@ -57,34 +57,6 @@ def init_db():
         conn.commit()
 
 
-def recover_stale_jobs():
-    """Fail every RUNNING Job; called when the Celery worker starts.
-
-    A Job is RUNNING only while a worker holds it, and this deployment runs a single
-    worker, so at worker start every RUNNING Job was interrupted. PENDING Jobs are
-    still queued for this worker and are left alone.
-    """
-    from models.job import Job, JobStatus
-    from models import Meeting, MeetingStatus
-
-    db = SessionLocal()
-    try:
-        stale_jobs = db.query(Job).filter(Job.status == JobStatus.RUNNING).all()
-        for job in stale_jobs:
-            job.status = JobStatus.FAILED
-            job.error = "Job interrupted by worker restart. Please retry."
-            job.completed_at = datetime.utcnow()
-            # Also reset the meeting status if it was stuck in PROCESSING
-            meeting = db.query(Meeting).filter(Meeting.id == job.meeting_id).first()
-            if meeting and meeting.status == MeetingStatus.PROCESSING:
-                meeting.status = MeetingStatus.FAILED
-        if stale_jobs:
-            db.commit()
-            log.info(f"Recovered {len(stale_jobs)} stale job(s)")
-    finally:
-        db.close()
-
-
 def cleanup_orphaned_storage():
     """Remove storage directories for meetings that no longer exist in the DB."""
     from config import get_storage_path

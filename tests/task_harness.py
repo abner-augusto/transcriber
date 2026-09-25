@@ -11,6 +11,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
+import jobs
+from jobs.runners import InMemoryProgressBus
 from engines import DiarizationResult, Transcription, Turn, Word
 from models import Job, Meeting, MeetingStatus
 from models.job import JobStatus, JobType
@@ -134,9 +136,8 @@ def install(monkeypatch, tmp_path, *, transcriber, diarization: DiarizationResul
                 return list(regions)
         return list(DEFAULT_VAD)
 
-    monkeypatch.setattr("tasks.shared.SessionLocal", session_factory)
-    monkeypatch.setattr("tasks.shared.publish_event", lambda meeting_id, data: None)
-    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: run_config)
+    jobs.configure(session_factory=session_factory, progress_bus=InMemoryProgressBus())
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: run_config)
     monkeypatch.setattr("tasks.process_meeting.make_transcriber", lambda run_config: transcriber)
     monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda run_config, **kwargs: diarizer)
     monkeypatch.setattr("tasks.reprocess_task.make_diarizer", lambda run_config, **kwargs: diarizer)

@@ -9,6 +9,8 @@
 
 ## Status
 
+- **Implementation**: DONE (backend suite passes; frontend unchanged)
+
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED
@@ -100,11 +102,15 @@ plain functions `(meeting_id, job_id)`; the Celery adapter wraps them.
 
 ## Done criteria
 
-- [ ] `rg "\.delay\(|celery_task_id" api` returns nothing
-- [ ] `rg "import redis|from celery|celery_app" api tasks/process_meeting.py tasks/reprocess_task.py jobs/__init__.py` returns nothing (only `jobs/runners*.py` and `tasks/celery_app.py`)
-- [ ] The PROCESSING claim exists once
-- [ ] Backend suite passes; frontend unchanged
-- [ ] `plans/README.md`: 017 DONE, 010 REJECTED (absorbed)
+- [x] `rg "\.delay\(|celery_task_id" api` returns nothing
+- [x] `rg "import redis|from celery|celery_app" api tasks/process_meeting.py tasks/reprocess_task.py jobs/__init__.py` returns nothing (only `jobs/runners*.py` and `tasks/celery_app.py`)
+- [x] The PROCESSING claim exists once
+- [x] Backend suite passes; frontend unchanged
+- [x] `plans/README.md`: 017 DONE, 010 REJECTED (absorbed)
+
+Outcome: the Celery and Redis adapters remain the active production adapters.
+The full backend test suite passed (327 passed, 20 local Engine smoke tests
+skipped); no frontend files changed.
 
 ## STOP conditions
 

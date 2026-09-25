@@ -41,7 +41,7 @@ the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`.
 | 014 | Vocabulary Correction (ticket 06) | P1 | L | 012, 013 | IN PROGRESS |
 | 015 | The Transcriber returns a Transcription (ticket 01) | P2 | M | 012 | IN PROGRESS |
 | 016 | One place for Preferences, RunConfig per Job (ticket 03) | P2 | L | 015 (soft) | DONE |
-| 017 | One Job module, Celery as first adapter (ticket 02) | P2 | M | 007 | TODO |
+| 017 | One Job module, Celery as first adapter (ticket 02) | P2 | M | 007 | DONE |
 | 018 | SQLite + FTS5, one-shot migration from Postgres (ticket 05) | P2 | M | — | TODO |
 | 019 | Local Job runner, child process per Job (ticket 04) | P2 | L | 017, 018 | TODO |
 | 020 | Remove Redis/Celery/Postgres/Docker, `uv`, one start command (ticket 05) | P3 | M | 018, 019 | TODO |

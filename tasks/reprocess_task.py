@@ -1,11 +1,10 @@
-from .celery_app import celery_app
 from .diarization import diarize_meeting
-from .shared import (
+from jobs import (
     MeetingNotFoundError,
-    meeting_job,
-    update_progress,
-    rebuild_speakers_and_segments,
+    running,
+    progress,
 )
+from meeting_store import rebuild_speakers_and_segments
 from engines import make_diarizer
 from preferences import hf_token
 from run_config import RunConfig
@@ -37,11 +36,11 @@ def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarizatio
 
     if rerun_diarization:
         diarizer = make_diarizer(run_config, hf_token=hf_token())
-        update_progress(db, job, meeting, 10, "Running new speaker identification...")
+        progress(db, job, meeting, 10, "Running new speaker identification...")
         diarization = diarize_meeting(meeting, audio_path, diarizer=diarizer, vad_service=VadService())
         meeting.raw_diarization = diarization.to_stored()
         db.commit()
-        update_progress(db, job, meeting, 50, "Diarization complete")
+        progress(db, job, meeting, 50, "Diarization complete")
         if hasattr(diarizer, "unload"):
             diarizer.unload()
         from engines.gpu_memory import release_gpu_memory
@@ -51,7 +50,7 @@ def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarizatio
         if diarization is None or not diarization.turns:
             raise RuntimeError("No existing diarization found. Run full processing first.")
 
-    update_progress(
+    progress(
         db, job, meeting,
         55 if rerun_diarization else 20,
         "Synchronizing speakers with text...",
@@ -64,7 +63,7 @@ def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarizatio
     )
 
     # Speaker naming (Participant N, overridden by voice profile matches)
-    update_progress(
+    progress(
         db, job, meeting,
         65 if rerun_diarization else 40,
         "Matching against saved voice profiles...",
@@ -83,7 +82,7 @@ def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarizatio
     release_gpu_memory()
 
     # Rebuild speakers and segments (preserving edits)
-    update_progress(
+    progress(
         db, job, meeting,
         85 if rerun_diarization else 80,
         "Saving results...",
@@ -91,15 +90,14 @@ def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarizatio
     rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service)
 
 
-@celery_app.task(bind=True)
-def rediarize_task(self, meeting_id: str, job_id: str):
+def rediarize_task(meeting_id: str, job_id: str):
     """Re-run diarization without re-transcribing.
 
     Keeps the Meeting's existing Words, runs the Diarizer again for fresh Turns, and
     rebuilds the Segments from both. Preserves manually edited segment text.
     """
     try:
-        with meeting_job(meeting_id, job_id) as (db, meeting, job):
+        with running(meeting_id, job_id) as (db, meeting, job):
             _reprocess_meeting(
                 db, meeting, job, RunConfig.model_validate(job.run_config), rerun_diarization=True
             )
@@ -108,8 +106,7 @@ def rediarize_task(self, meeting_id: str, job_id: str):
         return {"error": "Meeting or Job not found"}
 
 
-@celery_app.task(bind=True)
-def reidentify_task(self, meeting_id: str, job_id: str):
+def reidentify_task(meeting_id: str, job_id: str):
     """Re-run speaker naming without re-transcribing or re-diarizing.
 
     Reuses the Meeting's existing Words and Turns and only re-names the Speakers against
@@ -117,7 +114,7 @@ def reidentify_task(self, meeting_id: str, job_id: str):
     already-processed Meeting. Preserves edited text.
     """
     try:
-        with meeting_job(meeting_id, job_id) as (db, meeting, job):
+        with running(meeting_id, job_id) as (db, meeting, job):
             _reprocess_meeting(
                 db, meeting, job, RunConfig.model_validate(job.run_config), rerun_diarization=False
             )
@@ -172,11 +169,10 @@ def _rebuild_segments_only(db, meeting, aligned):
     db.commit()
 
 
-@celery_app.task(bind=True)
-def reapply_vocabulary_task(self, meeting_id: str, job_id: str):
+def reapply_vocabulary_task(meeting_id: str, job_id: str):
     """Re-derive Segments from stored Words and Turns without changing Speakers."""
     try:
-        with meeting_job(meeting_id, job_id) as (db, meeting, job):
+        with running(meeting_id, job_id) as (db, meeting, job):
             run_config = RunConfig.model_validate(job.run_config)
             words = words_from_stored(meeting.raw_transcription)
             if not words:
@@ -192,7 +188,7 @@ def reapply_vocabulary_task(self, meeting_id: str, job_id: str):
                 switch_penalty=run_config.speaker_switch_penalty,
                 correction=correction,
             )
-            update_progress(db, job, meeting, 80, "Saving corrected Segments...")
+            progress(db, job, meeting, 80, "Saving corrected Segments...")
             _rebuild_segments_only(db, meeting, aligned)
         return {"status": "completed", "meeting_id": meeting_id}
     except MeetingNotFoundError:

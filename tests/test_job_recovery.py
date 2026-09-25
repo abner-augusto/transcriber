@@ -11,7 +11,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from database import Base, recover_stale_jobs
+from database import Base
+import jobs
+from jobs.runners import InMemoryProgressBus
 from models import Job, Meeting, MeetingStatus
 from models.job import JobStatus, JobType
 
@@ -20,7 +22,7 @@ def _database(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'recovery.db'}")
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine)
-    monkeypatch.setattr("database.SessionLocal", session_factory)
+    jobs.configure(session_factory=session_factory, progress_bus=InMemoryProgressBus())
     return session_factory
 
 
@@ -48,7 +50,7 @@ def test_running_job_is_failed_and_its_meeting_released(monkeypatch, tmp_path):
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_with_job(session_factory, MeetingStatus.PROCESSING, JobStatus.RUNNING)
 
-    recover_stale_jobs()
+    jobs.recover()
 
     meeting_status, job_status, error, completed_at = _state(session_factory, meeting_id, job_id)
     assert job_status == JobStatus.FAILED
@@ -61,7 +63,7 @@ def test_pending_job_is_left_for_the_worker(monkeypatch, tmp_path):
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_with_job(session_factory, MeetingStatus.PROCESSING, JobStatus.PENDING)
 
-    recover_stale_jobs()
+    jobs.recover()
 
     meeting_status, job_status, error, completed_at = _state(session_factory, meeting_id, job_id)
     assert job_status == JobStatus.PENDING
@@ -74,7 +76,7 @@ def test_completed_jobs_and_meetings_are_untouched(monkeypatch, tmp_path):
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_with_job(session_factory, MeetingStatus.COMPLETED, JobStatus.COMPLETED)
 
-    recover_stale_jobs()
+    jobs.recover()
 
     assert _state(session_factory, meeting_id, job_id) == (
         MeetingStatus.COMPLETED, JobStatus.COMPLETED, None, datetime(2026, 9, 1),
@@ -86,7 +88,7 @@ def test_each_running_job_is_recovered_independently(monkeypatch, tmp_path):
     first = _meeting_with_job(session_factory, MeetingStatus.PROCESSING, JobStatus.RUNNING)
     second = _meeting_with_job(session_factory, MeetingStatus.PROCESSING, JobStatus.RUNNING)
 
-    recover_stale_jobs()
+    jobs.recover()
 
     for meeting_id, job_id in (first, second):
         meeting_status, job_status, _, _ = _state(session_factory, meeting_id, job_id)
@@ -95,16 +97,19 @@ def test_each_running_job_is_recovered_independently(monkeypatch, tmp_path):
 
 def test_fastapi_startup_does_not_recover_jobs():
     text = (Path(__file__).resolve().parent.parent / "main.py").read_text(encoding="utf-8")
-    assert "recover_stale_jobs" not in text
+    assert "jobs.recover" not in text
 
 
 def test_worker_ready_signal_runs_recovery(monkeypatch):
     from celery.signals import worker_ready
 
-    import tasks.celery_app  # noqa: F401  (connects the handler)
+    from tasks.celery_app import celery_app  # noqa: F401 (registers bodies and connects handler)
+    from jobs.runners import TASK_NAMES
+
+    assert set(TASK_NAMES.values()).issubset(celery_app.tasks)
 
     calls = []
-    monkeypatch.setattr("database.recover_stale_jobs", lambda: calls.append(True))
+    monkeypatch.setattr("jobs.recover", lambda: calls.append(True))
 
     worker_ready.send(sender=None)
 

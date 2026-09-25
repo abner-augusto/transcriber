@@ -5,9 +5,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
+import jobs
+from jobs.runners import InMemoryProgressBus, InlineJobRunner
 from main import app
 from models import Meeting, MeetingStatus, Segment, VocabularyEntry
-from models.job import Job
+from models.job import Job, JobType
 
 
 class FakeHealth:
@@ -19,7 +21,7 @@ class FakeHealth:
 
 
 @pytest.fixture
-def db_session():
+def db_session(monkeypatch):
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -27,6 +29,13 @@ def db_session():
     )
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    runner = InlineJobRunner(handlers={})
+    bus = InMemoryProgressBus()
+    previous = jobs.configure(
+        runner=runner, progress_bus=bus, session_factory=TestingSessionLocal
+    )
+    app.state.test_job_runner = runner
+    app.state.test_progress_bus = bus
 
     def override_get_db():
         db = TestingSessionLocal()
@@ -42,6 +51,9 @@ def db_session():
     finally:
         session.close()
         app.dependency_overrides.clear()
+        jobs.configure(**previous)
+        del app.state.test_job_runner
+        del app.state.test_progress_bus
 
 
 def test_update_meeting_title_and_vocabulary(db_session):
@@ -107,7 +119,7 @@ def test_blocked_preset_cannot_create_or_queue_job(db_session, monkeypatch):
     })
     monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: FakeHealth())
     queued = []
-    monkeypatch.setattr("api.meetings.process_meeting_task.delay", lambda *_args: queued.append(True))
+    runner = app.state.test_job_runner
 
     response = client.post(f"/api/meetings/{meeting_id}/process")
 
@@ -116,31 +128,132 @@ def test_blocked_preset_cannot_create_or_queue_job(db_session, monkeypatch):
     db_session.refresh(meeting)
     assert meeting.status == MeetingStatus.UPLOADED
     assert db_session.query(Job).count() == 0
-    assert queued == []
+    assert runner.submitted == []
 
 
-def test_reapply_vocabulary_endpoint_claims_meeting_and_queues_job(db_session, monkeypatch):
-    from types import SimpleNamespace
-
+@pytest.mark.parametrize(
+    ("path", "kind"),
+    [
+        ("process", JobType.PROCESS_MEETING),
+        ("rediarize", JobType.REDIARIZE),
+        ("reidentify", JobType.REIDENTIFY),
+        ("reapply-vocabulary", JobType.REAPPLY_VOCABULARY),
+    ],
+)
+def test_enqueue_routes_claim_once_and_submit_one_job(db_session, monkeypatch, path, kind):
     meeting = Meeting(
-        title="Vocabulary", status=MeetingStatus.COMPLETED,
+        title="Enqueue", status=MeetingStatus.COMPLETED, audio_filepath="meeting.wav",
+        preset_id="test",
         raw_transcription={"words": [{"start": 0.0, "end": 0.4, "text": " Galo"}]},
-        raw_diarization={"turns": []},
+        raw_diarization={"turns": [{"start": 0, "end": 1, "speaker": "SPEAKER_00"}]},
     )
     db_session.add(meeting)
     db_session.commit()
-    queued = []
-    monkeypatch.setattr(
-        "tasks.reprocess_task.reapply_vocabulary_task.delay",
-        lambda *args: (queued.append(args), SimpleNamespace(id="celery-1"))[1],
-    )
+    monkeypatch.setattr("api.meetings.presets.resolve_preset", lambda _preset_id: {
+        "id": "test", "name": "Test", "engine": "test", "model_path": "test-model"
+    })
+    class ReadyHealth:
+        def to_dict(self):
+            return {"state": "ready", "summary": "ready"}
+    monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: ReadyHealth())
+    runner = app.state.test_job_runner
 
-    response = TestClient(app).post(f"/api/meetings/{meeting.id}/reapply-vocabulary")
+    client = TestClient(app)
+    response = client.post(f"/api/meetings/{meeting.id}/{path}")
 
     assert response.status_code == 200
-    assert response.json()["job_type"] == "reapply_vocabulary"
-    assert queued == [(meeting.id, response.json()["id"])]
+    job_id = response.json()["id"]
+    assert response.json()["job_type"] == kind.value
+    assert runner.submitted == [(meeting.id, job_id, kind)]
+    db_session.refresh(meeting)
+    assert meeting.status == MeetingStatus.PROCESSING
+    assert db_session.query(Job).count() == 1
 
+    duplicate = client.post(f"/api/meetings/{meeting.id}/{path}")
+    assert duplicate.status_code == 400
+    assert runner.submitted == [(meeting.id, job_id, kind)]
+    assert db_session.query(Job).count() == 1
+
+
+def test_processing_meeting_is_rejected_before_preset_health(db_session, monkeypatch):
+    meeting = Meeting(
+        title="Already processing", status=MeetingStatus.PROCESSING, preset_id="invalid"
+    )
+    db_session.add(meeting)
+    db_session.commit()
+    monkeypatch.setattr(
+        "api.meetings.presets.resolve_preset",
+        lambda _preset_id: pytest.fail("preset health must not run for a processing Meeting"),
+    )
+
+    response = TestClient(app).post(f"/api/meetings/{meeting.id}/process")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Already processing"
+    assert db_session.query(Job).count() == 0
+
+
+def test_losing_atomic_claim_returns_conflict(db_session, monkeypatch):
+    meeting = Meeting(
+        title="Claim race", status=MeetingStatus.COMPLETED,
+        preset_id="test", audio_filepath="meeting.wav",
+    )
+    db_session.add(meeting)
+    db_session.commit()
+
+    class ReadyHealth:
+        def to_dict(self):
+            return {"state": "ready", "summary": "ready"}
+
+    monkeypatch.setattr("api.meetings.presets.resolve_preset", lambda _id: {"id": "test"})
+    monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: ReadyHealth())
+    calls = []
+
+    def lose_race(*args):
+        calls.append(args)
+        raise jobs.JobAlreadyRunning("claimed by another request")
+
+    monkeypatch.setattr("api.meetings.jobs.enqueue", lose_race)
+    response = TestClient(app).post(f"/api/meetings/{meeting.id}/process")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Meeting is already being processed"
+    assert len(calls) == 1
+    assert db_session.query(Job).count() == 0
+
+
+def test_websocket_forwards_progress_event_in_existing_shape(db_session):
+    import time
+
+    meeting = Meeting(title="Progress", status=MeetingStatus.PROCESSING)
+    db_session.add(meeting)
+    db_session.commit()
+    bus = app.state.test_progress_bus
+    event = {
+        "type": "progress", "progress": 48, "step": "Transcription complete",
+        "status": "processing",
+    }
+
+    with TestClient(app).websocket_connect(f"/ws/meetings/{meeting.id}") as websocket:
+        deadline = time.monotonic() + 2
+        while bus.subscriber_count(meeting.id) == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert bus.subscriber_count(meeting.id) == 1
+        bus.publish(meeting.id, event)
+        assert websocket.receive_json() == event
+
+
+def test_health_checks_progress_adapter_and_keeps_redis_key(monkeypatch, tmp_path):
+    import main
+
+    monkeypatch.setattr(main._settings, "storage_path", str(tmp_path))
+    calls = []
+    monkeypatch.setattr(jobs, "check_progress_bus", lambda: calls.append(True))
+
+    response = main.health()
+
+    assert response["redis"] == "ok"
+    assert calls == [True]
 
 def test_segment_edits_learn_and_increment_misheard_form(db_session):
     meeting = Meeting(title="Learning", status=MeetingStatus.COMPLETED)

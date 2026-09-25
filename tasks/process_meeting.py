@@ -2,15 +2,14 @@ import logging
 
 log = logging.getLogger(__name__)
 
-from .celery_app import celery_app
 from dataclasses import replace
 from .diarization import diarize_meeting
-from .shared import (
+from jobs import (
     MeetingNotFoundError,
-    meeting_job,
-    update_progress,
-    rebuild_speakers_and_segments,
+    running,
+    progress,
 )
+from meeting_store import rebuild_speakers_and_segments
 from engines import make_aligner, make_diarizer, make_transcriber, raw_transcription
 from services.audio_service import AudioService
 from services.speaker_id_service import SpeakerIdService
@@ -20,11 +19,10 @@ from .vocabulary import vocabulary_correction_for_meeting
 from run_config import RunConfig
 
 
-@celery_app.task(bind=True)
-def process_meeting_task(self, meeting_id: str, job_id: str):
+def process_meeting_task(meeting_id: str, job_id: str):
     """Main pipeline: audio extraction -> transcription -> diarization -> segments -> speaker naming."""
     try:
-        with meeting_job(meeting_id, job_id) as (db, meeting, job):
+        with running(meeting_id, job_id) as (db, meeting, job):
             audio_service = AudioService()
             speaker_id_service = SpeakerIdService()
 
@@ -40,7 +38,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                 make_aligner(run_config)
 
             # Step 1: Extract audio
-            update_progress(db, job, meeting, 2, "Extracting audio...")
+            progress(db, job, meeting, 2, "Extracting audio...")
             if meeting.is_dual_track:
                 audio_path = audio_service.extract_dual_audio(
                     meeting.mic_audio_filepath, meeting.system_audio_filepath, meeting.id
@@ -53,10 +51,10 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             meeting.duration = duration
             meeting.audio_filepath = audio_path
             db.commit()
-            update_progress(db, job, meeting, 5, "Audio extracted")
+            progress(db, job, meeting, 5, "Audio extracted")
 
             # Step 2: Transcription
-            update_progress(db, job, meeting, 10, f"Transcribing with {preset['name']}...")
+            progress(db, job, meeting, 10, f"Transcribing with {preset['name']}...")
             transcriber.load()
             try:
                 transcription = transcriber.transcribe(audio_path, vocabulary=meeting.vocabulary)
@@ -64,7 +62,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
 
                 # Optional Step 2.5: Higher-precision CTC Forced Alignment
                 if fa_enabled:
-                    update_progress(db, job, meeting, 46, "Refining word timestamps (CTC alignment)...")
+                    progress(db, job, meeting, 46, "Refining word timestamps (CTC alignment)...")
                     from engines import align_words
                     words = align_words(audio_path, words, run_config=run_config)
                     transcription = replace(transcription, words=words)
@@ -73,7 +71,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                     preset["engine"], preset["id"], transcription
                 )
                 db.commit()
-                update_progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
+                progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
             finally:
                 # Release Transcriber resources before loading the Diarizer.
                 transcriber.unload()
@@ -91,7 +89,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                     "native": "Extracting native speaker diarization...",
                     "diarizer": "Identifying speakers (diarization)...",
                 }[path]
-                update_progress(db, job, meeting, 50, step)
+                progress(db, job, meeting, 50, step)
 
             diarization = diarize_meeting(
                 meeting,
@@ -104,7 +102,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             )
             meeting.raw_diarization = diarization.to_stored()
             db.commit()
-            update_progress(db, job, meeting, 70, "Diarization complete")
+            progress(db, job, meeting, 70, "Diarization complete")
 
             # Free diarizer VRAM immediately after turns are extracted and saved
             if hasattr(diarizer, "unload"):
@@ -113,17 +111,17 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             release_gpu_memory()
 
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
-            update_progress(db, job, meeting, 75, "Synchronizing speakers with text...")
+            progress(db, job, meeting, 75, "Synchronizing speakers with text...")
             correction = vocabulary_correction_for_meeting(
                 db, meeting, enabled=run_config.vocabulary_correction.enabled
             )
             aligned = derive_segments(
                 words, diarization, switch_penalty=switch_penalty, correction=correction
             )
-            update_progress(db, job, meeting, 80, "Synchronization complete")
+            progress(db, job, meeting, 80, "Synchronization complete")
 
             # Step 5: Speaker naming (Participant N, overridden by voice profile matches)
-            update_progress(db, job, meeting, 85, "Matching against saved voice profiles...")
+            progress(db, job, meeting, 85, "Matching against saved voice profiles...")
             speaker_info = speaker_id_service.name_speakers(
                 db,
                 diarization.speaker_labels,
@@ -138,7 +136,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             release_gpu_memory()
 
             # Step 6: Save results (preserving edits)
-            update_progress(db, job, meeting, 90, "Saving results...")
+            progress(db, job, meeting, 90, "Saving results...")
             rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service)
 
         return {"status": "completed", "meeting_id": meeting_id}
