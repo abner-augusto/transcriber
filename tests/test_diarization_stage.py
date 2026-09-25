@@ -238,6 +238,44 @@ def test_dual_track_records_the_engine_the_diarizer_names(monkeypatch, tmp_path)
     assert harness.load(meeting_id).raw_diarization["engine"] == "nemotron-3-diarization"
 
 
+def test_a_diarized_label_that_gets_no_words_does_not_become_a_speaker(monkeypatch, tmp_path):
+    # SPEAKER_02 speaks between Words (2.2-2.9 s), so no Segment is attributed to it.
+    # Nemotron did this on a real dual-track Meeting: 8.7 s of system-track echo,
+    # 1.6 s after VAD, no Words.
+    turns = [*h.PYANNOTE.turns, Turn(start=2.2, end=2.9, speaker="SPEAKER_02")]
+    harness = h.install(monkeypatch, tmp_path, transcriber=h.FakeTranscriber(h.WORDS),
+                        diarization=DiarizationResult(turns=turns))
+    meeting_id = harness.meeting()
+    job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
+
+    assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
+    meeting = harness.load(meeting_id)
+    assert "SPEAKER_02" in {t["speaker"] for t in meeting.raw_diarization["turns"]}
+    assert sorted(s.label for s in meeting.speakers) == ["SPEAKER_00", "SPEAKER_01"]
+    assert all(s.segment_count > 0 for s in meeting.speakers)
+
+
+def test_replacing_segments_gives_a_newly_attributed_label_a_speaker(monkeypatch, tmp_path):
+    from meeting_store import replace_segments
+    from models import Meeting, Speaker
+
+    harness = h.install(monkeypatch, tmp_path, transcriber=h.FakeTranscriber(h.WORDS), diarization=h.PYANNOTE)
+    meeting_id = harness.meeting()
+    with harness.session_factory() as db:
+        db.add(Speaker(meeting_id=meeting_id, label="SPEAKER_00", display_name="Abner", color="#fff"))
+        db.commit()
+        aligned = [
+            {"start": 0.1, "end": 0.6, "text": "olá", "speaker": "SPEAKER_00"},
+            {"start": 1.2, "end": 1.8, "text": "pessoal", "speaker": "SPEAKER_02"},
+        ]
+        replace_segments(db, db.get(Meeting, meeting_id), aligned)
+
+    meeting = harness.load(meeting_id)
+    names = {s.label: s.display_name for s in meeting.speakers}
+    assert names == {"SPEAKER_00": "Abner", "SPEAKER_02": "Participant 2"}
+    assert all(segment.speaker_id is not None for segment in meeting.segments)
+
+
 def test_native_turns_are_bounded_without_calling_the_diarizer():
     diarizer = FakeDiarizer([])
     native = DiarizationResult(

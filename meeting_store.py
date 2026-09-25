@@ -1,10 +1,20 @@
 """Persistence operations for Meetings and their derived Segments."""
 
 from models import Speaker, Segment
+from services.speaker_id_service import SPEAKER_COLORS
 
 # An edited Segment survives a rebuild when a derived Segment starts and ends
 # within this many seconds of it.
 EDIT_TIME_TOLERANCE = 1.5
+
+
+def labels_with_segments(aligned) -> list[str]:
+    """The Diarizer labels that own at least one Segment: the ones that become Speakers.
+
+    A Diarizer can report a label whose Turns never cover a Word (echo, crosstalk
+    under another voice). Naming it would add an empty "Participant N".
+    """
+    return sorted({segment["speaker"] for segment in aligned} - {"UNKNOWN"})
 
 
 def rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service):
@@ -48,6 +58,18 @@ def replace_segments(db, meeting, aligned):
         speaker.label: speaker
         for speaker in db.query(Speaker).filter(Speaker.meeting_id == meeting.id).all()
     }
+    # Only labels that owned Segments became Speakers, so a re-derivation (a new
+    # smoothing penalty, say) can hand Words to a label that has none yet.
+    for label in labels_with_segments(aligned):
+        if label not in speakers:
+            index = len([s for s in speakers if s != "UNKNOWN"])
+            speakers[label] = Speaker(
+                meeting_id=meeting.id,
+                label=label,
+                display_name=f"Participant {index + 1}",
+                color=SPEAKER_COLORS[index % len(SPEAKER_COLORS)],
+            )
+            db.add(speakers[label])
     db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
     db.flush()
     _write_segments(db, meeting, aligned, speakers, edited)

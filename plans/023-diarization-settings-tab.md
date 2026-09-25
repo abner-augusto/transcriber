@@ -12,7 +12,7 @@
 
 ## Status
 
-- **Execution status**: TODO
+- **Execution status**: DONE
 - **Priority**: P2
 - **Effort**: S
 - **Risk**: LOW (frontend only, no stored-shape change beyond plan 022)
@@ -129,7 +129,7 @@ Preferences, which they will, because the form is owned by the dialog.
 - [x] pyannote-only controls appear only for pyannote; smoothing is always shown.
 - [x] Blocked Diarizers are visible but not selectable, with their reason.
 - [x] `npm run build` and `npm test` pass.
-- [ ] Manual check on the user's machine.
+- [x] Manual check on the user's machine.
 
 ## STOP conditions
 
@@ -177,3 +177,5 @@ passed; the backend suite has 370 passed, 20 skipped. Revert-proof: making
 the payload drop the threshold for Nemotron fails "keeps the stored threshold
 while Nemotron is selected", and restoring the payload makes it pass. Step 5,
 the manual check, is pending with the user.
+
+Step 5, 2026-09-25: the user selected Nemotron in the tab and saved. The choice persisted (`GET /api/settings` returned `diarization.engine == "nemotron-3-diarization"`, with the stored 0.55 clustering threshold kept), and the next Meeting was diarized with it.

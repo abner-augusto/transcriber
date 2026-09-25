@@ -5,7 +5,7 @@ log = logging.getLogger(__name__)
 from dataclasses import replace
 from .diarization import diarize_meeting
 from jobs import MeetingNotFoundError, running
-from meeting_store import rebuild_speakers_and_segments
+from meeting_store import labels_with_segments, rebuild_speakers_and_segments
 from engines import make_aligner, make_diarizer, make_transcriber, raw_transcription
 from services.audio_service import AudioService
 from services.speaker_id_service import SpeakerIdService
@@ -103,7 +103,7 @@ def process_meeting_task(meeting_id: str, job_id: str):
             current.progress(85, "Matching against saved voice profiles...")
             speaker_info = speaker_id_service.name_speakers(
                 db,
-                diarization.speaker_labels,
+                labels_with_segments(aligned),
                 diarization.turns,
                 audio_path,
                 host_label=diarization.host_label,

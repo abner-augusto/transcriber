@@ -1,6 +1,6 @@
 from .diarization import diarize_meeting
 from jobs import MeetingNotFoundError, RunningJob, running
-from meeting_store import rebuild_speakers_and_segments, replace_segments
+from meeting_store import labels_with_segments, rebuild_speakers_and_segments, replace_segments
 from engines import make_diarizer
 from preferences import hf_token
 from services.speaker_id_service import SpeakerIdService
@@ -59,7 +59,7 @@ def _reprocess_meeting(current: RunningJob, rerun_diarization: bool):
     )
     speaker_info = speaker_id_service.name_speakers(
         db,
-        diarization.speaker_labels,
+        labels_with_segments(aligned),
         diarization.turns,
         audio_path,
         host_label=diarization.host_label,

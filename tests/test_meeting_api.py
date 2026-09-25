@@ -144,6 +144,8 @@ def test_blocked_diarizer_refuses_queueing_with_409(db_session, monkeypatch, tmp
     monkeypatch.setattr("api.meetings.presets.get_preset", lambda _preset_id: ready)
     monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: type(
         "Ready", (), {"to_dict": lambda self: {"state": "ready", "summary": "ready"}})())
+    # Fresh Preferences, not the machine's: the default Diarizer is pyannote.
+    monkeypatch.setattr("config.settings.storage_path", str(tmp_path / "storage"))
     seen = []
     monkeypatch.setattr("api.meetings.diarizer_status", lambda engine, **_kwargs: seen.append(engine) or {
         "state": "blocked", "summary": "Dedicated runtime not found"})

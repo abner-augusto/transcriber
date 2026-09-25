@@ -11,7 +11,7 @@
 
 ## Status
 
-- **Execution status**: TODO
+- **Execution status**: DONE
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED (new isolated runtime, touches the Diarization stage)
@@ -240,7 +240,7 @@ no GPU.
 - [x] `GET /api/settings` lists both Diarizers with health.
 - [x] Installers create the runtime and the local model snapshot; no Job downloads weights.
 - [x] ADR-0009 written.
-- [ ] Local smoke tier and Step 8 end-to-end run on the user's machine.
+- [x] Local smoke tier and Step 8 end-to-end run on the user's machine.
 
 ## STOP conditions
 
@@ -312,3 +312,28 @@ Verification by the reviewer:
   `bench/diarizer_wder.py` was unchanged: 0.73% and 2.08%.
 - `GET /api/settings`: both Diarizers `ready`, and `pyannote.audio` was not
   imported into the API process.
+
+### Step 8 (2026-09-25, on the user's machine)
+
+The user selected Nemotron in the new Diarization tab (plan 023) and
+duplicated the Sinop 2026-09-22 Meeting (dual track, Parakeet q8_0).
+
+- `raw_diarization.engine == "nemotron-3-diarization"`, and the host was named
+  "You" from the mic track.
+- **Defect found.** An empty "Participant 4" (`SPEAKER_02`, 0 Segments)
+  appeared. On the app's processed system track Nemotron gave that label
+  8.7 s of raw speech. That clears decision 7's 5 s filter, which runs on raw
+  Turns, and VAD then cut it to 1.6 s, entirely under another voice, so it
+  got no Words. The bench's own ffmpeg mix had only 3.6 s. A time threshold on
+  raw Turns cannot decide this.
+- **Fix, Engine-agnostic** (`meeting_store.labels_with_segments`): only
+  labels that own at least one Segment are named and become Speakers, in
+  full processing and in Reprocessing. `replace_segments` creates a
+  "Participant N" for a label that gains Segments in a later re-derivation.
+  The 5 s filter stays as a first cut in the adapter. Tests:
+  `test_a_diarized_label_that_gets_no_words_does_not_become_a_speaker` and
+  `test_replacing_segments_gives_a_newly_attributed_label_a_speaker`; both
+  failed before the fix and pass with it.
+- After the fix, re-diarizing the copy left exactly HOST ("You"), Eduardo
+  Misturini and Fernando Crestani (both named by Voice Profile), plus the
+  pre-existing one-Segment "Unknown", which the pyannote original also has.
