@@ -60,4 +60,3 @@ def update_segment_speaker(segment_id: str, req: UpdateSegmentSpeakerRequest, db
     segment.speaker_id = req.speaker_id
     db.commit()
     return segment.to_dict()
-
