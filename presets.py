@@ -4,7 +4,7 @@ A Preset is one JSON file in model_presets/. It names an Engine and the model to
 on it, plus whatever that Engine needs to know:
 
     {"id": "parakeet-tdt-0.6b-v3", "name": "Parakeet TDT 0.6B v3",
-     "engine": "parakeet.cpp", "model_path": "./models/parakeet/tdt-0.6b-v3-q4_k.gguf",
+     "engine": "parakeet.cpp", "model_path": "./models/parakeet/tdt-0.6b-v3-q8_0.gguf",
      "decoder": "tdt"}
 
 There is one default, and a Meeting may override it — that is what makes an A/B run

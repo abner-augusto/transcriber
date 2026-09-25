@@ -72,7 +72,7 @@ export const ENGINE_METADATA: Record<string, EngineMetadata> = {
     badgeStyle: "bg-slate-800 text-slate-400 border-slate-700/50",
     badgeDot: "bg-slate-500",
     badgeTitle: "Transcription followed by external diarization",
-    modelPlaceholder: "Model path (e.g. ./models/parakeet/tdt-0.6b-v3-q4_k.gguf)",
+    modelPlaceholder: "Model path (e.g. ./models/parakeet/tdt-0.6b-v3-q8_0.gguf)",
     supportsDecoder: true,
   },
 };

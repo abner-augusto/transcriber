@@ -46,7 +46,7 @@ if [ "$(uname -s)" = "Linux" ] && command -v nvidia-smi >/dev/null 2>&1; then
   uv pip install --reinstall --python .venv/bin/python torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
 fi
 mkdir -p models/parakeet
-.venv/bin/python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='mudler/parakeet-cpp-gguf', filename='tdt-0.6b-v3-q4_k.gguf', local_dir='models/parakeet')"
+.venv/bin/python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='mudler/parakeet-cpp-gguf', filename='tdt-0.6b-v3-q8_0.gguf', local_dir='models/parakeet')"
 
 for engine_runtime in qwen3-asr vibevoice; do
   runtime_dir="venv-engines/$engine_runtime"

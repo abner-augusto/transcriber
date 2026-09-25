@@ -60,7 +60,7 @@ if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
     Assert-NativeSuccess "CUDA PyTorch installation"
 }
 New-Item -ItemType Directory -Force -Path "models\parakeet" | Out-Null
-& ".venv\Scripts\python.exe" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='mudler/parakeet-cpp-gguf', filename='tdt-0.6b-v3-q4_k.gguf', local_dir='models/parakeet')"
+& ".venv\Scripts\python.exe" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='mudler/parakeet-cpp-gguf', filename='tdt-0.6b-v3-q8_0.gguf', local_dir='models/parakeet')"
 if ($LASTEXITCODE -ne 0) { throw "Parakeet model download failed" }
 
 foreach ($engineRuntime in @("qwen3-asr", "vibevoice")) {
