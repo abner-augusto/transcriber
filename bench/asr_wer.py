@@ -1,8 +1,7 @@
 """Word error rate of several Transcriber outputs against one reference transcript.
 
-The reference is a Gemini/Meet Markdown transcript (every "Name: text" line, bold
-or not) or JSON as ``bench.wder`` reads it. Words are normalized as in
-``bench.wder``: case, accents and punctuation do not count.
+The reference is read like ``bench.wder`` reads it (Gemini Markdown or JSON), and
+words are normalized the same way: case, accents and punctuation do not count.
 A Meet/Gemini reference is itself machine-made, so absolute WER overstates every
 Engine's error; the comparison between hypotheses is what the number is for.
 
@@ -17,29 +16,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from collections import Counter
 from difflib import SequenceMatcher
 from pathlib import Path
 
 import numpy as np
 
-from bench.wder import load_json_transcript, load_reference, tokenize
-
-# "Name: text" or "**Name:** text". Unlike bench.wder, WER needs no speaker map, so
-# any participant's line counts.
-SPOKEN_LINE_PATTERN = re.compile(r"^(?:\*\*)?[^\W\d_][\w .'-]*?:(?:\*\*)?\s+(.+)$")
-
-
-def reference_words(path: Path) -> list[str]:
-    if path.suffix.lower() == ".json":
-        return [word.text for word in load_reference(path)]
-    words: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        match = SPOKEN_LINE_PATTERN.match(line.strip())
-        if match:
-            words.extend(tokenize(match.group(1)))
-    return words
+from bench.wder import load_json_transcript, load_reference
 
 
 def edit_distance(reference: list[str], hypothesis: list[str]) -> int:
@@ -75,7 +58,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, help="optional JSON report")
     args = parser.parse_args()
 
-    reference = reference_words(args.reference)
+    reference = [word.text for word in load_reference(args.reference)]
     hypotheses = {path: [word.text for word in load_json_transcript(path)] for path in args.hypotheses}
 
     report = {"reference": str(args.reference), "reference_words": len(reference), "hypotheses": []}

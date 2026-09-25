@@ -26,6 +26,26 @@ def test_gemini_reference_normalizes_known_and_shared_speakers(tmp_path):
     ]
 
 
+def test_gemini_reference_reads_bold_names_of_any_participant(tmp_path):
+    path = tmp_path / "reference.md"
+    path.write_text(
+        "### **00:02:20**\n\n"
+        "**Eduardo Misturini:** Opa.\n\n"
+        "**Abner Augusto Souza:** Oi pessoal, boa tarde.\n",
+        encoding="utf-8",
+    )
+
+    words = load_gemini_reference(path)
+
+    assert [(word.text, word.speaker) for word in words] == [
+        ("opa", "Eduardo Misturini"),
+        ("oi", "ABNER"),
+        ("pessoal", "ABNER"),
+        ("boa", "ABNER"),
+        ("tarde", "ABNER"),
+    ]
+
+
 def test_wder_excludes_shared_account_and_finds_optimal_label_mapping():
     reference = [
         LabeledWord("um", "ABNER"),

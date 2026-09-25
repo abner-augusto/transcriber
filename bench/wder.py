@@ -34,9 +34,9 @@ HYPOTHESIS_SPEAKER_MAP = {
 }
 
 WORD_PATTERN = re.compile(r"[\w]+(?:['’][\w]+)*", re.UNICODE)
-GEMINI_LINE_PATTERN = re.compile(
-    r"^(Abner Augusto Souza|Camilla Lessa|Chris Zamboni|Ricardo Albano):\s*(.*)$"
-)
+# A spoken line of a Meet/Gemini transcript: "Name: text", or "**Name:** text" in the
+# newer export. Names outside REFERENCE_SPEAKER_MAP are kept as written.
+GEMINI_LINE_PATTERN = re.compile(r"^(?:\*\*)?([^\W\d_][\w .'-]*?):(?:\*\*)?\s*(.*)$")
 
 
 @dataclass(frozen=True)
