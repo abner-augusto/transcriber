@@ -8,8 +8,7 @@ interface Props {
 export default function PreferencesTab({ form }: Props) {
   const {
     defaultVocab, setDefaultVocab, voiceProfilesEnabled, setVoiceProfilesEnabled,
-    hfToken, setHfToken, clusterThreshold, setClusterThreshold,
-    switchPenalty, setSwitchPenalty, voiceProfiles, learnedVocab, setLearnedVocab,
+    voiceProfiles, learnedVocab, setLearnedVocab,
     vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled,
     vocabProfiles, newProfileName, setNewProfileName, newProfileTerms, setNewProfileTerms,
     savingVocabProfile, handleCreateVocabProfile, handleDeleteVocabProfile, handleDeleteVoiceProfile,
@@ -17,74 +16,6 @@ export default function PreferencesTab({ form }: Props) {
 
   return (
     <>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">Hugging Face token</label>
-        <p className="text-xs text-slate-500 mb-1.5">
-          Required for speaker diarization.{" "}
-          <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer"
-            className="text-violet-400 hover:text-violet-300">huggingface.co/settings/tokens</a>
-        </p>
-        <input type="password" value={hfToken} onChange={(e) => setHfToken(e.target.value)}
-          className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-          placeholder="hf_..." autoComplete="off" />
-      </div>
-
-      <div className="border-t border-slate-800" />
-
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">Speaker attribution smoothing</label>
-        <p className="text-xs text-slate-500 mb-2">
-          Penalty for switching speakers between nearby words. Higher values suppress isolated
-          switches; set to zero to follow timestamp evidence directly.
-        </p>
-        <div className="flex items-center gap-3">
-          <input type="range" min={0} max={2} step={0.05}
-            value={switchPenalty}
-            onChange={(e) => setSwitchPenalty(parseFloat(e.target.value))}
-            className="flex-1 accent-violet-600" />
-          <span className="text-xs text-slate-400 font-mono w-10 text-right">
-            {switchPenalty.toFixed(2)}
-          </span>
-        </div>
-        <div className="flex text-[10px] text-slate-600 mt-1">
-          <span>more responsive</span>
-          <span className="flex-1" />
-          <span>more stable</span>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">Speaker separation</label>
-        <p className="text-xs text-slate-500 mb-2">
-          Clustering threshold for diarization. Lower splits more readily (one person can
-          become several speakers); higher merges more readily (two people can collapse into
-          one). Leave on the model default unless speakers are visibly wrong.
-        </p>
-        <div className="flex items-center gap-3">
-          <input type="range" min={0.5} max={0.9} step={0.01}
-            value={clusterThreshold ?? 0.7}
-            disabled={clusterThreshold == null}
-            onChange={(e) => setClusterThreshold(parseFloat(e.target.value))}
-            className="flex-1 accent-violet-600 disabled:opacity-40" />
-          <span className="text-xs text-slate-400 font-mono w-10 text-right">
-            {clusterThreshold == null ? "—" : clusterThreshold.toFixed(2)}
-          </span>
-        </div>
-        <div className="flex text-[10px] text-slate-600 mt-1">
-          <span>more speakers</span>
-          <span className="flex-1" />
-          <span>fewer speakers</span>
-        </div>
-        <label className="flex items-center gap-2 mt-2 text-xs text-slate-400 cursor-pointer">
-          <input type="checkbox" checked={clusterThreshold == null}
-            onChange={(e) => setClusterThreshold(e.target.checked ? null : 0.7)}
-            className="accent-violet-600" />
-          Use model default
-        </label>
-      </div>
-
-      <div className="border-t border-slate-800" />
 
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1">Default vocabulary</label>

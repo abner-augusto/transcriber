@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Preset } from "../types";
-import { firstUsablePreset } from "./engineHealth";
+import { engineHealthDot, firstUsablePreset } from "./engineHealth";
+
+describe("engineHealthDot", () => {
+  it("colors each health state distinctly", () => {
+    expect(engineHealthDot("ready")).toContain("emerald");
+    expect(engineHealthDot("degraded")).toContain("amber");
+    expect(engineHealthDot("blocked")).toContain("red");
+  });
+});
 
 function preset(id: string, state: Preset["state"]): Preset {
   return {

@@ -1,5 +1,6 @@
 import type { ModelSettings } from "../../types";
 import { engineMeta } from "../../engineMetadata";
+import { engineHealthDot } from "../../utils/engineHealth";
 import type { PresetEditor } from "./usePresetEditor";
 
 interface Props {
@@ -67,9 +68,7 @@ export default function PresetTab({ settings, editor }: Props) {
                     className="accent-violet-600 mt-1"
                   />
                   <span
-                    className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                      p.state === "ready" ? "bg-emerald-400 ring-2 ring-emerald-400/20" : p.state === "degraded" ? "bg-amber-400 ring-2 ring-amber-400/20" : "bg-red-400 ring-2 ring-red-400/20"
-                    }`}
+                    className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${engineHealthDot(p.state)}`}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">

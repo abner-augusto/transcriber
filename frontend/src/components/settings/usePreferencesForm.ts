@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import {
-  getPreferences, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile,
+  getSettings, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile,
   listVocabulary, listVocabularyProfiles, createVocabularyProfile, deleteVocabularyProfile,
 } from "../../api";
-import type { SpeakerProfile, VocabularyEntry } from "../../api";
+import type { DiarizerOption, DiarizationPrefs, SpeakerProfile, VocabularyEntry } from "../../api";
 import type { VocabularyProfile } from "../../types";
+import { buildDiarizationPayload } from "./preferencesPayload";
 
 /**
  * The Preferences tab's fields, loaded once when the Settings dialog opens.
@@ -17,6 +18,8 @@ export function usePreferencesForm() {
   const [voiceProfilesEnabled, setVoiceProfilesEnabled] = useState(true);
   const [hfToken, setHfToken] = useState("");
   const [clusterThreshold, setClusterThreshold] = useState<number | null>(null);
+  const [diarizerEngine, setDiarizerEngine] = useState<NonNullable<DiarizationPrefs["engine"]>>("pyannote");
+  const [diarizers, setDiarizers] = useState<DiarizerOption[]>([]);
   const [switchPenalty, setSwitchPenalty] = useState(0.8);
   const [vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled] = useState(true);
   const [voiceProfiles, setVoiceProfiles] = useState<SpeakerProfile[]>([]);
@@ -31,11 +34,13 @@ export function usePreferencesForm() {
   }, []);
 
   async function loadPreferences() {
-    const p = await getPreferences();
+    const { preferences: p, diarizers: options } = await getSettings();
+    setDiarizers(options);
     setDefaultVocab(p.default_vocabulary || "");
     setVoiceProfilesEnabled(p.speaker_profiles_enabled);
     setHfToken(p.hf_auth_token || "");
     setClusterThreshold(p.diarization?.clustering_threshold ?? null);
+    setDiarizerEngine(p.diarization?.engine ?? "pyannote");
     setSwitchPenalty(p.speaker_switch_penalty ?? 0.8);
     setVocabularyCorrectionEnabled(p.vocabulary_correction?.enabled ?? true);
     setVoiceProfiles(await listSpeakerProfiles());
@@ -81,7 +86,7 @@ export function usePreferencesForm() {
       hf_auth_token: hfToken,
       speaker_switch_penalty: switchPenalty,
       vocabulary_correction: { enabled: vocabularyCorrectionEnabled },
-      diarization: clusterThreshold == null ? {} : { clustering_threshold: clusterThreshold },
+      diarization: buildDiarizationPayload(diarizerEngine, clusterThreshold),
     });
   }
 
@@ -90,6 +95,7 @@ export function usePreferencesForm() {
     voiceProfilesEnabled, setVoiceProfilesEnabled,
     hfToken, setHfToken,
     clusterThreshold, setClusterThreshold,
+    diarizerEngine, setDiarizerEngine, diarizers,
     switchPenalty, setSwitchPenalty,
     vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled,
     voiceProfiles,

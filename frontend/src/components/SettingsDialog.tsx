@@ -1,6 +1,7 @@
 import { useState } from "react";
 import PresetTab from "./settings/PresetTab";
 import PreferencesTab from "./settings/PreferencesTab";
+import DiarizationTab from "./settings/DiarizationTab";
 import { usePresetEditor } from "./settings/usePresetEditor";
 import { usePreferencesForm } from "./settings/usePreferencesForm";
 
@@ -11,14 +12,14 @@ interface Props {
 export default function SettingsDialog({ onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<"presets" | "preferences">("presets");
+  const [tab, setTab] = useState<"presets" | "diarization" | "preferences">("presets");
   const presetEditor = usePresetEditor();
   const preferences = usePreferencesForm();
   const { settings } = presetEditor;
 
   async function handleSave() {
     setSaving(true);
-    if (tab === "preferences") {
+    if (tab === "preferences" || tab === "diarization") {
       await preferences.save();
     }
     setSaving(false);
@@ -44,10 +45,10 @@ export default function SettingsDialog({ onClose }: Props) {
         <h2 className="text-xl font-bold text-white mb-4 flex-shrink-0">Settings</h2>
 
         <div className="flex bg-slate-800 rounded-xl p-1 mb-5 flex-shrink-0">
-          {(["presets", "preferences"] as const).map((t) => (
+          {(["presets", "diarization", "preferences"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all capitalize ${tab === t ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white"}`}>
-              {t}
+              {t === "presets" ? "Presets" : t === "diarization" ? "Diarization" : "Preferences"}
             </button>
           ))}
         </div>
@@ -56,6 +57,8 @@ export default function SettingsDialog({ onClose }: Props) {
         <div className="space-y-5 overflow-y-auto pr-1 flex-1">
           {tab === "presets" ? (
             <PresetTab settings={settings} editor={presetEditor} />
+          ) : tab === "diarization" ? (
+            <DiarizationTab form={preferences} />
           ) : (
             <PreferencesTab form={preferences} />
           )}

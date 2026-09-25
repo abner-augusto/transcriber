@@ -125,18 +125,55 @@ Preferences, which they will, because the form is owned by the dialog.
 
 ## Done criteria
 
-- [ ] Settings has a Diarization tab that selects the Diarizer through Preferences.
-- [ ] pyannote-only controls appear only for pyannote; smoothing is always shown.
-- [ ] Blocked Diarizers are visible but not selectable, with their reason.
-- [ ] `npm run build` and `npm test` pass.
+- [x] Settings has a Diarization tab that selects the Diarizer through Preferences.
+- [x] pyannote-only controls appear only for pyannote; smoothing is always shown.
+- [x] Blocked Diarizers are visible but not selectable, with their reason.
+- [x] `npm run build` and `npm test` pass.
 - [ ] Manual check on the user's machine.
 
 ## STOP conditions
 
-- Plan 022 is not DONE, or `GET /api/settings` lacks `diarizers`.
+- Plan 022's backend is not on this branch: `GET /api/settings` lacks
+  `diarizers`, or `DiarizationPrefs` lacks `engine`. Plan 022 may still be
+  IN PROGRESS for its Step 8, a manual check in the app that needs this tab;
+  that is not a STOP.
 - Drift in the frontend files listed in "Current state".
 - The design needs a new endpoint or a backend change (that belongs to plan 022).
 
 ## Outcome
 
-_To be filled in by the executor._
+Implemented the Diarization tab with selectable engine cards, state-based health badges, blocked-engine reasons, and the two explanatory notes. Moved the Hugging Face token and Speaker separation controls out of Preferences; they appear only for pyannote. Speaker attribution smoothing appears for both engines. The dialog-owned form loads `diarization.engine` and the `diarizers` list from `GET /api/settings`, saves through the existing Preferences endpoint from either Preferences-related tab, and retains a stored clustering threshold while Nemotron is selected.
+
+Verification results:
+
+- Drift check: `git diff --stat 748cf57..HEAD -- frontend/src/components/SettingsDialog.tsx frontend/src/components/settings/ frontend/src/api.ts` returned no output. Plan 022's backend contract is present: `main.py` returns `diarizers` and `preferences.py` defines `DiarizationPrefs.engine`.
+- Step 1: `npm run build` passed; Vite transformed 120 modules and built successfully.
+- Step 2: `npm test` passed with 39 tests across 6 files, including the three payload cases (pyannote default threshold, pyannote override, and Nemotron retaining a stored threshold).
+- Step 4/final frontend verification: `npm run build` passed; Vite transformed 122 modules and built successfully. `npm test` passed with 40 tests across 6 files.
+- Backend regression suite: `.\.venv\Scripts\python.exe -m pytest -q tests` passed with 370 passed and 20 skipped in 35.42s.
+
+The only unchecked Done criterion is the manual check on the user's machine. It remains for the reviewer and user: open Settings, check engine health and persistence, verify the pyannote-only controls hide for Nemotron, and confirm the Preferences tab no longer contains the moved controls. No Meeting was queued for this check.
+
+### Review (2026-09-25)
+
+Executor: Codex `gpt-6-luna`. At first it stopped on the STOP condition "plan
+022 is not DONE". The condition was rewritten to what it protects, namely
+that plan 022's backend is on this branch, and the run was resumed. The
+reviewer fixed the following before committing:
+
+- The Diarizer cards used a new text badge ("Ready"/"Degraded"/"Blocked")
+  whose styles were copied from `engineMetadata.ts`, while decision 4 asks for
+  the Preset look. The status dot is now `engineHealthDot` in
+  `utils/engineHealth.ts`. `PresetTab` uses it in place of its inline
+  conditional, and the Diarizer cards share the Preset card layout: radio,
+  dot, ⚠️ summary, and a "Health checks" disclosure. `DiarizerOption` gains
+  `checks`, which the backend already returns.
+- The HF token copy said "Required for speaker diarization", which is no
+  longer true for Nemotron. It now says pyannote downloads its gated models
+  with it.
+
+Verification by the reviewer: `npm run build` passes; `npm test` has 40
+passed; the backend suite has 370 passed, 20 skipped. Revert-proof: making
+the payload drop the threshold for Nemotron fails "keeps the stored threshold
+while Nemotron is selected", and restoring the payload makes it pass. Step 5,
+the manual check, is pending with the user.

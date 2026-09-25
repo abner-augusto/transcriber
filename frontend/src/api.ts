@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Meeting, Segment, Speaker, Job, ModelSettings, Preset, VocabularyProfile } from "./types";
+import type { EngineCheck, Meeting, Segment, Speaker, Job, ModelSettings, Preset, VocabularyProfile } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -206,9 +206,24 @@ export async function saveProfileFromSpeaker(
 // --- Preferences ---
 
 export interface DiarizationPrefs {
+  engine?: "pyannote" | "nemotron-3-diarization";
   clustering_threshold?: number | null;
   Fa?: number | null;
   Fb?: number | null;
+}
+
+export interface DiarizerOption {
+  id: "pyannote" | "nemotron-3-diarization";
+  name: string;
+  description: string;
+  state: "ready" | "degraded" | "blocked";
+  summary: string;
+  checks: EngineCheck[];
+}
+
+export interface Settings {
+  preferences: Preferences;
+  diarizers: DiarizerOption[];
 }
 
 export interface Preferences {
@@ -220,9 +235,13 @@ export interface Preferences {
   vocabulary_correction?: { enabled: boolean };
 }
 
-export async function getPreferences(): Promise<Preferences> {
+export async function getSettings(): Promise<Settings> {
   const { data } = await api.get("/settings");
-  return data.preferences;
+  return data;
+}
+
+export async function getPreferences(): Promise<Preferences> {
+  return (await getSettings()).preferences;
 }
 
 export async function updatePreferences(prefs: Partial<Preferences>): Promise<Preferences> {
