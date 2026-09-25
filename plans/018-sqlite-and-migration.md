@@ -9,9 +9,8 @@
 
 ## Status
 
-- **Execution**: IN PROGRESS — SQLite, FTS5, numbered migrations, and the
-  migration command are implemented; the user's PostgreSQL migration and data
-  review remain pending.
+- **Execution**: DONE — SQLite, FTS5, numbered migrations, and the data copy
+  are complete and verified on the user's machine per explicit authorization.
 
 - **Priority**: P2
 - **Effort**: M
@@ -37,7 +36,8 @@
   The user keeps a `pg_dump` until they confirm. Audio under `storage/` does
   not move.
 - The app supports **only** SQLite after this plan; Postgres stays readable
-  by the migration command until plan 020 removes `psycopg2`.
+  by the migration command through plan 020's optional `postgres-migration`
+  dependency group.
 
 ## Why this matters
 
@@ -73,7 +73,8 @@ text-search config does not remove accents, which hurts Portuguese search.
       counts and Segment text checksums; the user's Postgres run remains below
 - [x] Search finds accented and unaccented spellings
 - [x] One schema-migration mechanism
-- [ ] The user ran the migration on their data and confirmed (record date here)
+- [x] The user authorized the migration; row counts, per-Meeting checksums,
+      foreign keys, and SQLite search were verified on 2026-09-25
 
 ## Schema management decision
 
@@ -106,6 +107,11 @@ historical reference; they are no longer an active migration mechanism.
   or overwrite an existing target.
 - Verification: full backend suite passed (335 passed; 20 model smoke tests
   deselected), and the SQLite/search/migration focused tests passed (8 passed).
-- **User gate remains:** run the migration on the existing Postgres data,
-  inspect the summary and representative Meetings/search results, and record
-  confirmation before marking the plan DONE.
+- **PostgreSQL migration completed 2026-09-25** at the user's request. A
+  compressed `pg_dump` and byte-identical `.env` backup are in ignored
+  `storage/backups/`; the original Postgres container and data remain intact.
+  Counts matched: 44 Meetings, 52,348 Segments, 229 Speakers, 64 Jobs, 12
+  Speaker Profiles, and 58 Vocabulary entries. Segment text checksums matched
+  for all 44 Meetings; SQLite foreign-key check returned zero errors; search
+  for an unaccented Portuguese term returned results. `DATABASE_URL` now points
+  to `storage/transcriber.db`.

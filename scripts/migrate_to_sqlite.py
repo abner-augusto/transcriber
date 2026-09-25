@@ -6,12 +6,19 @@ import argparse
 import hashlib
 from pathlib import Path
 
-from sqlalchemy import MetaData, create_engine, func, inspect, select
+from sqlalchemy import MetaData, create_engine, func, inspect, null, select
 from sqlalchemy.engine import URL
 
 from database import Base, configure_sqlite_engine
 import models  # noqa: F401: register every mapped table in Base.metadata
 from migrations.runner import upgrade
+
+
+_OPTIONAL_ADDITIVE_COLUMNS = {
+    "jobs": {"run_config"},
+    "segments": {"corrections"},
+    "vocabulary_entries": {"misheard_as"},
+}
 
 
 def _segment_checksums(connection, segments_table) -> dict[str, str]:
@@ -37,6 +44,43 @@ def _segment_checksums(connection, segments_table) -> dict[str, str]:
     return {meeting_id: digest.hexdigest() for meeting_id, digest in checksums.items()}
 
 
+def _reflect_and_validate_source(source_engine):
+    target_names = set(Base.metadata.tables)
+    source_names = set(inspect(source_engine).get_table_names())
+    if source_names != target_names:
+        missing = sorted(target_names - source_names)
+        extra = sorted(source_names - target_names)
+        raise ValueError(
+            "Source schema does not match the current application schema; "
+            f"missing tables={missing}, extra tables={extra}. Stop and review."
+        )
+
+    source_metadata = MetaData()
+    source_metadata.reflect(bind=source_engine, only=sorted(target_names))
+    missing_columns: dict[str, set[str]] = {}
+    for target_table in Base.metadata.sorted_tables:
+        source_table = source_metadata.tables[target_table.name]
+        source_columns = set(source_table.c.keys())
+        target_columns = set(target_table.c.keys())
+        source_only = source_columns - target_columns
+        target_only = target_columns - source_columns
+        allowed = _OPTIONAL_ADDITIVE_COLUMNS.get(target_table.name, set())
+        if source_only or target_only - allowed:
+            raise ValueError(
+                f"Column mismatch in {target_table.name}; "
+                f"source-only={sorted(source_only)}, "
+                f"target-only={sorted(target_only)}. Stop and review; no data was discarded."
+            )
+        if any(not target_table.c[column].nullable for column in target_only):
+            raise ValueError(
+                f"New columns in {target_table.name} are not nullable; "
+                "the source schema cannot be migrated losslessly."
+            )
+        if target_only:
+            missing_columns[target_table.name] = target_only
+    return source_metadata, missing_columns
+
+
 def _copy_database(source_url: str, target_path: Path) -> dict:
     target_path = target_path.expanduser().resolve()
     partial_path = target_path.with_name(target_path.name + ".migrating")
@@ -50,51 +94,38 @@ def _copy_database(source_url: str, target_path: Path) -> dict:
         )
 
     source_engine = create_engine(source_url, pool_pre_ping=True)
-    target_engine = create_engine(
-        URL.create("sqlite", database=str(partial_path)),
-        connect_args={"check_same_thread": False},
-    )
-    configure_sqlite_engine(target_engine)
+    target_engine = None
     counts: dict[str, int] = {}
     try:
+        # Validate the complete source schema before creating even the partial
+        # destination, so known incompatibilities leave no migration artefact.
+        source_metadata, missing_columns = _reflect_and_validate_source(source_engine)
+        target_engine = create_engine(
+            URL.create("sqlite", database=str(partial_path)),
+            connect_args={"check_same_thread": False},
+        )
+        configure_sqlite_engine(target_engine)
         Base.metadata.create_all(bind=target_engine)
         upgrade(target_engine)
 
-        source_inspector = inspect(source_engine)
-        source_names = set(source_inspector.get_table_names())
-        target_names = set(Base.metadata.tables)
-        if source_names != target_names:
-            missing = sorted(target_names - source_names)
-            extra = sorted(source_names - target_names)
-            raise ValueError(
-                "Source schema does not match the current application schema; "
-                f"missing tables={missing}, extra tables={extra}. Stop and review."
-            )
-
-        source_metadata = MetaData()
-        source_metadata.reflect(bind=source_engine, only=sorted(target_names))
         with source_engine.connect().execution_options(stream_results=True) as source_conn:
             with target_engine.begin() as target_conn:
                 for target_table in Base.metadata.sorted_tables:
                     source_table = source_metadata.tables[target_table.name]
-                    source_columns = set(source_table.c.keys())
-                    target_columns = set(target_table.c.keys())
-                    if source_columns != target_columns:
-                        raise ValueError(
-                            f"Column mismatch in {target_table.name}; "
-                            f"source-only={sorted(source_columns - target_columns)}, "
-                            f"target-only={sorted(target_columns - source_columns)}. "
-                            "Stop and review; no data was discarded."
-                        )
-
                     result = source_conn.execution_options(stream_results=True).execute(
                         select(source_table)
                     )
                     copied = 0
                     while rows := result.mappings().fetchmany(500):
+                        values = []
+                        for row in rows:
+                            record = dict(row)
+                            for column in missing_columns.get(target_table.name, ()):
+                                record[column] = null()
+                            values.append(record)
                         target_conn.execute(
                             target_table.insert(),
-                            [dict(row) for row in rows],
+                            values,
                         )
                         copied += len(rows)
                     counts[target_table.name] = copied
@@ -139,7 +170,8 @@ def _copy_database(source_url: str, target_path: Path) -> dict:
         }
     finally:
         source_engine.dispose()
-        target_engine.dispose()
+        if target_engine is not None:
+            target_engine.dispose()
 
 
 def main() -> int:
