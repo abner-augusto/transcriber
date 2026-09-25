@@ -1,4 +1,4 @@
-"""Runs the real Celery task bodies against SQLite, fake Engines, and fake VAD.
+"""Runs the real Job task bodies against SQLite, fake Engines, and fake VAD.
 
 Everything the tasks reach for — audio extraction, VAD, the Engine factories, the
 progress publisher, the Meeting storage directory — is replaced here, so a test only

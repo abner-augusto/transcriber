@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+cd "$(dirname "$0")"
 
 if [ ! -f frontend/dist/index.html ]; then
   echo "Built frontend is missing. Run ./install.sh first." >&2

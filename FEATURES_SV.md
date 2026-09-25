@@ -72,7 +72,7 @@
 ## Sökning
 
 - **Fulltextsökning** - Sök genom alla mötestranskript från startsidan
-- **PostgreSQL GIN-index** - Snabb textsökning med `to_tsvector` och ILIKE-fallback
+- **SQLite FTS5-index** - Snabb textsökning som ignorerar accenter
 - **Resultat grupperade per möte** - Sökresultat organiserade per möte med matchande segment
 - **Klicka för att navigera** - Hoppa direkt till ett matchande segment i valfritt möte
 
@@ -103,8 +103,8 @@
 
 - **FastAPI-backend** med asynkront WebSocket-stöd
 - **React + TypeScript + Vite**-frontend med Zustand för tillståndshantering
-- **PostgreSQL** för beständig lagring
-- **Redis + Celery** för bakgrundsbearbetning
+- **SQLite** för beständig lagring i en lokal fil
+- **Lokal jobbkörare** - varje jobb i en egen barnprocess, ingen extern kö
 - **FFmpeg** för ljud-/videokonvertering
 - **whisper.cpp** (nativ binär) för transkribering
 - **pyannote.audio** för diarisering

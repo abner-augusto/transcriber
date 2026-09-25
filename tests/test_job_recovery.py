@@ -1,8 +1,9 @@
-"""Recovering Jobs a dead worker left behind, and only those.
+"""Recovering Jobs an application restart interrupted, and only those.
 
-A Job is RUNNING only while a worker holds it. When the worker starts, nothing can be
-holding a RUNNING Job any more, so each one was interrupted. A PENDING Job is still
-waiting in the broker for that same worker and must be left alone.
+A Job is RUNNING only while a Job child process holds it. When the application
+starts, nothing can be holding a RUNNING Job any more, so each one was interrupted.
+A PENDING Job is still waiting in the Job table for the local runner and must be
+left alone.
 """
 
 from datetime import datetime
@@ -59,7 +60,7 @@ def test_running_job_is_failed_and_its_meeting_released(monkeypatch, tmp_path):
     assert meeting_status == MeetingStatus.FAILED
 
 
-def test_pending_job_is_left_for_the_worker(monkeypatch, tmp_path):
+def test_pending_job_is_left_for_the_runner(monkeypatch, tmp_path):
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_with_job(session_factory, MeetingStatus.PROCESSING, JobStatus.PENDING)
 

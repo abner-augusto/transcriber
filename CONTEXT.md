@@ -105,7 +105,7 @@ _Avoid_: configuration snapshot, job settings
 
 **Job**:
 One unit of background processing over a single Meeting, carrying its own progress and status.
-_Avoid_: task (reserved for the Celery mechanism that runs a Job)
+_Avoid_: task (that names the code a Job runs, not the Job itself)
 
 **Reprocessing**:
 Re-running diarization or speaker naming over a Meeting that has already been transcribed,

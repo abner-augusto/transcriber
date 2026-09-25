@@ -91,9 +91,8 @@ class PyannoteDiarizer:
     def _sync_clustering_overrides(cls, cfg: dict):
         """Re-instantiate if the current Job's clustering knobs changed.
 
-        Runs on every get_pipeline() call, not just at build time — the Celery worker
-        is a long-lived process, so a slider change in the UI has to reach the already
-        cached pipeline. instantiate() only sets hyperparameters (no model reload), so
+        Runs on every get_pipeline() call, not just at build time, so a change to the
+        clustering Preferences reaches a pipeline already cached in this process. instantiate() only sets hyperparameters (no model reload), so
         calling it again is cheap; the equality check keeps it to actual changes.
 
         Only clustering parameters supported by the instantiated pipeline are applied.
