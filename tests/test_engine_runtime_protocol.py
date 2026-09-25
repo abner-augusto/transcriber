@@ -3,7 +3,6 @@ import math
 import pytest
 
 from engine_runtimes.protocol import EngineRequest, EngineResponse, ProtocolError
-from engines.isolated_python import IsolatedPythonTranscriber
 
 
 def request_dict():
@@ -50,31 +49,3 @@ def test_request_rejects_unknown_version_fields_and_relative_paths(mutation):
 def test_response_rejects_nonfinite_invalid_and_unordered_words(words):
     value = response_dict(); value["words"] = words
     with pytest.raises(ProtocolError): EngineResponse.from_dict(value)
-
-
-def test_isolated_adapter_preserves_native_turns_and_fingerprint(monkeypatch, tmp_path):
-    model = tmp_path / "modelo"; model.mkdir()
-    response = EngineResponse.from_dict(response_dict())
-    monkeypatch.setattr("engines.isolated_python.launch_engine", lambda **kwargs: response)
-    adapter = IsolatedPythonTranscriber(engine_id="vibevoice", model_path=str(model), aligner_path=None,
-        device="cpu", options={"window_seconds": 600.0, "overlap_seconds": 45.0})
-    words = adapter.transcribe(str(tmp_path / "áudio com espaço.wav"))
-    assert words[0].text == " Olá"
-    assert adapter.get_native_diarization().turns[0].speaker == "SPEAKER_00"
-    assert adapter.runtime_fingerprint == "abc"
-
-
-def test_isolated_adapter_sends_load_operation(monkeypatch, tmp_path):
-    model = tmp_path / "modelo"; model.mkdir()
-    response = EngineResponse((), None, {}, "abc")
-    captured = {}
-
-    def launch(**kwargs):
-        captured["request"] = kwargs["request"]
-        return response
-
-    monkeypatch.setattr("engines.isolated_python.launch_engine", launch)
-    adapter = IsolatedPythonTranscriber(engine_id="qwen3-asr", model_path=str(model), aligner_path=None,
-        device="cpu", options={})
-    adapter.load()
-    assert captured["request"].operation == "load"

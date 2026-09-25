@@ -12,6 +12,7 @@ persists its result nor unloads models; the Job does both.
 """
 
 import logging
+from collections.abc import Callable
 
 from config import get_meeting_path
 from engines import DIARIZER_ENGINE, DiarizationResult, Turn, compute_overlaps
@@ -31,6 +32,7 @@ def diarize_meeting(
     vad_service,
     native: DiarizationResult | None = None,
     native_engine: str | None = None,
+    on_path: Callable[[str], None] | None = None,
 ) -> MeetingDiarization:
     """The Turns for ``meeting``. A dual-track Meeting ignores ``native``.
 
@@ -38,9 +40,17 @@ def diarize_meeting(
     Raises RuntimeError when a dual-track Meeting's processed tracks are missing.
     """
     if meeting.is_dual_track:
+        if on_path:
+            on_path("dual_track")
         return _diarize_dual_track(meeting, diarizer, vad_service)
     if native is not None:
-        return bound_to_speech(native, audio_path, vad_service, engine=native_engine or "native")
+        if not native_engine:
+            raise ValueError("native_engine is required when native diarization is provided")
+        if on_path:
+            on_path("native")
+        return bound_to_speech(native, audio_path, vad_service, engine=native_engine)
+    if on_path:
+        on_path("diarizer")
     result = diarizer.diarize(
         audio_path,
         min_speakers=meeting.min_speakers,

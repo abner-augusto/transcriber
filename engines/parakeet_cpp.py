@@ -26,7 +26,7 @@ from pathlib import Path
 import soundfile as sf
 
 from .chunking import chunk_bounds
-from .ports import Word
+from .ports import Transcription, Word
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +59,16 @@ class ParakeetCppTranscriber:
         self.timeout = timeout
         self.chunk_seconds = chunk_seconds
 
-    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
+    def load(self) -> None:
+        for path, label in ((self.cli_path, "parakeet-cli"), (self.model_path, "Parakeet model")):
+            if not path or not Path(path).is_file():
+                raise RuntimeError(f"{label} file not found: {path}")
+
+    def unload(self) -> None:
+        """No resources remain resident between parakeet-cli subprocess calls."""
+        pass
+
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         """Transcribe. `vocabulary` is ignored — Parakeet takes no prompt."""
         audio, sample_rate = sf.read(audio_path, dtype="float32", always_2d=True)
         audio = audio[:, 0]
@@ -68,7 +77,7 @@ class ParakeetCppTranscriber:
         if duration <= self.chunk_seconds:
             words = self._transcribe_file(audio_path)
             log.info(f"[parakeet.cpp] {len(words)} words from {Path(self.model_path).name}")
-            return words
+            return Transcription(words=words)
 
         cuts = chunk_bounds(audio, sample_rate, self.chunk_seconds, MIN_TAIL_SECONDS)
         log.info(
@@ -105,7 +114,7 @@ class ParakeetCppTranscriber:
                 )
 
         log.info(f"[parakeet.cpp] {len(words)} words from {Path(self.model_path).name}")
-        return words
+        return Transcription(words=words)
 
     def _transcribe_file(self, audio_path: str) -> list[Word]:
         """One parakeet-cli run over one file, whose Words start at that file's zero."""

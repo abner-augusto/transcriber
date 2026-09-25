@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
-from engines import DiarizationResult, Turn, Word
+from engines import DiarizationResult, Transcription, Turn, Word
 from models import Job, Meeting, MeetingStatus
 from models.job import JobStatus, JobType
 from services.audio_service import DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT
@@ -22,14 +22,14 @@ from .fakes import FakeDiarizer, FakeTranscriber
 class NativeTranscriber(FakeTranscriber):
     """A Transcriber that also produces its own Turns, the way VibeVoice does."""
 
-    has_native_diarization = True
-
     def __init__(self, words: list[Word], native: DiarizationResult):
         super().__init__(words)
         self.native = native
 
-    def get_native_diarization(self) -> DiarizationResult:
-        return self.native
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
+        self.calls.append((audio_path, vocabulary))
+        self.lifecycle.append("transcribe")
+        return Transcription(words=list(self.words), native=self.native)
 
 
 @dataclass

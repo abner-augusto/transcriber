@@ -28,7 +28,7 @@ from typing import Optional
 import numpy as np
 import torch
 
-from .ports import DiarizationResult, Transcriber, Turn, Word
+from .ports import DiarizationResult, Transcription, Transcriber, Turn, Word
 
 log = logging.getLogger(__name__)
 
@@ -296,8 +296,6 @@ def stitch_window_segments(
 class VibeVoiceTranscriber:
     """VibeVoice Transcriber offering native speaker diarization."""
 
-    has_native_diarization: bool = True
-
     def __init__(
         self,
         model_path: Optional[str] = None,
@@ -396,18 +394,20 @@ class VibeVoiceTranscriber:
         self._aligner_processor = processor
         self._aligner_model = model
 
-    def get_native_diarization(self) -> DiarizationResult:
-        """Access the native DiarizationResult produced during transcription."""
-        if self._native_diarization is None:
-            raise RuntimeError("VibeVoice has not transcribed audio yet.")
-        return self._native_diarization
+    def load(self) -> None:
+        self._ensure_model_loaded()
+        self._ensure_aligner_loaded()
 
-    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
+    def unload(self) -> None:
+        """The isolated runner process exits after each request and releases its models."""
+        pass
+
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         """Transcribe audio into Words and compute native Turns."""
         total_duration = get_audio_duration(audio_path)
         if total_duration <= 0.0:
             self._native_diarization = DiarizationResult(turns=[])
-            return []
+            return self._transcription([])
 
         self._ensure_model_loaded()
         self._ensure_aligner_loaded()
@@ -575,4 +575,14 @@ class VibeVoiceTranscriber:
 
         self._native_diarization = DiarizationResult(turns=turns)
         log.info(f"[vibevoice] Completed: {len(words)} words, {len(turns)} native turns")
-        return words
+        return self._transcription(words)
+
+    def _transcription(self, words: list[Word]) -> Transcription:
+        return Transcription(
+            words=words,
+            native=self._native_diarization,
+            provenance={
+                "alignment_degraded": bool(self._aligner_unavailable_reason),
+                "alignment_reason": self._aligner_unavailable_reason,
+            },
+        )

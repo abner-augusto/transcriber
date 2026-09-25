@@ -8,7 +8,7 @@ Neither port produces Segments. A Segment is what a reader sees, and it is deriv
 from Words and Turns together — see transcript.segments.derive_segments.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 
@@ -95,17 +95,53 @@ class DiarizationResult:
         return self.turns[index]
 
 
+@dataclass(frozen=True)
+class Transcription:
+    """One Transcriber's output and the provenance it decided while producing it."""
+
+    words: list[Word]
+    native: DiarizationResult | None = None
+    provenance: dict = field(default_factory=dict)
+
+
+RESERVED_PROVENANCE_KEYS = frozenset({"engine", "preset", "words"})
+
+
+def raw_transcription(engine: str, preset_id: str, transcription: Transcription) -> dict:
+    """Build the stable stored shape while keeping adapter provenance namespaced by owner."""
+    reserved = RESERVED_PROVENANCE_KEYS.intersection(transcription.provenance)
+    if reserved:
+        raise ValueError(
+            "Transcription provenance cannot use reserved key(s): "
+            + ", ".join(sorted(reserved))
+        )
+    return {
+        "engine": engine,
+        "preset": preset_id,
+        "words": [word.to_dict() for word in transcription.words],
+        **transcription.provenance,
+    }
+
+
 @runtime_checkable
 class Transcriber(Protocol):
-    """Turns audio into Words. Implemented by whisper.cpp and parakeet.cpp."""
+    """Turns audio into a Transcription. Implemented by local Transcriber Engines."""
 
-    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
-        """Words in ascending time order.
+    def load(self) -> None:
+        """Load model weights or validate native executable and model paths."""
+        ...
+
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
+        """Return Words in ascending time order and Engine-produced provenance.
 
         ``vocabulary`` is a hint, not a promise: an Engine that cannot be primed
         with domain terms is free to ignore it. Raises RuntimeError if the Engine
         fails; the caller fails the Job.
         """
+        ...
+
+    def unload(self) -> None:
+        """Release resident Engine resources, or do nothing for subprocess Engines."""
         ...
 
 

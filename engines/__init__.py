@@ -8,12 +8,22 @@ Imports of the adapters are deferred: the API process lists Presets without payi
 for torch, and a machine with no parakeet build can still run whisper.
 """
 
-from .ports import DiarizationResult, Aligner, Diarizer, Transcriber, Turn, Word
+from .ports import (
+    DiarizationResult,
+    Aligner,
+    Diarizer,
+    Transcriber,
+    Transcription,
+    Turn,
+    Word,
+    raw_transcription,
+)
 from .overlap import compute_overlaps
 
 
 __all__ = [
-    "Word", "Turn", "DiarizationResult", "Transcriber", "Diarizer", "Aligner",
+    "Word", "Turn", "DiarizationResult", "Transcription", "raw_transcription",
+    "Transcriber", "Diarizer", "Aligner",
     "make_transcriber", "make_diarizer", "make_aligner", "align_words",
     "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "compute_overlaps", "probe_engine", "engine_status", "alignment_engine_status",
     "release_gpu_memory", "unload_all_engines",

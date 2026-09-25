@@ -18,7 +18,7 @@ knows which Engine ran, which `CONTEXT.md` says it must not.
 **Blocked by:** None. Plan 012 is done: `tasks.diarization.diarize_meeting` takes
 `native` / `native_engine`, which collapse into the `Transcription` value.
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 **Plan:** `plans/015-transcriber-returns-transcription.md` (design session 2026-09-24:
 provenance dict, `load`/`unload` on the port, Aligner stays separate, RunConfig stays out).
@@ -39,3 +39,8 @@ provenance dict, `load`/`unload` on the port, Aligner stays separate, RunConfig 
 - [ ] No `hasattr`/`getattr` on a Transcriber anywhere in `tasks/`, `scripts/`, `engine_runners/`
 - [ ] Every adapter and `tests/fakes.py::FakeTranscriber` returns `Transcription`
 - [ ] `raw_transcription` stored JSON keeps its current keys
+
+**Outcome:** Implementation and ordinary backend verification are complete.
+User-only `model_load` and `model_inference` smoke tiers for parakeet.cpp and
+faster-whisper large-v3 are pending. Run them locally and record results before
+resolving this issue.

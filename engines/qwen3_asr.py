@@ -23,7 +23,7 @@ from typing import Optional
 import numpy as np
 import torch
 
-from .ports import Transcriber, Word
+from .ports import Transcription, Transcriber, Word
 from .torch_attention import (
     drop_single_sample_padding_mask,
     fused_attention_first,
@@ -154,11 +154,19 @@ class Qwen3AsrTranscriber:
         self._aligner_processor = processor
         self._aligner_model = model
 
-    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
+    def load(self) -> None:
+        self._ensure_asr_loaded()
+        self._ensure_aligner_loaded()
+
+    def unload(self) -> None:
+        """The isolated runner process exits after each request and releases its models."""
+        pass
+
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         """Transcribe audio into Words in ascending time order."""
         total_duration = get_audio_duration_seconds(audio_path)
         if total_duration <= 0.0:
-            return []
+            return self._transcription([])
 
         self._ensure_asr_loaded()
         self._ensure_aligner_loaded()
@@ -167,7 +175,7 @@ class Qwen3AsrTranscriber:
             audio_data = load_audio_ffmpeg_chunk(audio_path, 0.0, total_duration)
             words = self._transcribe_and_align_chunk(audio_data, offset_sec=0.0, vocabulary=vocabulary)
             log.info(f"[qwen3-asr] Transcribed single chunk ({total_duration:.1f}s): {len(words)} words")
-            return words
+            return self._transcription(words)
 
         # Build sliding windows
         windows = []
@@ -197,7 +205,16 @@ class Qwen3AsrTranscriber:
                 all_words = self._stitch_words(all_words, w_words)
 
         log.info(f"[qwen3-asr] Completed transcription: {len(all_words)} words total")
-        return all_words
+        return self._transcription(all_words)
+
+    def _transcription(self, words: list[Word]) -> Transcription:
+        return Transcription(
+            words=words,
+            provenance={
+                "alignment_degraded": bool(self._aligner_unavailable_reason),
+                "alignment_reason": self._aligner_unavailable_reason,
+            },
+        )
 
     def _aligner_model_forward(self, aln_inputs):
         """Align one chunk with the fused kernel, falling back to math if cuDNN rejects it."""

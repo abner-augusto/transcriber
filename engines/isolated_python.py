@@ -4,7 +4,7 @@ from pathlib import Path
 
 from config import settings
 from engine_runtimes import EngineRequest, launch_engine
-from .ports import DiarizationResult, Word
+from .ports import DiarizationResult, Transcription
 
 
 class IsolatedPythonTranscriber:
@@ -12,14 +12,6 @@ class IsolatedPythonTranscriber:
                  device: str, options: dict):
         self.engine_id, self.model_path, self.aligner_path = engine_id, model_path, aligner_path
         self.device, self.options = device, options
-        self.has_native_diarization = engine_id == "vibevoice"
-        self._native_diarization = None
-        self.runtime_fingerprint = None
-        self.runtime_diagnostics = {}
-
-    def get_native_diarization(self):
-        return self._native_diarization
-
     def _request(self, *, operation: str, audio_path: str, vocabulary: str | None = None):
         python = settings.qwen3_asr_python if self.engine_id == "qwen3-asr" else settings.vibevoice_python
         request = EngineRequest.from_dict({"schema_version": 1, "operation": operation, "engine_id": self.engine_id,
@@ -30,8 +22,6 @@ class IsolatedPythonTranscriber:
         response = launch_engine(python=python, module=f"engine_runners.{self.engine_id.replace('-', '_')}",
             request=request, timeout=settings.engine_runtime_timeout_seconds,
             debug_directory=settings.engine_runtime_debug_directory or None)
-        self.runtime_fingerprint = response.runtime_fingerprint
-        self.runtime_diagnostics = dict(response.diagnostics)
         return response
 
     def load(self) -> None:
@@ -39,13 +29,24 @@ class IsolatedPythonTranscriber:
         if response.words or response.native_turns:
             raise RuntimeError("load-only engine response unexpectedly contained transcription data")
 
-    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         response = self._request(operation="transcribe", audio_path=audio_path, vocabulary=vocabulary)
-        if response.native_turns is not None:
-            self._native_diarization = DiarizationResult(turns=list(response.native_turns))
-        return list(response.words)
+        native = (
+            DiarizationResult(turns=list(response.native_turns))
+            if response.native_turns is not None
+            else None
+        )
+        return Transcription(
+            words=list(response.words),
+            native=native,
+            provenance={
+                "runtime": {
+                    "fingerprint": response.runtime_fingerprint,
+                    "diagnostics": dict(response.diagnostics),
+                }
+            },
+        )
 
     def unload(self) -> None:
         """No-op: Isolated subprocess exits and frees its memory on completion."""
         pass
-

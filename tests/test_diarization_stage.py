@@ -193,29 +193,34 @@ class _Vad:
 
 def test_single_track_calls_the_diarizer_with_the_speaker_bounds():
     diarizer = FakeDiarizer([Turn(start=0.0, end=1.0, speaker="SPEAKER_00")])
+    reported = []
 
     diarization = diarize_meeting(
-        _Meeting(min_speakers=2, max_speakers=4), "audio.wav", diarizer=diarizer, vad_service=_Vad()
+        _Meeting(min_speakers=2, max_speakers=4), "audio.wav", diarizer=diarizer,
+        vad_service=_Vad(), on_path=reported.append,
     )
 
     assert diarizer.calls == [("audio.wav", 2, 4)]
     assert diarization.engine == "pyannote"
     assert diarization.host_label is None
+    assert reported == ["diarizer"]
 
 
 def test_native_turns_are_bounded_without_calling_the_diarizer():
     diarizer = FakeDiarizer([])
     native = DiarizationResult(turns=[Turn(start=0.0, end=1.0, speaker="SPEAKER_0")])
+    reported = []
 
     diarization = diarize_meeting(
         _Meeting(), "audio.wav", diarizer=diarizer, vad_service=_Vad(),
-        native=native, native_engine="vibevoice",
+        native=native, native_engine="vibevoice", on_path=reported.append,
     )
 
     assert diarizer.calls == []
     assert diarization.engine == "vibevoice"
     assert diarization.turns == native.turns
     assert diarization.original_turns == native.turns
+    assert reported == ["native"]
 
 
 def test_dual_track_without_processed_tracks_names_the_missing_file(monkeypatch, tmp_path):

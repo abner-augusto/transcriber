@@ -85,9 +85,14 @@ def main() -> int:
     results = []
     for preset in chosen:
         transcriber = make_transcriber(preset)
+        transcriber.load()
         started = time.perf_counter()
-        words = transcriber.transcribe(str(wav), vocabulary=args.vocabulary)
-        elapsed = time.perf_counter() - started
+        try:
+            transcription = transcriber.transcribe(str(wav), vocabulary=args.vocabulary)
+            elapsed = time.perf_counter() - started
+        finally:
+            transcriber.unload()
+        words = transcription.words
 
         text = "".join(w.text for w in words).strip()
         (OUT_DIR / f"{preset['id']}.txt").write_text(text, encoding="utf-8")

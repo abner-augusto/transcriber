@@ -65,6 +65,12 @@ _Avoid_: speaker profile, enrollment, voiceprint, profile (bare — it collides 
 Turns a Meeting's audio into Words. Knows nothing about who is speaking.
 _Avoid_: ASR, STT, whisper (that is one Engine, not the concept)
 
+**Transcription**:
+The immutable result of one Transcriber run: its Words, optional native Turns,
+and Engine-owned provenance such as runtime diagnostics or the resolved DTW
+preset. It does not include the Preset or other choices made by the user.
+_Avoid_: transcript (the full Meeting artifact)
+
 **Diarizer**:
 Turns a Meeting's audio into Turns. Knows nothing about what was said.
 _Avoid_: speaker segmentation, pyannote (that is one Engine)

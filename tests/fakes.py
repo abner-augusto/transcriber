@@ -5,7 +5,7 @@ of them can be tested without a GPU, a model file, or a subprocess. These two cl
 are the whole cost of that.
 """
 
-from engines import DiarizationResult, Turn, Word
+from engines import DiarizationResult, Transcription, Turn, Word
 
 
 class FakeTranscriber:
@@ -14,10 +14,18 @@ class FakeTranscriber:
     def __init__(self, words: list[Word]):
         self.words = words
         self.calls: list[tuple[str, str | None]] = []
+        self.lifecycle: list[str] = []
 
-    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
+    def load(self) -> None:
+        self.lifecycle.append("load")
+
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         self.calls.append((audio_path, vocabulary))
-        return list(self.words)
+        self.lifecycle.append("transcribe")
+        return Transcription(words=list(self.words))
+
+    def unload(self) -> None:
+        self.lifecycle.append("unload")
 
 
 class FakeDiarizer:

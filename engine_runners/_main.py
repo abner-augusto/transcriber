@@ -19,18 +19,17 @@ def run(engine_id, factory):
             raise ValueError(f"runner {engine_id} cannot execute {request.engine_id}")
         adapter = factory(request)
         if request.operation == "load":
-            primary_loader = adapter._ensure_asr_loaded if engine_id == "qwen3-asr" else adapter._ensure_model_loaded
-            primary_loader()
-            adapter._ensure_aligner_loaded()
-            words, native = (), None
+            adapter.load()
+            transcription = None
         else:
-            words = adapter.transcribe(request.audio_path, vocabulary=request.vocabulary)
-            native = adapter.get_native_diarization() if getattr(adapter, "has_native_diarization", False) else None
+            transcription = adapter.transcribe(request.audio_path, vocabulary=request.vocabulary)
+        words = () if transcription is None else tuple(transcription.words)
+        native = None if transcription is None else transcription.native
         turns = None if native is None else tuple(native.turns)
         manifest = load_manifest(engine_id)
         fingerprint = hashlib.sha256((manifest.runtime_id + "\n" + sys.executable + "\n" + sys.version).encode()).hexdigest()
-        degraded = getattr(adapter, "_aligner_unavailable_reason", None)
-        response = EngineResponse(tuple(words), turns, {"alignment_degraded": bool(degraded), "alignment_reason": degraded}, fingerprint)
+        provenance = {} if transcription is None else transcription.provenance
+        response = EngineResponse(tuple(words), turns, provenance, fingerprint)
         write_json(args.response, response.to_dict())
         return 0
     except Exception as exc:

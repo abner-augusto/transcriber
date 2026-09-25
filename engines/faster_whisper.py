@@ -9,7 +9,7 @@ integrated Silero VAD. Models can be standard Whisper model names (e.g.
 import logging
 from pathlib import Path
 
-from .ports import Word
+from .ports import Transcription, Word
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +25,16 @@ STYLE_PROMPTS = {
 
 class FasterWhisperTranscriber:
     _models: dict = {}
+
+    class _Unload:
+        """Keep the class-wide cleanup API while instances evict only their model."""
+
+        def __get__(self, instance, owner):
+            def unload(model_path: str | None = None):
+                target = instance.model_path if instance is not None else model_path
+                owner._unload_models(target)
+
+            return unload
 
     def __init__(
         self,
@@ -71,8 +81,11 @@ class FasterWhisperTranscriber:
             )
         return cls._models[cache_key]
 
+    def load(self) -> None:
+        self.get_model(self.model_path, self.device, self.compute_type)
+
     @classmethod
-    def unload(cls, model_path: str | None = None):
+    def _unload_models(cls, model_path: str | None = None):
         """Unload cached WhisperModel instance(s) and free CTranslate2 GPU memory."""
         if model_path is None:
             cls._models.clear()
@@ -83,7 +96,9 @@ class FasterWhisperTranscriber:
                 cls._models.pop(k, None)
             log.info(f"[faster-whisper] Unloaded model '{model_path}'")
 
-    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
+    unload = _Unload()
+
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         model = self.get_model(self.model_path, self.device, self.compute_type)
 
         lang = None if (not self.language or self.language == "auto") else self.language
@@ -118,7 +133,7 @@ class FasterWhisperTranscriber:
             f"[faster-whisper] {len(words)} words transcribed from {self.model_path} "
             f"(lang: {detected_lang}, prob: {lang_prob:.2f})"
         )
-        return words
+        return Transcription(words=words)
 
 
 def parse_words_from_segments(segments) -> list[Word]:

@@ -32,22 +32,11 @@ def load_preset(preset: dict) -> dict:
     from engines import make_transcriber
 
     transcriber = make_transcriber(preset)
-    engine = preset["engine"]
-    if hasattr(transcriber, "load"):
+    try:
         transcriber.load()
-    elif engine == "qwen3-asr":
-        transcriber._ensure_asr_loaded()
-        transcriber._ensure_aligner_loaded()
-    elif engine == "vibevoice":
-        transcriber._ensure_model_loaded()
-        transcriber._ensure_aligner_loaded()
-    elif engine == "faster-whisper":
-        transcriber.get_model(
-            transcriber.model_path, transcriber.device, transcriber.compute_type
-        )
-    # Native executable Engines are fully checked by metadata health. Their model
-    # files are opened by inference because they expose no separate load command.
-    return {"status": "passed", "engine": engine, "preset_id": preset["id"]}
+        return {"status": "passed", "engine": preset["engine"], "preset_id": preset["id"]}
+    finally:
+        transcriber.unload()
 
 
 def validate_words(words, duration: float) -> None:
@@ -89,29 +78,32 @@ def infer_preset(preset: dict, audio_path: Path) -> dict:
     from engines import make_transcriber
 
     transcriber = make_transcriber(preset)
-    words = transcriber.transcribe(str(audio_path), vocabulary=None)
-    duration_result = subprocess.run(
-        [
-            "ffprobe", "-v", "error", "-show_entries", "format=duration",
-            "-of", "csv=p=0", str(audio_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    duration = float(duration_result.stdout.strip())
-    validate_words(words, duration)
-    turns = []
-    if getattr(transcriber, "has_native_diarization", False):
-        turns = list(transcriber.get_native_diarization().turns)
-        validate_turns(turns, duration)
-    return {
-        "status": "passed",
-        "engine": preset["engine"],
-        "preset_id": preset["id"],
-        "word_count": len(words),
-        "turn_count": len(turns),
-    }
+    try:
+        transcriber.load()
+        transcription = transcriber.transcribe(str(audio_path), vocabulary=None)
+        duration_result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "csv=p=0", str(audio_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        duration = float(duration_result.stdout.strip())
+        validate_words(transcription.words, duration)
+        turns = list(transcription.native.turns) if transcription.native is not None else []
+        if turns:
+            validate_turns(turns, duration)
+        return {
+            "status": "passed",
+            "engine": preset["engine"],
+            "preset_id": preset["id"],
+            "word_count": len(transcription.words),
+            "turn_count": len(turns),
+        }
+    finally:
+        transcriber.unload()
 
 
 def release_engine_memory() -> None:

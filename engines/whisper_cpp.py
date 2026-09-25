@@ -26,7 +26,7 @@ from typing import Optional
 import soundfile as sf
 
 from .chunking import chunk_bounds
-from .ports import Word
+from .ports import Transcription, Word
 
 log = logging.getLogger(__name__)
 
@@ -145,6 +145,15 @@ class WhisperCppTranscriber:
         self.timeout = timeout
         self.chunk_seconds = chunk_seconds
 
+    def load(self) -> None:
+        for path, label in ((self.cli_path, "whisper-cli"), (self.model_path, "Whisper model")):
+            if not path or not Path(path).is_file():
+                raise RuntimeError(f"{label} file not found: {path}")
+
+    def unload(self) -> None:
+        """No resources remain resident between whisper-cli subprocess calls."""
+        pass
+
     def resolve_dtw_preset(self) -> Optional[str]:
         """Resolve active DTW preset if enabled, matching either user config or model inference."""
         if not self.dtw_enabled:
@@ -156,18 +165,19 @@ class WhisperCppTranscriber:
             return preset
         return detect_dtw_preset_from_model(self.model_path)
 
-    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> list[Word]:
+    def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         audio, sample_rate = sf.read(audio_path, dtype="float32", always_2d=True)
         audio = audio[:, 0]
         duration = len(audio) / sample_rate
 
         resolved_dtw = self.resolve_dtw_preset()
         dtw_status_str = f"dtw={resolved_dtw}" if (self.dtw_enabled and resolved_dtw) else "dtw=off"
+        provenance = {"dtw": resolved_dtw if (self.dtw_enabled and resolved_dtw) else False}
 
         if duration <= self.chunk_seconds:
             words = self._transcribe_file(audio_path, vocabulary)
             log.info(f"[whisper.cpp] {len(words)} words from {Path(self.model_path).name} ({dtw_status_str})")
-            return words
+            return Transcription(words=words, provenance=provenance)
 
         cuts = chunk_bounds(audio, sample_rate, self.chunk_seconds, MIN_TAIL_SECONDS)
         log.info(f"[whisper.cpp] {duration / 60:.1f} min of audio -> {len(cuts)} chunks ({dtw_status_str})")
@@ -201,7 +211,7 @@ class WhisperCppTranscriber:
                 )
 
         log.info(f"[whisper.cpp] {len(words)} words from {Path(self.model_path).name} ({dtw_status_str})")
-        return words
+        return Transcription(words=words, provenance=provenance)
 
     def build_command(
         self,

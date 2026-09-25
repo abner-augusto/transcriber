@@ -3,6 +3,7 @@ import logging
 log = logging.getLogger(__name__)
 
 from .celery_app import celery_app
+from dataclasses import replace
 from .diarization import diarize_meeting
 from .shared import (
     MeetingNotFoundError,
@@ -10,7 +11,7 @@ from .shared import (
     update_progress,
     rebuild_speakers_and_segments,
 )
-from engines import make_aligner, make_diarizer, make_transcriber
+from engines import make_aligner, make_diarizer, make_transcriber, raw_transcription
 from presets import resolve_preset
 from services.audio_service import AudioService
 from services.speaker_id_service import SpeakerIdService
@@ -65,36 +66,27 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
 
             # Step 2: Transcription
             update_progress(db, job, meeting, 10, f"Transcribing with {preset['name']}...")
-            words = transcriber.transcribe(audio_path, vocabulary=meeting.vocabulary)
+            transcriber.load()
+            try:
+                transcription = transcriber.transcribe(audio_path, vocabulary=meeting.vocabulary)
+                words = transcription.words
 
-            # Optional Step 2.5: Higher-precision CTC Forced Alignment
-            if fa_enabled:
-                update_progress(db, job, meeting, 46, "Refining word timestamps (CTC alignment)...")
-                from engines import align_words
-                words = align_words(audio_path, words, config=fa_config)
+                # Optional Step 2.5: Higher-precision CTC Forced Alignment
+                if fa_enabled:
+                    update_progress(db, job, meeting, 46, "Refining word timestamps (CTC alignment)...")
+                    from engines import align_words
+                    words = align_words(audio_path, words, config=fa_config)
+                    transcription = replace(transcription, words=words)
 
-            raw_transcription_data = {
-                "engine": preset["engine"],
-                "preset": preset["id"],
-                "words": [w.to_dict() for w in words],
-            }
-            runtime_fingerprint = getattr(transcriber, "runtime_fingerprint", None)
-            if runtime_fingerprint:
-                raw_transcription_data["runtime"] = {
-                    "fingerprint": runtime_fingerprint,
-                    "diagnostics": getattr(transcriber, "runtime_diagnostics", {}),
-                }
-            if hasattr(transcriber, "resolve_dtw_preset"):
-                resolved_dtw = transcriber.resolve_dtw_preset()
-                raw_transcription_data["dtw"] = resolved_dtw if (getattr(transcriber, "dtw_enabled", False) and resolved_dtw) else False
-
-            meeting.raw_transcription = raw_transcription_data
-            db.commit()
-            update_progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
-
-            # Inter-stage cleanup: free transcriber and aligner VRAM before loading diarizer
-            if hasattr(transcriber, "unload"):
+                meeting.raw_transcription = raw_transcription(
+                    preset["engine"], preset["id"], transcription
+                )
+                db.commit()
+                update_progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
+            finally:
+                # Release Transcriber resources before loading the Diarizer.
                 transcriber.unload()
+
             if fa_enabled:
                 from engines.alignment import MMSCTCAligner
                 MMSCTCAligner.unload()
@@ -102,23 +94,22 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             release_gpu_memory()
 
             # Step 3: Diarization & VAD bounding
-            native = None
-            native_engine = None
-            if meeting.is_dual_track:
-                update_progress(db, job, meeting, 50, "Identifying speakers (dual-track)...")
-            elif getattr(transcriber, "has_native_diarization", False):
-                update_progress(db, job, meeting, 50, "Extracting native speaker diarization...")
-                native = transcriber.get_native_diarization()
-                native_engine = preset.get("engine", "vibevoice")
-            else:
-                update_progress(db, job, meeting, 50, "Identifying speakers (diarization)...")
+            def report_diarization_path(path: str) -> None:
+                step = {
+                    "dual_track": "Identifying speakers (dual-track)...",
+                    "native": "Extracting native speaker diarization...",
+                    "diarizer": "Identifying speakers (diarization)...",
+                }[path]
+                update_progress(db, job, meeting, 50, step)
+
             diarization = diarize_meeting(
                 meeting,
                 audio_path,
                 diarizer=diarizer,
                 vad_service=VadService(),
-                native=native,
-                native_engine=native_engine,
+                native=transcription.native,
+                native_engine=preset["engine"] if transcription.native is not None else None,
+                on_path=report_diarization_path,
             )
             meeting.raw_diarization = diarization.to_stored()
             db.commit()

@@ -120,7 +120,7 @@ def test_parakeet_puts_every_chunks_words_back_on_the_meetings_timeline(tmp_path
         lambda self, path: [Word(start=1.0, end=1.5, text=" olá", confidence=0.9)],
     )
 
-    words = ParakeetCppTranscriber(cli_path="x", model_path="m.gguf").transcribe(str(audio_path))
+    words = ParakeetCppTranscriber(cli_path="x", model_path="m.gguf").transcribe(str(audio_path)).words
 
     chunk_starts = [start for start, _ in chunk_bounds(audio, SAMPLE_RATE, 300, PARAKEET_MIN_TAIL_SECONDS)]
     assert [w.start for w in words] == [pytest.approx(start + 1.0) for start in chunk_starts]
@@ -155,7 +155,7 @@ def test_whisper_puts_every_chunks_words_back_on_the_meetings_timeline(tmp_path,
         lambda self, path, vocabulary=None: [Word(start=1.0, end=1.5, text=" olá", confidence=0.9)],
     )
 
-    words = WhisperCppTranscriber(cli_path="x", model_path="m.bin").transcribe(str(audio_path))
+    words = WhisperCppTranscriber(cli_path="x", model_path="m.bin").transcribe(str(audio_path)).words
 
     chunk_starts = [start for start, _ in chunk_bounds(audio, SAMPLE_RATE, 900, WHISPER_MIN_TAIL_SECONDS)]
     assert len(chunk_starts) > 1  # the fixture is long enough to actually need chunking
@@ -203,6 +203,42 @@ def test_faster_whisper_preset_creation():
     assert isinstance(transcriber, Transcriber)
     assert transcriber.language == "pt"
     assert transcriber.model_path == "large-v3-turbo"
+
+
+def test_faster_whisper_load_uses_the_selected_model_configuration(monkeypatch):
+    transcriber = make_transcriber({
+        "id": "faster-whisper-large-v3-turbo",
+        "engine": "faster-whisper",
+        "model_path": "large-v3-turbo",
+        "device": "cuda",
+        "compute_type": "float16",
+    })
+    loaded = []
+    monkeypatch.setattr(transcriber, "get_model", lambda *args: loaded.append(args))
+
+    transcriber.load()
+
+    assert loaded == [("large-v3-turbo", "cuda", "float16")]
+
+
+@pytest.mark.parametrize("engine,transcriber_type", [
+    ("parakeet.cpp", ParakeetCppTranscriber),
+    ("whisper.cpp", WhisperCppTranscriber),
+])
+def test_native_cli_transcriber_load_requires_existing_cli_and_model_files(
+    tmp_path, engine, transcriber_type
+):
+    cli = tmp_path / ("engine.exe" if engine == "parakeet.cpp" else "whisper-cli.exe")
+    model = tmp_path / ("model.gguf" if engine == "parakeet.cpp" else "model.bin")
+    cli.write_bytes(b"binary")
+    model.write_bytes(b"model")
+    transcriber = transcriber_type(cli_path=str(cli), model_path=str(model))
+
+    transcriber.load()
+
+    missing = transcriber_type(cli_path=str(tmp_path / "missing-cli"), model_path=str(model))
+    with pytest.raises(RuntimeError, match="file not found"):
+        missing.load()
 
 
 def test_faster_whisper_words_parsing():
@@ -396,8 +432,8 @@ def test_qwen3_asr_and_vibevoice_satisfy_transcriber_protocol():
 
     assert isinstance(qwen, Transcriber)
     assert isinstance(vibe, Transcriber)
-    assert getattr(vibe, "has_native_diarization", False) is True
-    assert getattr(qwen, "has_native_diarization", False) is False
+    assert callable(qwen.load) and callable(qwen.unload)
+    assert callable(vibe.load) and callable(vibe.unload)
 
 
 def test_make_transcriber_supports_qwen3_and_vibevoice():
@@ -700,7 +736,7 @@ def test_vibevoice_transcribes_at_checkpoint_rate_and_streaming_geometry(monkeyp
 
     monkeypatch.setattr(module, "load_audio_ffmpeg", fake_load)
 
-    words = transcriber.transcribe("meeting.mp3")
+    words = transcriber.transcribe("meeting.mp3").words
 
     assert [word.text for word in words] == [" uma", " palavra"]
     assert captured["sample_rate"] == 24000
@@ -781,7 +817,7 @@ def test_vibevoice_proportional_fallback_produces_join_ready_ordered_words(monke
     monkeypatch.setattr(module, "get_audio_duration", lambda _path: 3.0)
     monkeypatch.setattr(module, "load_audio_ffmpeg", lambda *_args, **_kwargs: np.zeros(48000, dtype=np.float32))
 
-    words = transcriber.transcribe("meeting.wav")
+    words = transcriber.transcribe("meeting.wav").words
 
     assert [word.text for word in words] == [" primeira", " segunda", " terceira"]
     assert all(word.start <= word.end for word in words)

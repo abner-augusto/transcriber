@@ -12,6 +12,7 @@
 
 ## Status
 
+- **Execution status**: IN PROGRESS
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED (touches every adapter)
@@ -151,9 +152,19 @@ returns nothing.
 - [ ] Stored `raw_transcription` snapshots unchanged
 - [ ] No probing of a Transcriber anywhere outside tests
 - [ ] Every adapter and fake implements `load`, `transcribe → Transcription`, `unload`
-- [ ] Protocol v1 tests (`tests/test_engine_runtime_protocol.py`) unchanged and passing
+- [ ] Protocol v1 serialization/validation assertions in
+  `tests/test_engine_runtime_protocol.py` remain unchanged and pass; isolated-adapter
+  behavior tests live separately in `tests/test_isolated_transcriber.py`
 - [ ] Smoke tiers run on the user's machine for parakeet.cpp and faster-whisper large-v3 (ADR-0007): `model_load` and `model_inference`
 - [ ] `plans/README.md` row and ticket 01 status updated
+
+## Outcome
+
+Implementation and ordinary backend verification are complete. The user-only
+`model_load` and `model_inference` smoke tiers for parakeet.cpp and
+faster-whisper large-v3 remain pending; the user must run them and record the
+results before this plan can be marked DONE. No local model smoke or private
+recording was run by the agent.
 
 ## Carried over from the PR #1 review
 

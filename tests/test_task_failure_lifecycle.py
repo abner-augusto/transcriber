@@ -8,8 +8,14 @@ from models.job import JobStatus, JobType
 
 
 class FailingTranscriber:
+    def load(self):
+        pass
+
     def transcribe(self, audio_path, vocabulary=None):
         raise RuntimeError("engine failed")
+
+    def unload(self):
+        pass
 
 
 def _database(tmp_path, monkeypatch):

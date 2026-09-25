@@ -17,8 +17,10 @@ def test_faster_whisper_unload():
     FasterWhisperTranscriber._models[("other_model", "auto", "auto")] = MagicMock()
     assert len(FasterWhisperTranscriber._models) == 2
 
-    # Unload specific model
-    FasterWhisperTranscriber.unload("test_model")
+    # An instance unloads only its model path; the class call retains the all-model API.
+    FasterWhisperTranscriber(
+        model_path="test_model", device="auto", compute_type="auto"
+    ).unload()
     assert ("test_model", "auto", "auto") not in FasterWhisperTranscriber._models
     assert len(FasterWhisperTranscriber._models) == 1
 
@@ -136,4 +138,3 @@ def test_meeting_job_finally_calls_unload_all_engines(tmp_path, monkeypatch):
             with meeting_job(m_id, j_id):
                 raise RuntimeError("Simulated pipeline failure")
         mock_unload.assert_called_once()
-
