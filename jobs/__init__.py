@@ -171,15 +171,18 @@ def relay_event(meeting_id: str, event: dict, *, session_factory=None, progress_
     db = factory()
     try:
         if event.get("type") == "progress":
-            job = (
-                db.query(Job)
-                .filter(Job.meeting_id == meeting_id)
-                .order_by(Job.created_at.desc())
-                .first()
-            )
-            if job is not None:
-                job.progress = event.get("progress", job.progress)
-                job.current_step = event.get("step", job.current_step)
+            # One conditional UPDATE, not read-modify-write: the child may have
+            # finished the Job since this event was queued, and a stale value
+            # must not overwrite what the child recorded.
+            values = {
+                column: event[key]
+                for key, column in (("progress", Job.progress), ("step", Job.current_step))
+                if key in event
+            }
+            if values:
+                db.query(Job).filter(
+                    Job.meeting_id == meeting_id, Job.status == JobStatus.RUNNING
+                ).update(values, synchronize_session=False)
                 db.commit()
     finally:
         db.close()

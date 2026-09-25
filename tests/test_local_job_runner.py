@@ -26,6 +26,12 @@ def _raising_body(meeting_id: str, job_id: str) -> None:
         raise RuntimeError("fake child failure")
 
 
+def _slow_successful_body(meeting_id: str, job_id: str) -> None:
+    with running(meeting_id, job_id) as (db, meeting, job):
+        progress(db, job, meeting, 25, "Fake stage")
+        time.sleep(1.5)
+
+
 def _crashing_body(_meeting_id: str, _job_id: str) -> None:
     os._exit(17)
 
@@ -228,6 +234,33 @@ def test_child_progress_is_persisted_and_published_by_parent(tmp_path, monkeypat
         final_progress = _wait_for_final_progress(sessions, job_id)
         assert final_progress.progress == 100
         assert final_progress.current_step == "Done!"
+    finally:
+        runner.stop()
+        engine.dispose()
+
+
+class _BrokenBus(InProcessBus):
+    """A progress transport that fails the way a locked database does."""
+
+    def publish(self, meeting_id: str, event: dict) -> None:
+        raise RuntimeError("database is locked")
+
+
+def test_failed_progress_relay_neither_abandons_the_child_nor_overlaps_the_next_job(
+    tmp_path, monkeypatch
+):
+    engine, sessions, _bus, runner = _setup(tmp_path, monkeypatch, timeout="slow_successful")
+    runner.progress_bus = _BrokenBus()
+    first_id = _add_job(sessions, "First", datetime(2026, 1, 1))[1]
+    second_id = _add_job(sessions, "Second", datetime(2026, 1, 2))[1]
+    try:
+        runner.start()
+        _wait_for_status(sessions, second_id, JobStatus.COMPLETED)
+        with sessions() as db:
+            first = db.get(Job, first_id)
+            second = db.get(Job, second_id)
+            assert first.status == JobStatus.COMPLETED
+            assert second.started_at >= first.completed_at
     finally:
         runner.stop()
         engine.dispose()

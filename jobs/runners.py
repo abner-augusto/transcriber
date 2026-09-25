@@ -132,6 +132,17 @@ class QueueProgressBus:
         yield  # pragma: no cover - makes this an async generator for the protocol
 
 
+def _stop_process(process) -> None:
+    """Terminate a Job child, and kill it if it ignores the request."""
+    if not process.is_alive():
+        return
+    process.terminate()
+    process.join(5)
+    if process.is_alive():
+        process.kill()
+        process.join()
+
+
 def _import_handler(path: str) -> Callable[[str, str], object]:
     module_name, separator, attribute = path.rpartition(".")
     if not separator:
@@ -195,30 +206,10 @@ class LocalJobRunner:
             process = self._active_process
             job_id = self._active_job_id
         if process is not None and process.is_alive():
-            process.terminate()
-            process.join(5)
-            if process.is_alive():
-                process.kill()
-                process.join()
+            _stop_process(process)
             if job_id:
                 self._fail_job(job_id, "Job interrupted by application shutdown.")
         self._thread = None
-
-    def cancel(self, job_id: str) -> bool:
-        """Stop the active child for the future Cancel Job route (ticket 09)."""
-        with self._active_lock:
-            if self._active_job_id != job_id or self._active_process is None:
-                return False
-            process = self._active_process
-        if process.is_alive():
-            process.terminate()
-            process.join(5)
-            if process.is_alive():
-                process.kill()
-                process.join()
-        self._fail_job(job_id, "Job cancelled.")
-        self._wake.set()
-        return True
 
     def _sessions(self):
         if self.session_factory is not None:
@@ -306,11 +297,7 @@ class LocalJobRunner:
         try:
             while process.is_alive():
                 if self._stop.is_set():
-                    process.terminate()
-                    process.join(5)
-                    if process.is_alive():
-                        process.kill()
-                        process.join()
+                    _stop_process(process)
                     self._fail_job(job_id, "Job interrupted by application shutdown.")
                     break
 
@@ -324,11 +311,7 @@ class LocalJobRunner:
 
                 if now >= deadline:
                     timed_out = True
-                    process.terminate()
-                    process.join(5)
-                    if process.is_alive():
-                        process.kill()
-                        process.join()
+                    _stop_process(process)
                     limit_minutes = max(1, round(timeout_seconds / 60))
                     self._fail_job(
                         job_id,
@@ -348,6 +331,9 @@ class LocalJobRunner:
             elif not self._stop.is_set() and not timed_out:
                 self._fail_if_not_terminal(job_id)
         finally:
+            # Never leave a child on the GPU once this method stops watching it:
+            # the loop would otherwise start the next Job next to it.
+            _stop_process(process)
             with self._active_lock:
                 self._active_process = None
                 self._active_job_id = None
@@ -370,10 +356,15 @@ class LocalJobRunner:
             self._relay_event(meeting_id, event)
 
     def _relay_event(self, meeting_id: str, event: dict) -> None:
+        """Relay one progress event. Progress is advisory: a failed relay must
+        not stop the Job whose outcome the child records itself."""
         from jobs import relay_event
 
-        relay_event(meeting_id, event, session_factory=self.session_factory,
-                    progress_bus=self.progress_bus)
+        try:
+            relay_event(meeting_id, event, session_factory=self.session_factory,
+                        progress_bus=self.progress_bus)
+        except Exception:
+            log.exception("Could not relay progress for Meeting %s", meeting_id)
 
     def _fail_job(self, job_id: str, error: str) -> None:
         from datetime import datetime
@@ -393,11 +384,14 @@ class LocalJobRunner:
             if meeting is not None:
                 meeting.status = MeetingStatus.FAILED
             db.commit()
-            if self.progress_bus is not None:
-                self.progress_bus.publish(meeting_id=job.meeting_id,
-                                          event={"type": "error", "error": error})
+            meeting_id = job.meeting_id
         finally:
             db.close()
+        if self.progress_bus is not None:
+            try:
+                self.progress_bus.publish(meeting_id, {"type": "error", "error": error})
+            except Exception:
+                log.exception("Could not publish the failure of Job %s", job_id)
 
     def _fail_if_not_terminal(self, job_id: str) -> None:
         from models import Job
