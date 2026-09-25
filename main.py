@@ -4,7 +4,6 @@ from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -39,11 +38,8 @@ app.include_router(analytics.router)
 app.include_router(preferences.router)
 
 _frontend_dist = Path(__file__).parent / "frontend" / "dist"
-app.mount(
-    "/assets",
-    StaticFiles(directory=_frontend_dist / "assets", check_dir=False),
-    name="frontend-assets",
-)
+# Paths under these prefixes name a route or a file; they never fall back to the UI.
+_NOT_CLIENT_ROUTES = ("api/", "assets/")
 
 
 @app.on_event("startup")
@@ -163,5 +159,7 @@ def frontend(path: str):
         raise HTTPException(404, "Not found")
     if requested.is_file():
         return FileResponse(requested)
+    if f"{path}/".startswith(_NOT_CLIENT_ROUTES):
+        raise HTTPException(404, "Not found")
     return FileResponse(_frontend_dist / "index.html")
 
