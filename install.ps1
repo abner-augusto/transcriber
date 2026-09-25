@@ -39,9 +39,9 @@ if (-not (Test-Path $parakeetBin)) {
     }
     Push-Location $parakeetDir
     if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-        cmake -B build -DPARAKEET_GGML_CUDA=ON
+        cmake -B build -G "Visual Studio 17 2022" -A x64 -DPARAKEET_GGML_CUDA=ON
     } else {
-        cmake -B build
+        cmake -B build -G "Visual Studio 17 2022" -A x64
     }
     Assert-NativeSuccess "parakeet.cpp configuration"
     cmake --build build --config Release --parallel 8
