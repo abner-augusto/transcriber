@@ -37,6 +37,7 @@ def test_isolated_adapter_returns_native_words_and_runtime_provenance(monkeypatc
 
     assert transcription.words[0].text == " Olá"
     assert transcription.native.turns[0].speaker == "SPEAKER_00"
+    assert transcription.native.engine == "vibevoice"
     assert transcription.provenance == {
         "runtime": {
             "fingerprint": "abc",

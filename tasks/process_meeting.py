@@ -83,7 +83,6 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 diarizer=diarizer,
                 vad_service=VadService(),
                 native=transcription.native,
-                native_engine=preset["engine"] if transcription.native is not None else None,
                 on_path=report_diarization_path,
             )
             meeting.raw_diarization = diarization.to_stored()

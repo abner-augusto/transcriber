@@ -175,4 +175,5 @@ NATIVE = DiarizationResult(
         Turn(start=0.0, end=1.0, speaker="SPEAKER_0"),
         Turn(start=1.0, end=5.0, speaker="SPEAKER_1"),
     ],
+    engine="vibevoice",
 )

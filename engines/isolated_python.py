@@ -32,7 +32,7 @@ class IsolatedPythonTranscriber:
     def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         response = self._request(operation="transcribe", audio_path=audio_path, vocabulary=vocabulary)
         native = (
-            DiarizationResult(turns=list(response.native_turns))
+            DiarizationResult(turns=list(response.native_turns), engine=self.engine_id)
             if response.native_turns is not None
             else None
         )

@@ -79,11 +79,14 @@ class DiarizationResult:
     ``exclusive_turns`` contains single-speaker exclusive Turns when available
     (e.g., from Community-1), used for unambiguous Word/Segment attribution.
     ``overlaps`` contains computed or model-provided overlapping speech regions.
+    ``engine`` names the Engine that produced the Turns; a Transcriber's native
+    Turns must carry it so the Meeting records where its Turns came from.
     """
 
     turns: list[Turn]
     exclusive_turns: list[Turn] | None = None
     overlaps: list[dict] | None = None
+    engine: str | None = None
 
     def __iter__(self):
         return iter(self.turns)

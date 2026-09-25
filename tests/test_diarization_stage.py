@@ -208,12 +208,14 @@ def test_single_track_calls_the_diarizer_with_the_speaker_bounds():
 
 def test_native_turns_are_bounded_without_calling_the_diarizer():
     diarizer = FakeDiarizer([])
-    native = DiarizationResult(turns=[Turn(start=0.0, end=1.0, speaker="SPEAKER_0")])
+    native = DiarizationResult(
+        turns=[Turn(start=0.0, end=1.0, speaker="SPEAKER_0")], engine="vibevoice"
+    )
     reported = []
 
     diarization = diarize_meeting(
         _Meeting(), "audio.wav", diarizer=diarizer, vad_service=_Vad(),
-        native=native, native_engine="vibevoice", on_path=reported.append,
+        native=native, on_path=reported.append,
     )
 
     assert diarizer.calls == []
