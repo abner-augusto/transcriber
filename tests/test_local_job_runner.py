@@ -10,15 +10,15 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, configure_sqlite_engine
-from jobs import progress, running
+from jobs import running
 from jobs.runners import InProcessBus, LocalJobRunner
 from models import Job, Meeting, MeetingStatus
 from models.job import JobStatus, JobType
 
 
 def _successful_body(meeting_id: str, job_id: str) -> None:
-    with running(meeting_id, job_id) as (db, meeting, job):
-        progress(db, job, meeting, 25, "Fake stage")
+    with running(meeting_id, job_id) as current:
+        current.progress(25, "Fake stage")
 
 
 def _raising_body(meeting_id: str, job_id: str) -> None:
@@ -27,8 +27,8 @@ def _raising_body(meeting_id: str, job_id: str) -> None:
 
 
 def _slow_successful_body(meeting_id: str, job_id: str) -> None:
-    with running(meeting_id, job_id) as (db, meeting, job):
-        progress(db, job, meeting, 25, "Fake stage")
+    with running(meeting_id, job_id) as current:
+        current.progress(25, "Fake stage")
         time.sleep(1.5)
 
 

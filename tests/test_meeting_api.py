@@ -243,18 +243,6 @@ def test_websocket_forwards_progress_event_in_existing_shape(db_session):
         assert websocket.receive_json() == event
 
 
-def test_health_checks_progress_adapter(monkeypatch, tmp_path):
-    import main
-
-    monkeypatch.setattr(main._settings, "storage_path", str(tmp_path))
-    calls = []
-    monkeypatch.setattr(jobs, "check_progress_bus", lambda: calls.append(True))
-
-    response = main.health()
-
-    assert response["progress_bus"] == "ok"
-    assert calls == [True]
-
 def test_segment_edits_learn_and_increment_misheard_form(db_session):
     meeting = Meeting(title="Learning", status=MeetingStatus.COMPLETED)
     entry = VocabularyEntry(term="Garrah")

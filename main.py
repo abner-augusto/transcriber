@@ -95,14 +95,6 @@ def health():
     except Exception as e:
         checks["database"] = f"error: {e}"
 
-    # Job progress transport
-    try:
-        from jobs import check_progress_bus
-        check_progress_bus()
-        checks["progress_bus"] = "ok"
-    except Exception as e:
-        checks["progress_bus"] = f"error: {e}"
-
     # Whisper CLI
     whisper_path = Path(_settings.whisper_cli_path)
     checks["whisper_cli"] = "ok" if whisper_path.exists() else f"missing: {whisper_path}"

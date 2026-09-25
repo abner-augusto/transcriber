@@ -22,7 +22,6 @@ class JobRunner(Protocol):
 class ProgressBus(Protocol):
     def publish(self, meeting_id: str, event: dict) -> None: ...
     def subscribe(self, meeting_id: str) -> AsyncIterator[dict]: ...
-    def check(self) -> None: ...
 
 
 TASK_HANDLERS = {
@@ -44,26 +43,13 @@ class InlineJobRunner:
 
     def submit(self, job: Job) -> None:
         self.submitted.append((job.meeting_id, job.id, job.job_type))
-        handler = self._handlers.get(job.job_type) if self._handlers is not None else self._task_body(job.job_type)
+        handler = (
+            self._handlers.get(job.job_type) if self._handlers is not None
+            else _import_handler(TASK_HANDLERS[job.job_type])
+        )
         if handler is not None:
             handler(job.meeting_id, job.id)
         return None
-
-    @staticmethod
-    def _task_body(job_type: JobType) -> Callable[[str, str], object]:
-        if job_type == JobType.PROCESS_MEETING:
-            from tasks.process_meeting import process_meeting_task
-            return process_meeting_task
-        from tasks.reprocess_task import (
-            reapply_vocabulary_task,
-            rediarize_task,
-            reidentify_task,
-        )
-        return {
-            JobType.REDIARIZE: rediarize_task,
-            JobType.REIDENTIFY: reidentify_task,
-            JobType.REAPPLY_VOCABULARY: reapply_vocabulary_task,
-        }[job_type]
 
 
 class InProcessBus:
@@ -81,9 +67,6 @@ class InProcessBus:
                 loop.call_soon_threadsafe(queue.put_nowait, dict(event))
             except RuntimeError:
                 self._remove(meeting_id, loop, queue)
-
-    def check(self) -> None:
-        return None
 
     async def subscribe(self, meeting_id: str) -> AsyncIterator[dict]:
         import asyncio
@@ -123,9 +106,6 @@ class QueueProgressBus:
 
     def publish(self, meeting_id: str, event: dict) -> None:
         self._messages.put((meeting_id, dict(event)))
-
-    def check(self) -> None:
-        return None
 
     async def subscribe(self, meeting_id: str) -> AsyncIterator[dict]:
         raise RuntimeError("A Job child cannot subscribe to WebSocket progress")
@@ -212,10 +192,8 @@ class LocalJobRunner:
         self._thread = None
 
     def _sessions(self):
-        if self.session_factory is not None:
-            return self.session_factory
-        from database import SessionLocal
-        return SessionLocal
+        from jobs import sessions
+        return sessions(self.session_factory)
 
     def _run_loop(self) -> None:
         while not self._stop.is_set():
@@ -329,7 +307,7 @@ class LocalJobRunner:
                     f"Job child process exited with code {process.exitcode}.",
                 )
             elif not self._stop.is_set() and not timed_out:
-                self._fail_if_not_terminal(job_id)
+                self._fail_job(job_id, "Job child process exited without completing the Job.")
         finally:
             # Never leave a child on the GPU once this method stops watching it:
             # the loop would otherwise start the next Job next to it.
@@ -367,47 +345,9 @@ class LocalJobRunner:
             log.exception("Could not relay progress for Meeting %s", meeting_id)
 
     def _fail_job(self, job_id: str, error: str) -> None:
-        from datetime import datetime
-        from jobs import Job, Meeting
-        from models import MeetingStatus
-        from models.job import JobStatus
+        from jobs import fail
 
-        db = self._sessions()()
-        try:
-            job = db.query(Job).filter(Job.id == job_id).first()
-            if job is None or job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
-                return
-            job.status = JobStatus.FAILED
-            job.error = error
-            job.completed_at = datetime.utcnow()
-            meeting = db.query(Meeting).filter(Meeting.id == job.meeting_id).first()
-            if meeting is not None:
-                meeting.status = MeetingStatus.FAILED
-            db.commit()
-            meeting_id = job.meeting_id
-        finally:
-            db.close()
-        if self.progress_bus is not None:
-            try:
-                self.progress_bus.publish(meeting_id, {"type": "error", "error": error})
-            except Exception:
-                log.exception("Could not publish the failure of Job %s", job_id)
-
-    def _fail_if_not_terminal(self, job_id: str) -> None:
-        from models import Job
-        from models.job import JobStatus
-
-        needs_failure = False
-        db = self._sessions()()
-        try:
-            job = db.query(Job).filter(Job.id == job_id).first()
-            needs_failure = job is not None and job.status not in (
-                JobStatus.COMPLETED, JobStatus.FAILED
-            )
-        finally:
-            db.close()
-        if needs_failure:
-            self._fail_job(job_id, "Job child process exited without completing the Job.")
+        fail(job_id, error, session_factory=self.session_factory, progress_bus=self.progress_bus)
 
 
 def _execute_job_in_child(handler_path: str, meeting_id: str, job_id: str, messages: Queue) -> None:

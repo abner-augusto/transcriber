@@ -4,11 +4,7 @@ log = logging.getLogger(__name__)
 
 from dataclasses import replace
 from .diarization import diarize_meeting
-from jobs import (
-    MeetingNotFoundError,
-    running,
-    progress,
-)
+from jobs import MeetingNotFoundError, running
 from meeting_store import rebuild_speakers_and_segments
 from engines import make_aligner, make_diarizer, make_transcriber, raw_transcription
 from services.audio_service import AudioService
@@ -16,17 +12,17 @@ from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
 from transcript.segments import derive_segments
 from .vocabulary import vocabulary_correction_for_meeting
-from run_config import RunConfig
 
 
 def process_meeting_task(meeting_id: str, job_id: str):
     """Main pipeline: audio extraction -> transcription -> diarization -> segments -> speaker naming."""
     try:
-        with running(meeting_id, job_id) as (db, meeting, job):
+        with running(meeting_id, job_id) as current:
+            db, meeting = current.db, current.meeting
             audio_service = AudioService()
             speaker_id_service = SpeakerIdService()
 
-            run_config = RunConfig.model_validate(job.run_config)
+            run_config = current.run_config
             preset = run_config.preset
             transcriber = make_transcriber(run_config)
             from preferences import hf_token
@@ -38,7 +34,7 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 make_aligner(run_config)
 
             # Step 1: Extract audio
-            progress(db, job, meeting, 2, "Extracting audio...")
+            current.progress(2, "Extracting audio...")
             if meeting.is_dual_track:
                 audio_path = audio_service.extract_dual_audio(
                     meeting.mic_audio_filepath, meeting.system_audio_filepath, meeting.id
@@ -51,17 +47,17 @@ def process_meeting_task(meeting_id: str, job_id: str):
             meeting.duration = duration
             meeting.audio_filepath = audio_path
             db.commit()
-            progress(db, job, meeting, 5, "Audio extracted")
+            current.progress(5, "Audio extracted")
 
             # Step 2: Transcription
-            progress(db, job, meeting, 10, f"Transcribing with {preset['name']}...")
+            current.progress(10, f"Transcribing with {preset['name']}...")
             transcriber.load()
             transcription = transcriber.transcribe(audio_path, vocabulary=meeting.vocabulary)
             words = transcription.words
 
             # Optional Step 2.5: Higher-precision CTC Forced Alignment
             if fa_enabled:
-                progress(db, job, meeting, 46, "Refining word timestamps (CTC alignment)...")
+                current.progress(46, "Refining word timestamps (CTC alignment)...")
                 from engines import align_words
                 words = align_words(audio_path, words, run_config=run_config)
                 transcription = replace(transcription, words=words)
@@ -70,7 +66,7 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 preset["engine"], preset["id"], transcription
             )
             db.commit()
-            progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
+            current.progress(48 if fa_enabled else 45, "Transcription complete")
 
             # Step 3: Diarization & VAD bounding
             def report_diarization_path(path: str) -> None:
@@ -79,7 +75,7 @@ def process_meeting_task(meeting_id: str, job_id: str):
                     "native": "Extracting native speaker diarization...",
                     "diarizer": "Identifying speakers (diarization)...",
                 }[path]
-                progress(db, job, meeting, 50, step)
+                current.progress(50, step)
 
             diarization = diarize_meeting(
                 meeting,
@@ -92,20 +88,20 @@ def process_meeting_task(meeting_id: str, job_id: str):
             )
             meeting.raw_diarization = diarization.to_stored()
             db.commit()
-            progress(db, job, meeting, 70, "Diarization complete")
+            current.progress(70, "Diarization complete")
 
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
-            progress(db, job, meeting, 75, "Synchronizing speakers with text...")
+            current.progress(75, "Synchronizing speakers with text...")
             correction = vocabulary_correction_for_meeting(
                 db, meeting, enabled=run_config.vocabulary_correction.enabled
             )
             aligned = derive_segments(
                 words, diarization, switch_penalty=switch_penalty, correction=correction
             )
-            progress(db, job, meeting, 80, "Synchronization complete")
+            current.progress(80, "Synchronization complete")
 
             # Step 5: Speaker naming (Participant N, overridden by voice profile matches)
-            progress(db, job, meeting, 85, "Matching against saved voice profiles...")
+            current.progress(85, "Matching against saved voice profiles...")
             speaker_info = speaker_id_service.name_speakers(
                 db,
                 diarization.speaker_labels,
@@ -115,7 +111,7 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 speaker_profiles_enabled=run_config.speaker_profiles_enabled,
             )
             # Step 6: Save results (preserving edits)
-            progress(db, job, meeting, 90, "Saving results...")
+            current.progress(90, "Saving results...")
             rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service)
 
         return {"status": "completed", "meeting_id": meeting_id}

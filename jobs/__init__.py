@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from datetime import datetime
 import logging
+from typing import NamedTuple
 
 from sqlalchemy import update
 
@@ -14,7 +15,6 @@ log = logging.getLogger(__name__)
 _runner = None
 _progress_bus = None
 _session_factory = None
-_soft_time_limit_errors: tuple[type[BaseException], ...] = ()
 _UNSET = object()
 
 
@@ -26,20 +26,16 @@ class JobAlreadyRunning(Exception):
     """The atomic Meeting claim failed because another Job is processing it."""
 
 
-def configure(
-    *, runner=_UNSET, progress_bus=_UNSET, session_factory=_UNSET,
-    soft_time_limit_errors=_UNSET,
-) -> dict:
+def configure(*, runner=_UNSET, progress_bus=_UNSET, session_factory=_UNSET) -> dict:
     """Select adapters once at startup (or per isolated test fixture).
 
     Return the previous configuration so a test fixture can restore it afterward.
     """
-    global _runner, _progress_bus, _session_factory, _soft_time_limit_errors
+    global _runner, _progress_bus, _session_factory
     previous = {
         "runner": _runner,
         "progress_bus": _progress_bus,
         "session_factory": _session_factory,
-        "soft_time_limit_errors": _soft_time_limit_errors,
     }
     if runner is not _UNSET:
         _runner = runner
@@ -47,12 +43,13 @@ def configure(
         _progress_bus = progress_bus
     if session_factory is not _UNSET:
         _session_factory = session_factory
-    if soft_time_limit_errors is not _UNSET:
-        _soft_time_limit_errors = tuple(soft_time_limit_errors)
     return previous
 
 
-def _sessions():
+def sessions(session_factory=None):
+    """The session factory to use: the given one, the configured one, or the app's."""
+    if session_factory is not None:
+        return session_factory
     if _session_factory is not None:
         return _session_factory
     from database import SessionLocal
@@ -97,10 +94,26 @@ def enqueue(db, meeting_id: str, kind: JobType) -> Job:
     return job
 
 
+class RunningJob(NamedTuple):
+    """What a task body works with while ``running`` owns its Job's lifecycle."""
+
+    db: object
+    meeting: Meeting
+    job: Job
+
+    @property
+    def run_config(self):
+        from run_config import RunConfig
+        return RunConfig.model_validate(self.job.run_config)
+
+    def progress(self, percent: float, step: str) -> None:
+        _progress(self.db, self.job, self.meeting, percent, step)
+
+
 @contextmanager
 def running(meeting_id: str, job_id: str):
     """Open a session and own the RUNNING → COMPLETED/FAILED lifecycle."""
-    db = _sessions()()
+    db = sessions()()
     try:
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
         job = db.query(Job).filter(Job.id == job_id).first()
@@ -114,7 +127,7 @@ def running(meeting_id: str, job_id: str):
         meeting.status = MeetingStatus.PROCESSING
         db.commit()
 
-        yield db, meeting, job
+        yield RunningJob(db, meeting, job)
 
         meeting.status = MeetingStatus.COMPLETED
         job.status = JobStatus.COMPLETED
@@ -122,36 +135,48 @@ def running(meeting_id: str, job_id: str):
         job.current_step = "Done!"
         job.completed_at = datetime.utcnow()
         db.commit()
-        progress(db, job, meeting, 100, "Done!")
+        _progress(db, job, meeting, 100, "Done!")
     except Exception as exc:
         db.rollback()
-        if _soft_time_limit_errors and isinstance(exc, _soft_time_limit_errors):
-            error = "Task exceeded time limit (55 minutes). Try a shorter recording."
-        else:
-            error = str(exc)
-        _fail_job(db, meeting_id, job_id, error)
+        db.close()
+        fail(job_id, str(exc))
         raise
     finally:
         db.close()
 
 
-def _fail_job(db, meeting_id: str, job_id: str, error_msg: str) -> None:
-    job = db.query(Job).filter(Job.id == job_id).first()
-    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
-    if job:
-        job.status = JobStatus.FAILED
-        job.error = error_msg
-        job.completed_at = datetime.utcnow()
-    if meeting:
-        meeting.status = MeetingStatus.FAILED
-    db.commit()
+def fail(job_id: str, error: str, *, session_factory=None, progress_bus=None) -> bool:
+    """Fail a Job that has not finished, and its Meeting; tell subscribers.
+
+    Returns False, changing nothing, when the Job is missing or already finished.
+    """
+    db = sessions(session_factory)()
     try:
-        _progress_adapter().publish(meeting_id, {"type": "error", "error": error_msg})
+        job = db.get(Job, job_id)
+        if job is None or job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+            return False
+        _mark_failed(db, job, error)
+        meeting_id = job.meeting_id
+        db.commit()
+    finally:
+        db.close()
+    try:
+        (progress_bus or _progress_adapter()).publish(meeting_id, {"type": "error", "error": error})
     except Exception:
-        pass
+        log.exception("Could not publish the failure of Job %s", job_id)
+    return True
 
 
-def progress(db, job: Job, meeting: Meeting, percent: float, step: str) -> None:
+def _mark_failed(db, job: Job, error: str) -> None:
+    job.status = JobStatus.FAILED
+    job.error = error
+    job.completed_at = datetime.utcnow()
+    meeting = db.get(Meeting, job.meeting_id)
+    if meeting is not None and meeting.status == MeetingStatus.PROCESSING:
+        meeting.status = MeetingStatus.FAILED
+
+
+def _progress(db, job: Job, meeting: Meeting, percent: float, step: str) -> None:
     adapter = _progress_adapter()
     if not getattr(adapter, "persists_progress_in_parent", False):
         job.progress = percent
@@ -167,8 +192,7 @@ def progress(db, job: Job, meeting: Meeting, percent: float, step: str) -> None:
 
 def relay_event(meeting_id: str, event: dict, *, session_factory=None, progress_bus=None) -> None:
     """Persist child progress in the parent, then fan it out to subscribers."""
-    factory = session_factory or _sessions()
-    db = factory()
+    db = sessions(session_factory)()
     try:
         if event.get("type") == "progress":
             # One conditional UPDATE, not read-modify-write: the child may have
@@ -189,13 +213,6 @@ def relay_event(meeting_id: str, event: dict, *, session_factory=None, progress_
     (progress_bus or _progress_adapter()).publish(meeting_id, event)
 
 
-def check_progress_bus() -> None:
-    """Check the configured progress transport, if it exposes a health check."""
-    check = getattr(_progress_adapter(), "check", None)
-    if check is not None:
-        check()
-
-
 async def subscribe(meeting_id: str):
     async for event in _progress_adapter().subscribe(meeting_id):
         yield event
@@ -203,16 +220,11 @@ async def subscribe(meeting_id: str):
 
 def recover() -> None:
     """Fail RUNNING Jobs left behind when the application restarts."""
-    db = _sessions()()
+    db = sessions()()
     try:
         stale_jobs = db.query(Job).filter(Job.status == JobStatus.RUNNING).all()
         for job in stale_jobs:
-            job.status = JobStatus.FAILED
-            job.error = "Job interrupted by worker restart. Please retry."
-            job.completed_at = datetime.utcnow()
-            meeting = db.query(Meeting).filter(Meeting.id == job.meeting_id).first()
-            if meeting and meeting.status == MeetingStatus.PROCESSING:
-                meeting.status = MeetingStatus.FAILED
+            _mark_failed(db, job, "Job interrupted by an application restart. Please retry.")
         if stale_jobs:
             db.commit()
             log.info("Recovered %d stale Job(s)", len(stale_jobs))
