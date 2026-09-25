@@ -52,6 +52,7 @@
 ## Done criteria
 
 - [ ] Clean Windows install with Docker Desktop stopped or absent, verified on a fresh checkout
+- [ ] Clean Linux install from a fresh checkout (Step 2; not yet run anywhere)
 - [x] One FastAPI process, one port, one start command; Jobs run in their planned child process
 - [x] Celery and Redis packages/adapters are removed; PostgreSQL is an explicit migration extra only
 - [x] ADR written
