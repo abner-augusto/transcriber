@@ -18,6 +18,11 @@ MIN_SPEAKER_SWITCH_PENALTY = 0.0
 MAX_SPEAKER_SWITCH_PENALTY = 2.0
 
 
+# Where releases before plan 016 kept Preferences: the repository root, which is
+# this module's directory, whatever the working directory of the process.
+LEGACY_PREFERENCES_PATH = Path(__file__).resolve().parent / "preferences.json"
+
+
 class PreferenceMigrationError(RuntimeError):
     """Migration stopped without changing legacy files or writing Preferences."""
 
@@ -85,7 +90,7 @@ def _preference_path(storage_dir: Path | None = None) -> Path:
 
 
 def _legacy_path(legacy_preferences_path: Path | None = None) -> Path:
-    return Path(legacy_preferences_path) if legacy_preferences_path is not None else Path.cwd() / "preferences.json"
+    return Path(legacy_preferences_path) if legacy_preferences_path is not None else LEGACY_PREFERENCES_PATH
 
 
 def _migrate_if_needed(
@@ -94,42 +99,34 @@ def _migrate_if_needed(
     legacy_preferences_path: Path,
     storage_dir: Path,
 ) -> None:
+    """Merge the legacy files into ``destination``, install it, then archive them.
+
+    The canonical file is installed before any legacy file is renamed, so an
+    interruption at any point leaves either the untouched legacy files or a
+    complete canonical file. Once installed, the legacy files are never read
+    again, even if the canonical file is later deleted to reset Preferences.
+    """
     if destination.exists():
         return
 
     legacy_settings = storage_dir / "settings.json"
-    entries = []
-    for source in (legacy_preferences_path, legacy_settings):
-        backup = source.with_name(source.name + ".migrated")
-        if source.exists() and backup.exists():
+    sources = [source for source in (legacy_preferences_path, legacy_settings) if source.exists()]
+    for source in sources:
+        if _archive_path(source).exists():
             raise PreferenceMigrationError("Both a legacy source and its .migrated archive exist")
-        if source.exists():
-            entries.append((source, backup, False))
-        elif backup.exists():
-            # Recover a process interruption that happened after archival but
-            # before the canonical file was installed.
-            entries.append((backup, backup, True))
 
     data: dict[str, Any] = {}
     try:
-        root_entry = next((entry for entry in entries if entry[0] in {
-            legacy_preferences_path,
-            legacy_preferences_path.with_name(legacy_preferences_path.name + ".migrated"),
-        }), None)
-        if root_entry:
-            old = json.loads(root_entry[0].read_text(encoding="utf-8"))
+        if legacy_preferences_path.exists():
+            old = json.loads(legacy_preferences_path.read_text(encoding="utf-8"))
             if not isinstance(old, dict):
                 raise PreferenceMigrationError("Legacy preferences.json must contain an object")
             # This field belongs to the retired LLM feature. It remains only in
             # the byte-for-byte .migrated archive and is never active or logged.
             old.pop("llm_api_key", None)
             data.update(old)
-        settings_entry = next((entry for entry in entries if entry[0] in {
-            legacy_settings,
-            legacy_settings.with_name(legacy_settings.name + ".migrated"),
-        }), None)
-        if settings_entry:
-            old_settings = json.loads(settings_entry[0].read_text(encoding="utf-8"))
+        if legacy_settings.exists():
+            old_settings = json.loads(legacy_settings.read_text(encoding="utf-8"))
             if not isinstance(old_settings, dict):
                 raise PreferenceMigrationError("Legacy settings.json must contain an object")
             unknown = set(old_settings) - {"default_preset"}
@@ -142,8 +139,38 @@ def _migrate_if_needed(
     except (json.JSONDecodeError, OSError) as exc:
         raise PreferenceMigrationError(f"Could not safely read legacy Preferences: {exc}") from exc
 
+    parsed = _validate_legacy(data)
+
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f"{destination.name}.{uuid4().hex}.tmp")
     try:
-        parsed = Preferences.model_validate(data)
+        temporary.write_text(
+            json.dumps(parsed.model_dump(mode="json", exclude_none=True), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        temporary.replace(destination)
+    except OSError as exc:
+        temporary.unlink(missing_ok=True)
+        raise PreferenceMigrationError(
+            "Could not write Preferences; the legacy files were left untouched"
+        ) from exc
+
+    for source in sources:
+        try:
+            source.replace(_archive_path(source))
+        except OSError:
+            log.warning("Could not archive legacy Preferences %s; it is no longer read", source)
+    if sources:
+        log.info("Migrated legacy Preferences from %s", ", ".join(str(source) for source in sources))
+
+
+def _archive_path(source: Path) -> Path:
+    return source.with_name(source.name + ".migrated")
+
+
+def _validate_legacy(data: dict[str, Any]) -> Preferences:
+    try:
+        return Preferences.model_validate(data)
     except ValidationError as exc:
         # A bound violation can be repaired by dropping just that value. Any other
         # validation error is a STOP: preserve the sources for user review.
@@ -165,45 +192,11 @@ def _migrate_if_needed(
                 parent.pop(path[-1], None)
             log.warning("Dropped out-of-bounds legacy Preference field %s", ".".join(map(str, path)))
         try:
-            parsed = Preferences.model_validate(repaired)
+            return Preferences.model_validate(repaired)
         except ValidationError as retry_error:
             raise PreferenceMigrationError(
                 "Legacy Preferences could not be validated without losing a user value"
             ) from retry_error
-
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f"{destination.name}.{uuid4().hex}.tmp")
-
-    archived = []
-    try:
-        temporary.write_text(
-            json.dumps(parsed.model_dump(mode="json", exclude_none=True), indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        for source, backup, already_archived in entries:
-            if not already_archived:
-                source.replace(backup)
-                archived.append((source, backup))
-        temporary.replace(destination)
-    except OSError as exc:
-        # Roll back successful source renames before reporting failure. If a
-        # rollback itself fails, the .migrated file remains a recovery source
-        # for the next load because the canonical destination was not installed.
-        for source, backup in reversed(archived):
-            try:
-                if backup.exists() and not source.exists():
-                    backup.replace(source)
-            except OSError:
-                log.error("Could not restore a legacy Preferences archive; it remains recoverable")
-        temporary.unlink(missing_ok=True)
-        # The destination was absent on entry, so any file at this point came
-        # from this failed attempt and must not cause a later load to skip recovery.
-        destination.unlink(missing_ok=True)
-        raise PreferenceMigrationError(
-            "Could not complete Preferences migration; legacy data was preserved for retry"
-        ) from exc
-    if entries:
-        log.info("Migrated legacy Preferences from %s", ", ".join(str(source) for source, _, _ in entries))
 
 
 def load(

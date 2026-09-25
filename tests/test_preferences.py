@@ -114,42 +114,40 @@ def test_migration_archives_retired_llm_key_without_activating_or_disclosing_it(
     assert "test-secret-value" not in caplog.text
 
 
-def test_source_rename_failure_rolls_back_and_a_later_load_completes(tmp_path, monkeypatch):
+def test_archive_rename_failure_keeps_the_migrated_preferences(tmp_path, monkeypatch):
     storage = tmp_path / "storage"
     storage.mkdir()
     legacy = tmp_path / "preferences.json"
     legacy_bytes = b'{ "default_vocabulary": "kept" }\n'
     settings = storage / "settings.json"
-    settings_bytes = b'{ "default_preset": "preset-a" }\n'
+    settings.write_bytes(b'{ "default_preset": "preset-a" }\n')
     legacy.write_bytes(legacy_bytes)
-    settings.write_bytes(settings_bytes)
 
     original_replace = Path.replace
-    fail_once = {"enabled": True}
 
-    def flaky_replace(source, target):
-        if source == settings and Path(target) == storage / "settings.json.migrated" and fail_once["enabled"]:
-            fail_once["enabled"] = False
+    def failing_archive(source, target):
+        if str(target).endswith(".migrated"):
             raise OSError("simulated archive rename failure")
         return original_replace(source, target)
 
-    monkeypatch.setattr(Path, "replace", flaky_replace)
-    with pytest.raises(PreferenceMigrationError, match="preserved for retry"):
-        load(storage_dir=storage, legacy_preferences_path=legacy)
-
-    assert legacy.read_bytes() == legacy_bytes
-    assert settings.read_bytes() == settings_bytes
-    assert not (storage / "preferences.json").exists()
-    assert not (tmp_path / "preferences.json.migrated").exists()
-    assert not (storage / "settings.json.migrated").exists()
-
-    monkeypatch.setattr(Path, "replace", original_replace)
+    monkeypatch.setattr(Path, "replace", failing_archive)
     prefs = load(storage_dir=storage, legacy_preferences_path=legacy)
+    monkeypatch.setattr(Path, "replace", original_replace)
 
-    assert prefs.default_vocabulary == "kept"
-    assert prefs.default_preset == "preset-a"
-    assert (tmp_path / "preferences.json.migrated").read_bytes() == legacy_bytes
-    assert (storage / "settings.json.migrated").read_bytes() == settings_bytes
+    assert (prefs.default_vocabulary, prefs.default_preset) == ("kept", "preset-a")
+    assert legacy.read_bytes() == legacy_bytes
+    assert load(storage_dir=storage, legacy_preferences_path=legacy) == prefs
+
+
+def test_deleting_the_preferences_file_resets_to_defaults_after_migration(tmp_path):
+    storage = tmp_path / "storage"
+    legacy = tmp_path / "preferences.json"
+    legacy.write_text(json.dumps({"default_vocabulary": "old value"}), encoding="utf-8")
+    assert load(storage_dir=storage, legacy_preferences_path=legacy).default_vocabulary == "old value"
+
+    (storage / "preferences.json").unlink()
+
+    assert load(storage_dir=storage, legacy_preferences_path=legacy).default_vocabulary == ""
 
 
 def test_second_load_does_not_migrate_again(tmp_path):

@@ -160,6 +160,14 @@ original bytes were preserved. `llm_api_key` is absent from active Preferences
 and was never printed; all other unmodeled legacy values still stop migration.
 A temporary-filesystem test covers failed archive rename, rollback, and retry.
 
+Review fixes (2026-09-25): the migration now follows decision 3's order —
+install `storage/preferences.json`, then archive the legacy files — so it no
+longer recovers from `.migrated` archives. Deleting the canonical file to reset
+Preferences previously brought the archived values back. The legacy root file
+is located next to `preferences.py` instead of in the working directory, and
+`scripts/local_job_smoke.py` writes its temporary Preferences through
+`preferences.update`, which makes done criterion 2's `rg` check true again.
+
 ## Carried over from the PR #1 review
 
 - [x] Add **Preferences** and **RunConfig** to `CONTEXT.md` when this plan lands.

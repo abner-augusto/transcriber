@@ -66,13 +66,13 @@ def _run_smoke(audio_path: str, audio_duration: float) -> list[dict]:
     from models.job import JobStatus, JobType
     from migrations.runner import upgrade
 
-    from preferences import load as load_preferences, hf_token
+    import preferences
 
     original_hf_token = os.environ.get("HF_AUTH_TOKEN")
     original_database_url = os.environ.get("DATABASE_URL")
     original_storage_path = os.environ.get("STORAGE_PATH")
-    token = hf_token()
-    user_preferences = load_preferences()
+    token = preferences.hf_token()
+    user_preferences = preferences.load()
 
     results = []
     with tempfile.TemporaryDirectory(prefix="transcriber-local-job-smoke-") as temp_root:
@@ -89,9 +89,10 @@ def _run_smoke(audio_path: str, audio_duration: float) -> list[dict]:
         os.environ["STORAGE_PATH"] = str(temp_storage)
         settings.database_url = database_url
         settings.storage_path = str(temp_storage)
-        (temp_storage / "preferences.json").write_text(
-            user_preferences.model_copy(update={"hf_auth_token": ""}).model_dump_json(),
-            encoding="utf-8",
+        preferences.update(
+            user_preferences.model_copy(update={"hf_auth_token": ""}).model_dump(mode="json"),
+            storage_dir=temp_storage,
+            legacy_preferences_path=temp_path / "no-legacy-file",
         )
         if token:
             os.environ["HF_AUTH_TOKEN"] = token
