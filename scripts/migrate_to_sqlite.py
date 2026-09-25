@@ -20,6 +20,12 @@ _OPTIONAL_ADDITIVE_COLUMNS = {
     "vocabulary_entries": {"misheard_as"},
 }
 
+# Columns the application dropped on purpose. Their values mean nothing to the
+# current schema, so the migration leaves them behind and says so.
+_RETIRED_SOURCE_COLUMNS = {
+    "jobs": {"celery_task_id"},  # Celery was removed by ADR-0008.
+}
+
 
 def _segment_checksums(connection, segments_table) -> dict[str, str]:
     checksums: dict[str, hashlib._Hash] = {}
@@ -58,11 +64,14 @@ def _reflect_and_validate_source(source_engine):
     source_metadata = MetaData()
     source_metadata.reflect(bind=source_engine, only=sorted(target_names))
     missing_columns: dict[str, set[str]] = {}
+    retired_columns: list[str] = []
     for target_table in Base.metadata.sorted_tables:
         source_table = source_metadata.tables[target_table.name]
         source_columns = set(source_table.c.keys())
         target_columns = set(target_table.c.keys())
-        source_only = source_columns - target_columns
+        retired = source_columns & _RETIRED_SOURCE_COLUMNS.get(target_table.name, set())
+        retired_columns += [f"{target_table.name}.{column}" for column in sorted(retired)]
+        source_only = source_columns - target_columns - retired
         target_only = target_columns - source_columns
         allowed = _OPTIONAL_ADDITIVE_COLUMNS.get(target_table.name, set())
         if source_only or target_only - allowed:
@@ -78,7 +87,7 @@ def _reflect_and_validate_source(source_engine):
             )
         if target_only:
             missing_columns[target_table.name] = target_only
-    return source_metadata, missing_columns
+    return source_metadata, missing_columns, retired_columns
 
 
 def _copy_database(source_url: str, target_path: Path) -> dict:
@@ -99,7 +108,9 @@ def _copy_database(source_url: str, target_path: Path) -> dict:
     try:
         # Validate the complete source schema before creating even the partial
         # destination, so known incompatibilities leave no migration artefact.
-        source_metadata, missing_columns = _reflect_and_validate_source(source_engine)
+        source_metadata, missing_columns, retired_columns = _reflect_and_validate_source(
+            source_engine
+        )
         target_engine = create_engine(
             URL.create("sqlite", database=str(partial_path)),
             connect_args={"check_same_thread": False},
@@ -112,8 +123,12 @@ def _copy_database(source_url: str, target_path: Path) -> dict:
             with target_engine.begin() as target_conn:
                 for target_table in Base.metadata.sorted_tables:
                     source_table = source_metadata.tables[target_table.name]
+                    copied_columns = [
+                        source_table.c[name] for name in target_table.c.keys()
+                        if name in source_table.c
+                    ]
                     result = source_conn.execution_options(stream_results=True).execute(
-                        select(source_table)
+                        select(*copied_columns)
                     )
                     copied = 0
                     while rows := result.mappings().fetchmany(500):
@@ -141,15 +156,18 @@ def _copy_database(source_url: str, target_path: Path) -> dict:
                 f"{partial_path}. Do not switch DATABASE_URL."
             )
 
-        with target_engine.connect() as connection:
+        with source_engine.connect() as source_conn, target_engine.connect() as connection:
             for table in Base.metadata.sorted_tables:
+                expected = source_conn.execute(
+                    select(func.count()).select_from(source_metadata.tables[table.name])
+                ).scalar_one()
                 actual = connection.execute(
                     select(func.count()).select_from(table)
                 ).scalar_one()
-                if actual != counts[table.name]:
+                if not expected == counts[table.name] == actual:
                     raise ValueError(
-                        f"Row count differs for {table.name}: "
-                        f"source={counts[table.name]}, target={actual}. "
+                        f"Row count differs for {table.name}: source={expected}, "
+                        f"copied={counts[table.name]}, target={actual}. "
                         f"Target kept at {partial_path}. Do not switch DATABASE_URL."
                     )
             foreign_key_errors = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
@@ -167,6 +185,7 @@ def _copy_database(source_url: str, target_path: Path) -> dict:
             "target": str(target_path),
             "row_counts": counts,
             "segment_checksums": source_checksums,
+            "retired_columns": retired_columns,
         }
     finally:
         source_engine.dispose()
@@ -185,6 +204,8 @@ def main() -> int:
     print("Rows copied by table:")
     for table, count in summary["row_counts"].items():
         print(f"  {table}: {count}")
+    if summary["retired_columns"]:
+        print("Retired columns left behind: " + ", ".join(summary["retired_columns"]))
     print("Segment text checksums (Meeting ID: SHA-256):")
     for meeting_id, digest in sorted(summary["segment_checksums"].items()):
         print(f"  {meeting_id}: {digest}")

@@ -52,13 +52,16 @@ For a database from an older PostgreSQL release, retain a custom-format dump
 before migration. Install the optional driver when migrating:
 
 ```powershell
+New-Item -ItemType Directory -Force .\storage\backups | Out-Null
+pg_dump --format=custom --file .\storage\backups\transcriber.dump "<PostgreSQL URL from the old .env>"
 uv sync --locked --extra dev --extra postgres-migration
 $sourceDatabaseUrl = "<PostgreSQL URL from the old .env>"
 .\.venv\Scripts\python.exe -m scripts.migrate_to_sqlite --from $sourceDatabaseUrl --to .\storage\transcriber.db
 ```
 
 The command must report matching table counts and per-Meeting Segment text
-checksums, then confirm SQLite foreign keys. Point `.env` at
+checksums, then confirm SQLite foreign keys. It also lists the retired columns
+it left behind on purpose (`jobs.celery_task_id`). Point `.env` at
 `sqlite:///./storage/transcriber.db` only after those checks pass. Start the
 app, open representative Meetings, and search for both `reunião` and
 `reuniao`. Keep PostgreSQL and its dump until the UI review succeeds. Do not
