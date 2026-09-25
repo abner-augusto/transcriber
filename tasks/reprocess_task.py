@@ -4,7 +4,7 @@ from jobs import (
     running,
     progress,
 )
-from meeting_store import rebuild_speakers_and_segments
+from meeting_store import rebuild_speakers_and_segments, replace_segments
 from engines import make_diarizer
 from preferences import hf_token
 from run_config import RunConfig
@@ -14,7 +14,6 @@ from transcript.diarization import MeetingDiarization
 from transcript.segments import derive_segments
 from transcript.words import words_from_stored
 from .vocabulary import vocabulary_correction_for_meeting
-from models import Speaker, Segment
 
 
 def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarization: bool):
@@ -114,52 +113,6 @@ def reidentify_task(meeting_id: str, job_id: str):
         return {"error": "Meeting or Job not found"}
 
 
-def _rebuild_segments_only(db, meeting, aligned):
-    """Replace derived Segments while retaining the Meeting's existing Speakers."""
-    old_segments = (
-        db.query(Segment).filter(Segment.meeting_id == meeting.id)
-        .order_by(Segment.order).all()
-    )
-    edited = [
-        {"start": row.start_time, "end": row.end_time, "text": row.text}
-        for row in old_segments if row.is_edited
-    ]
-    speakers = {
-        speaker.label: speaker
-        for speaker in db.query(Speaker).filter(Speaker.meeting_id == meeting.id).all()
-    }
-    speaker_segments = {label: [] for label in speakers}
-    db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
-    db.flush()
-    for index, derived in enumerate(aligned):
-        text = derived["text"]
-        is_edited = False
-        for old in edited:
-            if abs(derived["start"] - old["start"]) < 1.5 and abs(derived["end"] - old["end"]) < 1.5:
-                text = old["text"]
-                is_edited = True
-                break
-        db.add(Segment(
-            meeting_id=meeting.id,
-            speaker_id=speakers.get(derived["speaker"]).id if derived["speaker"] in speakers else None,
-            start_time=derived["start"],
-            end_time=derived["end"],
-            text=text,
-            original_text=derived["text"],
-            order=index,
-            is_edited=is_edited,
-            confidence=derived.get("confidence"),
-            corrections=[] if is_edited else derived.get("corrections", []),
-        ))
-        if derived["speaker"] in speaker_segments:
-            speaker_segments[derived["speaker"]].append(derived)
-    for label, speaker in speakers.items():
-        assigned = speaker_segments[label]
-        speaker.segment_count = len(assigned)
-        speaker.total_speaking_time = sum(item["end"] - item["start"] for item in assigned)
-    db.commit()
-
-
 def reapply_vocabulary_task(meeting_id: str, job_id: str):
     """Re-derive Segments from stored Words and Turns without changing Speakers."""
     try:
@@ -180,7 +133,7 @@ def reapply_vocabulary_task(meeting_id: str, job_id: str):
                 correction=correction,
             )
             progress(db, job, meeting, 80, "Saving corrected Segments...")
-            _rebuild_segments_only(db, meeting, aligned)
+            replace_segments(db, meeting, aligned)
         return {"status": "completed", "meeting_id": meeting_id}
     except MeetingNotFoundError:
         return {"error": "Meeting or Job not found"}

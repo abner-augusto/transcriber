@@ -2,27 +2,19 @@
 
 from models import Speaker, Segment
 
+# An edited Segment survives a rebuild when a derived Segment starts and ends
+# within this many seconds of it.
+EDIT_TIME_TOLERANCE = 1.5
+
 
 def rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service):
-    """Preserve edits, delete old derived rows, and save Speakers and Segments."""
-    EDIT_TIME_TOLERANCE = 1.5
-
-    existing_segments = (
-        db.query(Segment)
-        .filter(Segment.meeting_id == meeting.id)
-        .order_by(Segment.order)
-        .all()
-    )
-    edited_segments = [
-        {"start": s.start_time, "end": s.end_time, "text": s.text}
-        for s in existing_segments if s.is_edited
-    ]
-
+    """Replace the Meeting's Speakers and Segments, preserving edited Segment text."""
+    edited = _edited_segments(db, meeting)
     db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
     db.query(Speaker).filter(Speaker.meeting_id == meeting.id).delete()
     db.commit()
 
-    speaker_map = {}
+    speakers = {}
     for i, (label, info) in enumerate(sorted(speaker_info.items())):
         speaker = Speaker(
             meeting_id=meeting.id,
@@ -33,48 +25,71 @@ def rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id
             confidence=info.get("confidence"),
         )
         db.add(speaker)
-        db.flush()
-        speaker_map[label] = speaker
+        speakers[label] = speaker
 
     if any(s["speaker"] == "UNKNOWN" for s in aligned):
-        unk = Speaker(
+        unknown = Speaker(
             meeting_id=meeting.id,
             label="UNKNOWN",
             display_name="Unknown",
             color="#9ca3af",
         )
-        db.add(unk)
-        db.flush()
-        speaker_map["UNKNOWN"] = unk
+        db.add(unknown)
+        speakers["UNKNOWN"] = unknown
+    db.flush()
 
+    _write_segments(db, meeting, aligned, speakers, edited)
+
+
+def replace_segments(db, meeting, aligned):
+    """Replace the Meeting's Segments, keeping its Speakers and edited Segment text."""
+    edited = _edited_segments(db, meeting)
+    speakers = {
+        speaker.label: speaker
+        for speaker in db.query(Speaker).filter(Speaker.meeting_id == meeting.id).all()
+    }
+    db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
+    db.flush()
+    _write_segments(db, meeting, aligned, speakers, edited)
+
+
+def _edited_segments(db, meeting) -> list[tuple[float, float, str]]:
+    """(start, end, text) of edited Segments, copied before the rows are deleted."""
+    return [
+        (segment.start_time, segment.end_time, segment.text)
+        for segment in (
+            db.query(Segment)
+            .filter(Segment.meeting_id == meeting.id, Segment.is_edited.is_(True))
+            .order_by(Segment.order)
+            .all()
+        )
+    ]
+
+
+def _write_segments(db, meeting, aligned, speakers: dict[str, Speaker], edits):
     for i, seg in enumerate(aligned):
-        speaker = speaker_map.get(seg["speaker"])
-        text = seg["text"]
-        is_edited = False
-
-        for edited in edited_segments:
-            if (abs(seg["start"] - edited["start"]) < EDIT_TIME_TOLERANCE
-                    and abs(seg["end"] - edited["end"]) < EDIT_TIME_TOLERANCE):
-                text = edited["text"]
-                is_edited = True
-                break
-
+        edited_text = next((
+            text for start, end, text in edits
+            if abs(seg["start"] - start) < EDIT_TIME_TOLERANCE
+            and abs(seg["end"] - end) < EDIT_TIME_TOLERANCE
+        ), None)
+        speaker = speakers.get(seg["speaker"])
         db.add(Segment(
             meeting_id=meeting.id,
             speaker_id=speaker.id if speaker else None,
             start_time=seg["start"],
             end_time=seg["end"],
-            text=text,
+            text=seg["text"] if edited_text is None else edited_text,
             original_text=seg["text"],
             order=i,
-            is_edited=is_edited,
+            is_edited=edited_text is not None,
             confidence=seg.get("confidence"),
-            corrections=[] if is_edited else seg.get("corrections", []),
+            corrections=seg.get("corrections", []) if edited_text is None else [],
         ))
 
-    for spk in speaker_map.values():
-        segs = [s for s in aligned if s["speaker"] == spk.label]
-        spk.segment_count = len(segs)
-        spk.total_speaking_time = sum(s["end"] - s["start"] for s in segs)
+    for speaker in speakers.values():
+        spoken = [s for s in aligned if s["speaker"] == speaker.label]
+        speaker.segment_count = len(spoken)
+        speaker.total_speaking_time = sum(s["end"] - s["start"] for s in spoken)
 
     db.commit()

@@ -143,3 +143,55 @@ def test_vocabulary_correction_rules_seen_in_processed_segments(
 
     assert segment.text == expected_text
     assert [correction["term"] for correction in segment.corrections] == expected_terms
+
+
+@pytest.mark.parametrize("job_type", [JobType.REAPPLY_VOCABULARY, JobType.REIDENTIFY])
+def test_reprocessing_keeps_an_edited_segment_and_gives_it_no_corrections(
+    monkeypatch, tmp_path, job_type
+):
+    from tasks.reprocess_task import reidentify_task
+
+    harness = h.install(
+        monkeypatch, tmp_path,
+        transcriber=FakeTranscriber([Word(0.1, 0.6, " Garra", 0.8)]),
+        diarization=DiarizationResult(turns=[Turn(0, 1, "SPEAKER_00")]),
+    )
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+        update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
+    ))
+    meeting_id = harness.meeting(vocabulary="Vocabulary: Garrah")
+    assert process_meeting_task(meeting_id, harness.job(meeting_id, JobType.PROCESS_MEETING))["status"] == "completed"
+    with harness.session_factory() as db:
+        (segment,) = db.get(Meeting, meeting_id).segments
+        assert segment.corrections
+        segment.text = "Garrah, typed by hand"
+        segment.is_edited = True
+        db.commit()
+
+    task = {JobType.REAPPLY_VOCABULARY: reapply_vocabulary_task, JobType.REIDENTIFY: reidentify_task}[job_type]
+    assert task(meeting_id, harness.job(meeting_id, job_type))["status"] == "completed"
+
+    (segment,) = harness.load(meeting_id).segments
+    assert (segment.text, segment.is_edited, segment.corrections) == ("Garrah, typed by hand", True, [])
+
+
+def test_each_correction_is_stored_on_the_segment_whose_time_contains_it(monkeypatch, tmp_path):
+    harness = h.install(
+        monkeypatch, tmp_path,
+        transcriber=FakeTranscriber([
+            Word(0.1, 0.6, " Garra", 0.8), Word(0.7, 0.9, " chegou.", 0.8),
+            Word(2.1, 2.6, " Stefanopoulos", 0.8), Word(2.7, 2.9, " respondeu.", 0.8),
+        ]),
+        diarization=DiarizationResult(turns=[Turn(0, 1.5, "SPEAKER_00"), Turn(1.5, 3.5, "SPEAKER_01")]),
+    )
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+        update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
+    ))
+    meeting_id = harness.meeting(vocabulary="Vocabulary: Garrah, Stephanopoulos")
+    assert process_meeting_task(meeting_id, harness.job(meeting_id, JobType.PROCESS_MEETING))["status"] == "completed"
+
+    segments = harness.load(meeting_id).segments
+    assert [(s.text, [(c["start"], c["term"]) for c in s.corrections]) for s in segments] == [
+        ("Garrah chegou.", [(0.1, "Garrah")]),
+        ("Stephanopoulos respondeu.", [(2.1, "Stephanopoulos")]),
+    ]
