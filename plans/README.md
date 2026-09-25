@@ -32,7 +32,9 @@ status here when finished.
 
 Source: `.scratch/architecture-review/README.md`. Plans 014–021 come from the
 design sessions held the same day on tickets 01–07. Tickets 08 (corrections on
-the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`.
+the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`. Tickets
+10 and 11 were closed on 2026-09-25: plans 018/019 removed the broker and the
+Postgres lock they described.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
@@ -43,7 +45,7 @@ the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`.
 | 016 | One place for Preferences, RunConfig per Job (ticket 03) | P2 | L | 015 (soft) | DONE |
 | 017 | One Job module, Celery as first adapter (ticket 02) | P2 | M | 007 | DONE |
 | 018 | SQLite + FTS5, one-shot migration from Postgres (ticket 05) | P2 | M | — | DONE |
-| 019 | Local Job runner, child process per Job (ticket 04) | P2 | L | 017, 018 | DONE |
+| 019 | Local Job runner, child process per Job (ticket 04) | P2 | L | 017, 018 | IN PROGRESS (restart mid-Job check on the machine pending) |
 | 020 | Remove Redis/Celery/Postgres/Docker, `uv`, one start command (ticket 05) | P3 | M | 018, 019 | IN PROGRESS (clean Windows install pending) |
 | 021 | Evaluate VibeVoice against the daily stack (ticket 07) | P3 | M | 012, 013 | TODO |
 

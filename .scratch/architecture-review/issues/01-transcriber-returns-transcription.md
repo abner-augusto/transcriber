@@ -36,9 +36,9 @@ provenance dict, `load`/`unload` on the port, Aligner stays separate, RunConfig 
   `Transcription → Transcription`?
 
 **Acceptance criteria (draft):**
-- [ ] No `hasattr`/`getattr` on a Transcriber anywhere in `tasks/`, `scripts/`, `engine_runners/`
-- [ ] Every adapter and `tests/fakes.py::FakeTranscriber` returns `Transcription`
-- [ ] `raw_transcription` stored JSON keeps its current keys
+- [x] No `hasattr`/`getattr` on a Transcriber anywhere in `tasks/`, `scripts/`, `engine_runners/`
+- [x] Every adapter and `tests/fakes.py::FakeTranscriber` returns `Transcription`
+- [x] `raw_transcription` stored JSON keeps its current keys
 
 **Outcome:** Implementation and ordinary backend verification are complete.
 User-only `model_load` and `model_inference` smoke tiers for parakeet.cpp and

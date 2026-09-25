@@ -149,15 +149,15 @@ returns nothing.
 
 ## Done criteria
 
-- [ ] Stored `raw_transcription` snapshots unchanged
-- [ ] No probing of a Transcriber anywhere outside tests
+- [x] Stored `raw_transcription` snapshots unchanged
+- [x] No probing of a Transcriber anywhere outside tests
 - [x] Every adapter and fake implements `load` and `transcribe → Transcription`;
       Plan 019 supersedes and removes the `unload` port method
-- [ ] Protocol v1 serialization/validation assertions in
+- [x] Protocol v1 serialization/validation assertions in
   `tests/test_engine_runtime_protocol.py` remain unchanged and pass; isolated-adapter
   behavior tests live separately in `tests/test_isolated_transcriber.py`
 - [ ] Smoke tiers run on the user's machine for parakeet.cpp and faster-whisper large-v3 (ADR-0007): `model_load` and `model_inference`
-- [ ] `plans/README.md` row and ticket 01 status updated
+- [x] `plans/README.md` row and ticket 01 status updated
 
 ## Outcome
 
@@ -175,7 +175,9 @@ recording was run by the agent.
   `diarize_meeting` report which path it took, and carry the Engine name with
   the native Turns so the `native_engine or "native"` fallback in
   `tasks/diarization.py` disappears.
-- Add **Transcription** to `CONTEXT.md` when this plan lands.
+  Done 2026-09-25: `diarize_meeting` reports its path through `on_path`, and
+  `DiarizationResult.engine` carries the Engine name with the native Turns.
+- Add **Transcription** to `CONTEXT.md` when this plan lands. Done.
 
 ## STOP conditions
 

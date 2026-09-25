@@ -17,7 +17,10 @@ start failing PENDING Jobs again.
 the queue and PENDING Jobs resumed on restart) removes the broker and with it
 this failure mode. Decide whether a stopgap is worth it before 019 lands.
 
-**Status:** needs-exploration
+**Status:** done — superseded by plan 019 (2026-09-25). There is no broker
+any more: the Job table is the queue, and the local runner resumes PENDING Jobs
+in creation order on startup
+(`tests/test_local_job_runner.py::test_local_runner_resumes_pending_jobs_in_creation_order`).
 
 **Options:**
 - On worker start, re-submit PENDING Jobs whose `celery_task_id` is unknown to

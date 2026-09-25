@@ -76,7 +76,8 @@ in the tree until plan 020 deletes them.
 - [x] App runs with no Redis and no Celery process
 - [x] Child crash / timeout / restart behave as decided, with tests
 - [x] No `unload`/`release_gpu_memory` calls remain in the pipeline
-- [x] Measurements and the end-to-end check recorded in this plan
+- [ ] Measurements and the end-to-end check recorded in this plan (restart
+      mid-Job and per-Job VRAM baseline on the machine still pending; see Step 6)
 
 ## Step 1 measurements (2026-09-25)
 
@@ -106,6 +107,13 @@ large-v3 completed in 21.86 seconds (7 Segments, 1 Speaker). GPU memory was
 passed 340 tests, including child crash, timeout, shutdown, restart recovery,
 and PENDING ordering. The combined machine evidence is in
 `LOCAL-VERIFICATION.md`.
+
+Still to run on the machine (review, 2026-09-25): Step 6 asks for VRAM back at
+the idle baseline *after each* Job (one reading was taken for both) and for
+restarting the app *mid-Job*. Restart was covered only by automated tests.
+Include a hard kill of the app process: on Windows a spawned Job child is not
+killed with its parent, so check that no orphaned child keeps the GPU while
+the restarted app fails its Job and starts the next PENDING one.
 
 ## STOP conditions
 
