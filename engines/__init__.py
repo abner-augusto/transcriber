@@ -18,7 +18,7 @@ from .ports import (
     Word,
     raw_transcription,
 )
-from .overlap import compute_overlaps
+from .overlap import compute_overlaps, compute_exclusive_turns
 
 from typing import TYPE_CHECKING
 
@@ -30,13 +30,14 @@ __all__ = [
     "Word", "Turn", "DiarizationResult", "Transcription", "raw_transcription",
     "Transcriber", "Diarizer", "Aligner",
     "make_transcriber", "make_diarizer", "make_aligner", "align_words",
-    "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "compute_overlaps", "probe_engine", "engine_status", "alignment_engine_status",
+    "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "compute_overlaps", "compute_exclusive_turns", "probe_engine", "engine_status", "alignment_engine_status",
 ]
 
 TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp", "qwen3-asr", "vibevoice"]
 
 DEFAULT_ALIGNMENT_ENGINE = "mms-fa"
 ALIGNMENT_ENGINES = [DEFAULT_ALIGNMENT_ENGINE]
+DIARIZER_ENGINES = ["pyannote", "nemotron-3-diarization"]
 
 DIARIZER_ENGINE = "pyannote"
 
@@ -122,11 +123,15 @@ def make_transcriber(run_config: "RunConfig") -> Transcriber:
 
 
 def make_diarizer(run_config: "RunConfig", *, hf_token: str = "") -> Diarizer:
-    """The Diarizer. There is only one, and swapping it means one more branch here."""
+    """Build the Diarizer selected in the Job's RunConfig."""
+    if run_config.diarization.engine == "nemotron-3-diarization":
+        from config import settings
+        from .isolated_python import IsolatedPythonDiarizer
+        return IsolatedPythonDiarizer(model_path=settings.nemotron_diarization_model_path,
+            device="cuda", threshold=0.5)
     from .pyannote import PyannoteDiarizer
-
     return PyannoteDiarizer(
-        clustering=run_config.diarization.model_dump(exclude_none=True),
+        clustering=run_config.diarization.model_dump(exclude_none=True, exclude={"engine"}),
         auth_token=hf_token,
     )
 
@@ -134,6 +139,11 @@ def make_diarizer(run_config: "RunConfig", *, hf_token: str = "") -> Diarizer:
 def engine_status(preset: dict) -> dict:
     """Return structured Engine health plus the legacy availability fields."""
     return probe_engine(preset).to_dict()
+
+
+def diarizer_status(engine: str, *, hf_token: str = "") -> dict:
+    from .health import diarizer_status as _status
+    return _status(engine, hf_token=hf_token)
 
 
 def probe_engine(preset: dict, deep: bool = False):

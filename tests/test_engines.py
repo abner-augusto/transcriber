@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from engines import Diarizer, Transcriber, Turn, Word, make_transcriber
+from engines import Diarizer, Transcriber, Turn, Word, make_diarizer, make_transcriber
 from engines.chunking import chunk_bounds
 from engines.parakeet_cpp import MIN_TAIL_SECONDS as PARAKEET_MIN_TAIL_SECONDS
 from engines.parakeet_cpp import ParakeetCppTranscriber
@@ -46,6 +46,40 @@ def test_a_fake_satisfies_the_ports():
     """If this fails, the fakes have drifted from the ports and every test above is a lie."""
     assert isinstance(FakeTranscriber([]), Transcriber)
     assert isinstance(FakeDiarizer([]), Diarizer)
+
+
+def test_default_diarizer_factory_stays_pyannote():
+    from engines.pyannote import PyannoteDiarizer
+    selected = _run_config({}).model_copy(update={
+        "diarization": DiarizationPrefs(clustering_threshold=0.6)
+    })
+
+    diarizer = make_diarizer(selected, hf_token="token")
+
+    assert isinstance(diarizer, PyannoteDiarizer)
+    # The Engine choice is not a clustering knob; pyannote would try to cast it to a float.
+    assert diarizer.clustering == {"clustering_threshold": 0.6}
+
+
+def test_nemotron_factory_and_adapter_filter_short_speakers(monkeypatch):
+    from engines import DiarizationResult
+    from engines.isolated_python import IsolatedPythonDiarizer
+    from engines import make_diarizer
+
+    selected = _run_config({}).model_copy(update={
+        "diarization": DiarizationPrefs(engine="nemotron-3-diarization")
+    })
+    diarizer = make_diarizer(selected)
+    assert isinstance(diarizer, IsolatedPythonDiarizer)
+
+    response = types.SimpleNamespace(native_turns=(
+        Turn(0, 8, "SPEAKER_00"), Turn(6, 14, "SPEAKER_01"), Turn(1, 4.5, "SPEAKER_02")
+    ))
+    monkeypatch.setattr("engines.isolated_python.launch_engine", lambda **_kwargs: response)
+    result = diarizer.diarize("audio.wav")
+    assert result.engine == "nemotron-3-diarization"
+    assert {turn.speaker for turn in result.turns} == {"SPEAKER_00", "SPEAKER_01"}
+    assert result.exclusive_turns == [Turn(0, 6, "SPEAKER_00"), Turn(8, 14, "SPEAKER_01")]
 
 
 def test_whisper_subword_tokens_are_stitched_back_into_words():

@@ -4,7 +4,7 @@ import json
 import logging
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -47,6 +47,7 @@ class WhisperDtwPrefs(BaseModel):
 class DiarizationPrefs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    engine: Literal["pyannote", "nemotron-3-diarization"] = "pyannote"
     clustering_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     Fa: float | None = Field(default=None, ge=0.0, le=5.0)
     Fb: float | None = Field(default=None, ge=0.0, le=5.0)
@@ -260,11 +261,16 @@ def apply_preferences_request(body: dict) -> Preferences:
             patch["hf_auth_token"] = value
     if "diarization" in body:
         raw = body["diarization"] if isinstance(body["diarization"], dict) else {}
-        patch["diarization"] = {
+        diarization_patch = {
             key: number
             for key in DiarizationPrefs.model_fields
             if (number := _accepted_number(DiarizationPrefs, key, raw.get(key))) is not None
         }
+        # The patch replaces the whole block, so an absent or unknown engine keeps the stored one.
+        engine = raw.get("engine")
+        supported = get_args(DiarizationPrefs.model_fields["engine"].annotation)
+        diarization_patch["engine"] = engine if engine in supported else load().diarization.engine
+        patch["diarization"] = diarization_patch
     if "speaker_switch_penalty" in body:
         penalty = _accepted_number(Preferences, "speaker_switch_penalty", body["speaker_switch_penalty"])
         if penalty is not None:

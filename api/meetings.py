@@ -17,7 +17,7 @@ from models import Meeting, MeetingStatus, Speaker, Segment
 from models.job import Job, JobType
 from config import get_meeting_path
 from services.audio_service import AudioService
-from engines import probe_engine
+from engines import probe_engine, diarizer_status
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -240,6 +240,14 @@ def _reject_processing(meeting: Meeting) -> None:
         raise HTTPException(409, ALREADY_PROCESSING)
 
 
+def _require_usable_diarizer() -> dict:
+    from preferences import load, hf_token
+    health = diarizer_status(load().diarization.engine, hf_token=hf_token())
+    if health["state"] == "blocked":
+        raise HTTPException(409, {"message": health["summary"], "health": health})
+    return health
+
+
 @router.post("/{meeting_id}/process")
 def start_processing(meeting_id: str, db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -249,6 +257,7 @@ def start_processing(meeting_id: str, db: Session = Depends(get_db)):
 
     preset = presets.resolve_preset(meeting.preset_id)
     health = _require_usable_preset(preset)
+    _require_usable_diarizer()
 
     job = _enqueue(db, meeting.id, JobType.PROCESS_MEETING)
     return {**job.to_dict(), "engine_health": health}
@@ -275,6 +284,7 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
     if not preset:
         raise HTTPException(400, f"Unknown preset '{req.preset_id}'")
     health = _require_usable_preset(preset)
+    _require_usable_diarizer()
 
     copy = Meeting(
         title=f"{source.title} (copy · {preset['name']})"[:MAX_TITLE_LENGTH],
@@ -318,6 +328,7 @@ def rediarize_meeting(meeting_id: str, db: Session = Depends(get_db)):
     _reject_processing(meeting)
     if not meeting.raw_transcription:
         raise HTTPException(400, "No transcription data. Run full processing first.")
+    _require_usable_diarizer()
     job = _enqueue(db, meeting.id, JobType.REDIARIZE)
     return job.to_dict()
 

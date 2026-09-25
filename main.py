@@ -125,10 +125,18 @@ def shutdown():
 
 @app.get("/api/settings")
 def get_settings():
-    from preferences import public
+    from preferences import public, hf_token
+    from engines import diarizer_status
     prefs = public()
     return {
         "preferences": prefs,
+        "diarizers": [
+            {"id": engine, "name": name, "description": description, **diarizer_status(engine, hf_token=hf_token())}
+            for engine, name, description in (
+                ("pyannote", "pyannote Community-1", "Community speaker diarization"),
+                ("nemotron-3-diarization", "Nemotron 3 Diarization", "NVIDIA offline speaker diarization"),
+            )
+        ],
     }
 
 

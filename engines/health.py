@@ -6,14 +6,15 @@ import ast
 import ctypes
 import hashlib
 import importlib.metadata
+import importlib.util
 import json
 import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
-from config import settings
-from engine_runtimes.manifest import ManifestError, RuntimeManifest, load_manifest, version_satisfies
+from config import engine_runtime_python, settings
+from engine_runtimes.manifest import ManifestError, RuntimeManifest, load_manifest, runtime_for_engine, version_satisfies
 
 
 HealthState = Literal["ready", "degraded", "blocked"]
@@ -175,7 +176,7 @@ def _cuda_available() -> bool:
 def _manifest_probe(preset: dict, manifest: RuntimeManifest) -> tuple[list[EngineCheck], list[str]]:
     checks: list[EngineCheck] = []
     engine = preset.get("engine")
-    runtime_text = settings.qwen3_asr_python if engine == "qwen3-asr" else settings.vibevoice_python
+    runtime_text = engine_runtime_python(runtime_for_engine(engine))
     runtime = Path(runtime_text)
     runtime_exists = runtime.is_file()
     checks.append(_check("runtime.executable", True, runtime_exists, f"Dedicated runtime {'found' if runtime_exists else 'not found'}: {runtime_text}"))
@@ -256,8 +257,8 @@ def probe_engine(preset: dict, deep: bool = False) -> EngineHealth:
     del deep
     engine = preset.get("engine")
     try:
-        if engine in ("qwen3-asr", "vibevoice"):
-            checks, facts = _manifest_probe(preset, load_manifest(engine))
+        if engine in ("qwen3-asr", "vibevoice", "nemotron-3-diarization"):
+            checks, facts = _manifest_probe(preset, load_manifest(runtime_for_engine(engine)))
         else:
             checks, facts = _legacy_probe(preset)
     except ManifestError as exc:
@@ -274,3 +275,24 @@ def probe_engine(preset: dict, deep: bool = False) -> EngineHealth:
     health = EngineHealth(state=state, summary=summary, checks=tuple(checks), fingerprint=fingerprint)
     _HEALTH_CACHE[fingerprint] = health
     return health
+
+
+def diarizer_status(engine: str, *, hf_token: str = "") -> dict:
+    """Health of a Diarizer Engine, in the same shape as a Preset's."""
+    if engine == "nemotron-3-diarization":
+        preset = {"engine": engine, "model_path": settings.nemotron_diarization_model_path, "device": "cuda"}
+        return probe_engine(preset).to_dict()
+    if engine == "pyannote":
+        # find_spec, not import: importing pyannote.audio pulls torch into the API process.
+        installed = importlib.util.find_spec("pyannote.audio") is not None
+        checks = (
+            _check("runtime.package.pyannote.audio", True, installed,
+                   f"pyannote.audio {'is installed' if installed else 'is not installed'}"),
+            _check("credentials.hf_token", True, bool(hf_token),
+                   f"Hugging Face token {'is set' if hf_token else 'is not set'}"),
+        )
+        failures = [item for item in checks if not item.passed]
+        summary = failures[0].message if failures else "Engine is ready"
+        fingerprint = hashlib.sha256(f"pyannote:{installed}:{bool(hf_token)}".encode()).hexdigest()
+        return EngineHealth("blocked" if failures else "ready", summary, checks, fingerprint).to_dict()
+    raise ValueError(f"Unknown Diarizer Engine: {engine}")

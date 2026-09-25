@@ -11,7 +11,7 @@ are the same recording, their timelines align, and overlapping (crosstalk) regio
 are preserved rather than collapsed.
 """
 
-from engines import Turn, DiarizationResult, compute_overlaps
+from engines import Turn, DiarizationResult, compute_overlaps, compute_exclusive_turns
 
 # The Diarizer-local label for the host (local mic) speaker. Naming is the Speaker
 # Namer's job; this is the label that gets named "You".
@@ -40,38 +40,6 @@ def merge_dual_turns(host_turns: list[Turn], remote_turns: list[Turn]) -> list[T
     merged = list(host_turns) + list(remote_turns)
     merged.sort(key=lambda t: (t.start, t.end, t.speaker))
     return merged
-
-
-def compute_exclusive_turns(turns: list[Turn]) -> list[Turn]:
-    """The single-speaker (exclusive) portion of each Turn.
-
-    For each Turn, the regions where no other speaker is active are kept; the
-    overlapping portions are dropped. This gives unambiguous attribution evidence
-    for Words, the same role pyannote's exclusive annotation plays for single-track.
-    """
-    exclusive: list[Turn] = []
-    for turn in turns:
-        others = [t for t in turns if t.speaker != turn.speaker]
-        intervals = [(turn.start, turn.end)]
-        for other in others:
-            next_intervals: list[tuple[float, float]] = []
-            for s, e in intervals:
-                if other.end <= s:
-                    next_intervals.append((s, e))
-                elif other.start >= e:
-                    next_intervals.append((s, e))
-                else:
-                    if other.start > s:
-                        next_intervals.append((s, other.start))
-                    if other.end < e:
-                        next_intervals.append((other.end, e))
-            intervals = next_intervals
-        for s, e in intervals:
-            if e - s >= 0.01:
-                exclusive.append(Turn(start=round(s, 3), end=round(e, 3), speaker=turn.speaker))
-
-    exclusive.sort(key=lambda t: (t.start, t.end, t.speaker))
-    return exclusive
 
 
 def build_dual_diarization(

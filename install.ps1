@@ -63,7 +63,7 @@ New-Item -ItemType Directory -Force -Path "models\parakeet" | Out-Null
 & ".venv\Scripts\python.exe" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='mudler/parakeet-cpp-gguf', filename='tdt-0.6b-v3-q8_0.gguf', local_dir='models/parakeet')"
 if ($LASTEXITCODE -ne 0) { throw "Parakeet model download failed" }
 
-foreach ($engineRuntime in @("qwen3-asr", "vibevoice")) {
+foreach ($engineRuntime in @("qwen3-asr", "vibevoice", "nemotron-diarization")) {
     $runtimeDir = Join-Path "venv-engines" $engineRuntime
     $runtimePython = Join-Path $runtimeDir "Scripts\python.exe"
     if (-not (Test-Path $runtimePython)) {
@@ -82,6 +82,10 @@ foreach ($engineRuntime in @("qwen3-asr", "vibevoice")) {
     & $runtimePython -m engine_runtimes.manifest $engineRuntime --include-optional --presets-dir model_presets
     if ($LASTEXITCODE -ne 0) { throw "$engineRuntime runtime validation failed" }
 }
+
+New-Item -ItemType Directory -Force -Path "models\nemotron-diarization" | Out-Null
+& ".venv\Scripts\python.exe" -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='nvidia/Nemotron-3-Diarization', local_dir='models/nemotron-diarization', allow_patterns=['config.json','model.safetensors','processor_config.json'])"
+if ($LASTEXITCODE -ne 0) { throw "Nemotron diarization model download failed" }
 
 # Work around speechbrain's Unix-only inspect.py path check on Windows.
 $sbImportUtils = ".venv\Lib\site-packages\speechbrain\utils\importutils.py"

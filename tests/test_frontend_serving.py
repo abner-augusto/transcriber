@@ -19,7 +19,9 @@ def test_root_client_routes_and_assets_serve_the_built_frontend(frontend):
     assert frontend.get("/").text == "<main>Transcriber UI</main>"
     assert frontend.get("/meetings/example").text == "<main>Transcriber UI</main>"
     assert frontend.get("/assets/index-abc.js").text == "console.log('ui')"
-    assert frontend.get("/api/settings").json() == {"preferences": {"default_vocabulary": ""}}
+    payload = frontend.get("/api/settings").json()
+    assert payload["preferences"] == {"default_vocabulary": ""}
+    assert [item["id"] for item in payload["diarizers"]] == ["pyannote", "nemotron-3-diarization"]
 
 
 @pytest.mark.parametrize("path", ["/api/no-such-route", "/assets/missing.js"])

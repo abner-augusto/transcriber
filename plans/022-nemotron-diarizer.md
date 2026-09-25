@@ -234,12 +234,12 @@ no GPU.
 
 ## Done criteria
 
-- [ ] Default Preferences still diarize with pyannote, and Step 1 tests pass unchanged.
-- [ ] Selecting `nemotron-3-diarization` runs the isolated runtime, stores that Engine name, and drops sub-5 s speakers.
-- [ ] A blocked Diarizer refuses queueing with 409; a failing runner fails the Job.
-- [ ] `GET /api/settings` lists both Diarizers with health.
-- [ ] Installers create the runtime and the local model snapshot; no Job downloads weights.
-- [ ] ADR-0009 written.
+- [x] Default Preferences still diarize with pyannote, and Step 1 tests pass unchanged.
+- [x] Selecting `nemotron-3-diarization` runs the isolated runtime, stores that Engine name, and drops sub-5 s speakers.
+- [x] A blocked Diarizer refuses queueing with 409; a failing runner fails the Job.
+- [x] `GET /api/settings` lists both Diarizers with health.
+- [x] Installers create the runtime and the local model snapshot; no Job downloads weights.
+- [x] ADR-0009 written.
 - [ ] Local smoke tier and Step 8 end-to-end run on the user's machine.
 
 ## STOP conditions
@@ -256,4 +256,59 @@ no GPU.
 
 ## Outcome
 
-_To be filled in by the executor._
+Implemented the selectable `pyannote` / `nemotron-3-diarization` Preference, RunConfig capture, dedicated runtime and runner, protocol v1 `diarize` operation, local model installation, health and queue checks, settings payload, smoke tier, and ADR-0009. The core adapter filters Speakers with less than 5.0 seconds of total speech and computes exclusive Turns. pyannote remains the default.
+
+Verification results:
+
+- Drift check: `git diff --stat 748cf57..HEAD -- engines/ engine_runners/ engine_runtimes/ tasks/diarization.py tasks/dual_track.py tasks/reprocess_task.py tasks/process_meeting.py preferences.py run_config.py main.py config.py install.ps1 install.sh` returned no diff for the listed protected paths; no Drift STOP condition fired.
+- Baseline suite before changes: `357 passed, 18 skipped, 588 warnings in 31.22s` from `.\.venv\Scripts\python.exe -m pytest -q tests`.
+- Runtime setup: `uv venv --python .venv\Scripts\python.exe venv-engines\nemotron-diarization` created the runtime with CPython 3.13.13. The cu128 install completed with `torch==2.11.0+cu128` and `torchaudio==2.11.0+cu128`. Requirements installed Transformers `5.18.0.dev0` from commit `11c16613d93911300c38ec8c9c2460567be53281`, plus librosa and soundfile. The pinned-source STOP condition did not fire.
+- Manifest and model API check: `venv-engines\nemotron-diarization\Scripts\python.exe -m engine_runtimes.manifest nemotron-diarization` printed `nemotron-diarization-v1: compatible`; importing `AutoModelForAudioFrameClassification` from the runtime succeeded.
+- Model snapshot: `snapshot_download` fetched the three allowed files (`config.json`, `model.safetensors`, `processor_config.json`) into `models/nemotron-diarization/`.
+- Runner gate: on `bench\out\test.16k.wav`, both the bench and isolated runner returned 6 Turns. Start, end, and speaker values were `identical: True`; no runner-vs-bench STOP condition fired.
+- Final suite: `.\.venv\Scripts\python.exe -m pytest -q tests` completed with `365 passed, 20 skipped, 590 warnings in 34.59s`.
+- Smoke tier: `.\.venv\Scripts\python.exe -m pytest -q tests/engine_smoke --run-engine-smoke --engine-smoke-preset nemotron-3-diarization --engine-smoke-audio bench\out\test.16k.wav` completed with `17 passed, 18 skipped, 5 warnings in 21.97s`.
+- Focused verification: manifest, Engine adapter/factory, Preference API, and Meeting API tests completed with `90 passed, 52 warnings in 10.66s`. `git diff --check` reported no whitespace errors.
+
+The remaining unchecked item is the real Sinop 2026-09-22 Meeting reprocessing in Step 8 and its combined Done criterion. Per the executor instruction, it is left for the reviewer and user; no real Meeting was reprocessed. No boxes remain unchecked in the other Done criteria.
+
+### Review (2026-09-25)
+
+Executor: Codex `gpt-6-luna`. The reviewer re-ran everything and fixed these before committing:
+
+- **Bug**: the single-track stage read `result.engine` before normalizing the
+  result. A Diarizer returning a bare list of Turns, which the port allows,
+  raised `AttributeError`. The stage now wraps the result with `_as_result` first.
+- **Bug**: `POST /duplicate` queued a Meeting without checking the Diarizer.
+  It now refuses a blocked one with 409, like `process` and `rediarize`.
+- **Regression**: pyannote's health check imported `pyannote.audio` (and with
+  it torch) into the API process on every `GET /api/settings`. It now uses
+  `importlib.util.find_spec`, and it reports the package and the token as
+  separate checks.
+- `compute_exclusive_turns` was rewritten while moving. It is now moved
+  verbatim into `engines/overlap.py`, docstring included.
+- The Engine-to-runtime name mapping was repeated in three places. It is now
+  `engine_runtimes.manifest.runtime_for_engine`, which lives there because the
+  runner's runtime cannot import `config`.
+- `IsolatedPythonDiarizer`: the constant carries its reason, moved to the top
+  of the module; dropped speakers are logged; and `load()` validates its
+  response, as the Transcriber's does.
+- Tests: the stage records the named Engine on both paths and accepts bare
+  Turns. The 409 test now goes through the real `diarizer_status` on
+  `process`, `rediarize` and `duplicate`. pyannote's clustering excludes
+  `engine`.
+
+Verification by the reviewer:
+
+- `.\.venv\Scripts\python.exe -m pytest -q tests`: 370 passed, 20 skipped.
+- Revert-proof: each fix removed in turn made its test fail, and restoring it
+  made the test pass. The fixes covered were the phantom drop, the Engine
+  recorded on single and dual track, bare Turns, the 409 on rediarize and
+  duplicate, keeping the stored Engine, and the clustering exclusion.
+- Runner vs bench, on full Meetings: the adapter produced the same Turns as
+  `bench/run_nemotron_diarization.py`, identical after the drop, on
+  Arquitetura 03 (743 Turns, 36 min, 18.7 s) and on the Sinop system track (695
+  Turns; the 3.6 s phantom `SPEAKER_02` dropped). WDER through
+  `bench/diarizer_wder.py` was unchanged: 0.73% and 2.08%.
+- `GET /api/settings`: both Diarizers `ready`, and `pyannote.audio` was not
+  imported into the API process.

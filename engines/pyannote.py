@@ -240,7 +240,7 @@ class PyannoteDiarizer:
             + (f", {len(exclusive_turns)} exclusive turns" if exclusive_turns is not None else "")
             + f", {len(overlaps)} overlap regions"
         )
-        return DiarizationResult(turns=turns, exclusive_turns=exclusive_turns, overlaps=overlaps)
+        return DiarizationResult(turns=turns, exclusive_turns=exclusive_turns, overlaps=overlaps, engine="pyannote")
 
 
 def _load_audio_tensor(path: str, target_sr: int = TARGET_SAMPLE_RATE):

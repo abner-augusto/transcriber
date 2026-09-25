@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     # Dedicated Python interpreters for heavyweight Python Engines.
     qwen3_asr_python: str = "./venv-engines/qwen3-asr/Scripts/python.exe"
     vibevoice_python: str = "./venv-engines/vibevoice/Scripts/python.exe"
+    nemotron_diarization_python: str = "./venv-engines/nemotron-diarization/Scripts/python.exe"
+    nemotron_diarization_model_path: str = "./models/nemotron-diarization"
     engine_runtime_timeout_seconds: float = 7200.0
     engine_runtime_debug_directory: str = ""
 
@@ -29,6 +31,16 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+ENGINE_RUNTIME_PYTHON_SETTINGS = {
+    "qwen3-asr": "qwen3_asr_python",
+    "vibevoice": "vibevoice_python",
+    "nemotron-diarization": "nemotron_diarization_python",
+}
+
+
+def engine_runtime_python(engine_id: str) -> str:
+    return getattr(settings, ENGINE_RUNTIME_PYTHON_SETTINGS[engine_id])
 
 # Warn about missing critical config at import time
 import logging as _logging

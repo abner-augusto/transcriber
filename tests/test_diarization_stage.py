@@ -206,6 +206,38 @@ def test_single_track_calls_the_diarizer_with_the_speaker_bounds():
     assert reported == ["diarizer"]
 
 
+def test_single_track_accepts_a_diarizer_that_returns_bare_turns():
+    class BareTurns:
+        def diarize(self, audio_path, min_speakers=None, max_speakers=None):
+            return [Turn(start=0.0, end=1.0, speaker="SPEAKER_00")]
+
+    diarization = diarize_meeting(_Meeting(), "audio.wav", diarizer=BareTurns(), vad_service=_Vad())
+
+    assert diarization.engine == "pyannote"
+    assert diarization.turns == [Turn(start=0.0, end=1.0, speaker="SPEAKER_00")]
+
+
+def test_single_track_records_the_engine_the_diarizer_names():
+    result = DiarizationResult(
+        turns=[Turn(start=0.0, end=1.0, speaker="SPEAKER_00")], engine="nemotron-3-diarization"
+    )
+
+    diarization = diarize_meeting(_Meeting(), "audio.wav", diarizer=FakeDiarizer(result), vad_service=_Vad())
+
+    assert diarization.engine == "nemotron-3-diarization"
+
+
+def test_dual_track_records_the_engine_the_diarizer_names(monkeypatch, tmp_path):
+    result = DiarizationResult(turns=h.PYANNOTE.turns, engine="nemotron-3-diarization")
+    harness = h.install(monkeypatch, tmp_path, transcriber=h.FakeTranscriber(h.WORDS), diarization=result)
+    meeting_id = harness.meeting(dual_track=True)
+    harness.write_dual_tracks(meeting_id)
+    job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
+
+    assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
+    assert harness.load(meeting_id).raw_diarization["engine"] == "nemotron-3-diarization"
+
+
 def test_native_turns_are_bounded_without_calling_the_diarizer():
     diarizer = FakeDiarizer([])
     native = DiarizationResult(

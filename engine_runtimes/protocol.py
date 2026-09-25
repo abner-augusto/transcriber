@@ -14,7 +14,7 @@ SCHEMA_VERSION = 1
 _REQUEST_FIELDS = {"schema_version", "operation", "engine_id", "audio_path", "vocabulary", "model_path", "aligner_path", "device", "options"}
 _RESPONSE_FIELDS = {"schema_version", "words", "native_diarization", "diagnostics", "runtime_fingerprint", "error"}
 _ERROR_FIELDS = {"code", "message", "retryable", "degraded_capabilities"}
-_OPTION_FIELDS = {"language", "chunk_seconds", "window_seconds", "overlap_seconds", "quantization"}
+_OPTION_FIELDS = {"language", "chunk_seconds", "window_seconds", "overlap_seconds", "quantization", "threshold"}
 
 
 class ProtocolError(ValueError):
@@ -72,11 +72,13 @@ class EngineRequest:
         _fields(data, _REQUEST_FIELDS, _REQUEST_FIELDS - {"operation"}, "request")
         if data["schema_version"] != SCHEMA_VERSION:
             raise ProtocolError(f"unsupported schema_version {data['schema_version']!r}")
-        if data["engine_id"] not in {"qwen3-asr", "vibevoice"}:
+        if data["engine_id"] not in {"qwen3-asr", "vibevoice", "nemotron-3-diarization"}:
             raise ProtocolError("request.engine_id is unsupported")
         operation = data.get("operation", "transcribe")
-        if operation not in {"load", "transcribe"}:
+        if operation not in {"load", "transcribe", "diarize"}:
             raise ProtocolError("request.operation is unsupported")
+        if operation == "diarize" and data["engine_id"] != "nemotron-3-diarization":
+            raise ProtocolError("request.operation diarize is unsupported for this Engine")
         options = _object(data["options"], "request.options")
         _fields(options, _OPTION_FIELDS, set(), "request.options")
         for key, value in options.items():
@@ -84,6 +86,9 @@ class EngineRequest:
                 raise ProtocolError(f"request.options.{key} must be scalar")
             if isinstance(value, float):
                 _finite(value, f"request.options.{key}")
+            if key == "threshold":
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= float(value) <= 1:
+                    raise ProtocolError("request.options.threshold must be between 0 and 1")
         vocabulary = data["vocabulary"]
         if vocabulary is not None and not isinstance(vocabulary, str):
             raise ProtocolError("request.vocabulary must be a string or null")

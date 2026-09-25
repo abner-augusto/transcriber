@@ -57,7 +57,7 @@ Diarization beat pyannote on WDER in two of the user's Meetings
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 022 | Nemotron 3 Diarization as a second Diarizer Engine | P2 | M | — | TODO |
+| 022 | Nemotron 3 Diarization as a second Diarizer Engine | P2 | M | — | IN PROGRESS (executor Codex gpt-6-luna, reviewed 2026-09-25; Step 8 reprocessing a real Meeting on the machine pending) |
 | 023 | A Diarization tab in Settings | P2 | S | 022 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or

@@ -32,8 +32,14 @@ def test_diarization_keeps_in_bounds_numbers_and_drops_the_rest(client):
         "diarization": {"clustering_threshold": "0.7", "Fa": 2, "Fb": 99, "ignored": 1},
     })
 
-    assert client.stored()["diarization"] == {"clustering_threshold": 0.7, "Fa": 2.0}
-    assert result["diarization"] == {"clustering_threshold": 0.7, "Fa": 2.0}
+    assert client.stored()["diarization"] == {"engine": "pyannote", "clustering_threshold": 0.7, "Fa": 2.0}
+    assert result["diarization"] == {"engine": "pyannote", "clustering_threshold": 0.7, "Fa": 2.0}
+
+
+def test_diarization_engine_accepts_supported_ids_and_ignores_unknown(client):
+    assert _put(client, {"diarization": {"engine": "nemotron-3-diarization"}})["diarization"]["engine"] == "nemotron-3-diarization"
+    assert _put(client, {"diarization": {"engine": "unknown"}})["diarization"]["engine"] == "nemotron-3-diarization"
+    assert _put(client, {"diarization": {"clustering_threshold": 0.4}})["diarization"]["engine"] == "nemotron-3-diarization"
 
 
 @pytest.mark.parametrize(
@@ -78,3 +84,14 @@ def test_hf_token_is_masked_and_a_masked_echo_does_not_overwrite_it(client):
 
     assert client.stored()["hf_auth_token"] == "hf_secret_value"
     assert client.get("/api/settings").json()["preferences"]["hf_auth_token"] == "hf_**********lue"
+
+
+def test_settings_payload_lists_both_diarizers(client, monkeypatch):
+    import engines
+    monkeypatch.setattr(engines, "diarizer_status", lambda _engine, **_kwargs: {
+        "state": "ready", "summary": "ready", "checks": [], "fingerprint": "test",
+        "available": True, "reason": None,
+    })
+    payload = client.get("/api/settings").json()
+    assert [item["id"] for item in payload["diarizers"]] == ["pyannote", "nemotron-3-diarization"]
+    assert all(item["state"] == "ready" for item in payload["diarizers"])

@@ -4,6 +4,9 @@ import pytest
 
 from presets import list_presets
 
+NEMOTRON_SMOKE = {"id": "nemotron-3-diarization", "engine": "nemotron-3-diarization", "model_path": "./models/nemotron-diarization", "diarizer": True}
+SMOKE_TARGETS = [*list_presets(), NEMOTRON_SMOKE]
+
 
 def pytest_addoption(parser):
     group = parser.getgroup("engine smoke")
@@ -38,7 +41,7 @@ def _selected_ids(config):
 
 
 def pytest_configure(config):
-    known = {preset["id"] for preset in list_presets()}
+    known = {preset["id"] for preset in SMOKE_TARGETS}
     unknown = sorted(set(_selected_ids(config)) - known)
     if unknown:
         raise pytest.UsageError(
@@ -66,7 +69,7 @@ def selected_engine_smoke_preset(request):
     preset_id = request.param
     if preset_id not in selected:
         pytest.skip(f"Preset {preset_id!r} was not selected for Engine smoke testing")
-    return next(preset for preset in list_presets() if preset["id"] == preset_id)
+    return next(preset for preset in SMOKE_TARGETS if preset["id"] == preset_id)
 
 
 @pytest.fixture

@@ -50,12 +50,12 @@ def diarize_meeting(
         return bound_to_speech(native, audio_path, vad_service, engine=native.engine)
     if on_path:
         on_path("diarizer")
-    result = diarizer.diarize(
+    result = _as_result(diarizer.diarize(
         audio_path,
         min_speakers=meeting.min_speakers,
         max_speakers=meeting.max_speakers,
-    )
-    return bound_to_speech(result, audio_path, vad_service, engine=DIARIZER_ENGINE)
+    ))
+    return bound_to_speech(result, audio_path, vad_service, engine=result.engine or DIARIZER_ENGINE)
 
 
 def bound_to_speech(result, audio_path: str, vad_service, *, engine: str) -> MeetingDiarization:
@@ -115,7 +115,7 @@ def _diarize_dual_track(meeting, diarizer, vad_service) -> MeetingDiarization:
 
     merged = build_dual_diarization(host_turns, remote_turns)
     return MeetingDiarization(
-        engine=DIARIZER_ENGINE,
+        engine=remote.engine or DIARIZER_ENGINE,
         turns=merged.turns,
         exclusive_turns=merged.exclusive_turns,
         overlaps=merged.overlaps,

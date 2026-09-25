@@ -48,7 +48,7 @@ fi
 mkdir -p models/parakeet
 .venv/bin/python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='mudler/parakeet-cpp-gguf', filename='tdt-0.6b-v3-q8_0.gguf', local_dir='models/parakeet')"
 
-for engine_runtime in qwen3-asr vibevoice; do
+for engine_runtime in qwen3-asr vibevoice nemotron-diarization; do
   runtime_dir="venv-engines/$engine_runtime"
   runtime_python="$runtime_dir/bin/python"
   [ -x "$runtime_python" ] || uv venv --python .venv/bin/python "$runtime_dir"
@@ -60,6 +60,9 @@ for engine_runtime in qwen3-asr vibevoice; do
   uv pip install --python "$runtime_python" -r "requirements/engines/$engine_runtime.txt"
   "$runtime_python" -m engine_runtimes.manifest "$engine_runtime" --include-optional --presets-dir model_presets
 done
+
+mkdir -p models/nemotron-diarization
+.venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='nvidia/Nemotron-3-Diarization', local_dir='models/nemotron-diarization', allow_patterns=['config.json','model.safetensors','processor_config.json'])"
 
 npm --prefix frontend ci
 npm --prefix frontend run build

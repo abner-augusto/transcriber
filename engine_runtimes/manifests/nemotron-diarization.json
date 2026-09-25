@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "runtime_id": "nemotron-diarization-v1",
+  "python": ">=3.10,<3.15",
+  "packages": {
+    "transformers": "==5.18.0.dev0",
+    "torch": ">=2.11,<2.12",
+    "torchaudio": "==2.11.0",
+    "librosa": ">=0.11,<1.0",
+    "soundfile": ">=0.13,<1.0"
+  },
+  "sources": {
+    "transformers": {
+      "url": "https://github.com/huggingface/transformers",
+      "commit": "11c16613d93911300c38ec8c9c2460567be53281"
+    }
+  },
+  "transformers": "==5.18.0.dev0",
+  "torch": {"version": ">=2.11,<2.12", "cuda": "CUDA 12.8 wheels tested"},
+  "model_types": ["nemotron3_diarization"],
+  "capabilities": {},
+  "required_imports": ["transformers.models.auto.modeling_auto:AutoModelForAudioFrameClassification"],
+  "tested": {"python": "3.14.7", "torch": "2.11.0", "cuda": "12.8", "transformers": "5.18.0.dev0", "platform": "Windows 11"}
+}

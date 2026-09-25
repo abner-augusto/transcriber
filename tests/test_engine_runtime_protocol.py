@@ -30,6 +30,27 @@ def test_protocol_defaults_legacy_request_to_transcribe_and_accepts_load():
     assert EngineRequest.from_dict(value).operation == "load"
 
 
+def test_diarize_request_and_empty_words_turn_response_round_trip():
+    value = request_dict()
+    value.update(engine_id="nemotron-3-diarization", operation="diarize", vocabulary=None,
+                 model_path="C:/models/nemotron")
+    value["options"] = {"threshold": 0.5}
+    assert EngineRequest.from_dict(value).operation == "diarize"
+    response = response_dict()
+    response["words"] = []
+    parsed = EngineResponse.from_dict(response)
+    assert parsed.words == () and len(parsed.native_turns) == 1
+    assert EngineResponse.from_dict(parsed.to_dict()) == parsed
+
+
+def test_diarize_rejects_other_engine_and_invalid_threshold():
+    value = request_dict(); value["operation"] = "diarize"
+    with pytest.raises(ProtocolError): EngineRequest.from_dict(value)
+    value = request_dict(); value.update(engine_id="nemotron-3-diarization", operation="diarize")
+    value["options"] = {"threshold": 2}
+    with pytest.raises(ProtocolError): EngineRequest.from_dict(value)
+
+
 @pytest.mark.parametrize("mutation", [
     lambda d: d.update(schema_version=2),
     lambda d: d.update(extra=True),

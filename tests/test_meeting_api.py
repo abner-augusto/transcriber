@@ -131,6 +131,36 @@ def test_blocked_preset_cannot_create_or_queue_job(db_session, monkeypatch):
     assert runner.submitted == []
 
 
+@pytest.mark.parametrize("route", ["process", "rediarize", "duplicate"])
+def test_blocked_diarizer_refuses_queueing_with_409(db_session, monkeypatch, tmp_path, route):
+    audio = tmp_path / "meeting.wav"
+    audio.write_bytes(b"RIFF")
+    meeting = Meeting(title="Blocked Diarizer", status=MeetingStatus.COMPLETED,
+        audio_filepath=str(audio), raw_transcription={"words": []})
+    db_session.add(meeting)
+    db_session.commit()
+    ready = {"id": "ready", "name": "Ready", "engine": "parakeet.cpp", "model_path": "m"}
+    monkeypatch.setattr("api.meetings.presets.resolve_preset", lambda _preset_id: ready)
+    monkeypatch.setattr("api.meetings.presets.get_preset", lambda _preset_id: ready)
+    monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: type(
+        "Ready", (), {"to_dict": lambda self: {"state": "ready", "summary": "ready"}})())
+    seen = []
+    monkeypatch.setattr("api.meetings.diarizer_status", lambda engine, **_kwargs: seen.append(engine) or {
+        "state": "blocked", "summary": "Dedicated runtime not found"})
+
+    client = TestClient(app)
+    if route == "duplicate":
+        response = client.post(f"/api/meetings/{meeting.id}/duplicate", json={"preset_id": "ready"})
+    else:
+        response = client.post(f"/api/meetings/{meeting.id}/{route}")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["message"] == "Dedicated runtime not found"
+    assert seen == ["pyannote"]
+    assert db_session.query(Job).count() == 0
+    assert db_session.query(Meeting).count() == 1
+
+
 @pytest.mark.parametrize(
     ("path", "kind"),
     [
@@ -156,6 +186,7 @@ def test_enqueue_routes_claim_once_and_submit_one_job(db_session, monkeypatch, p
         def to_dict(self):
             return {"state": "ready", "summary": "ready"}
     monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: ReadyHealth())
+    monkeypatch.setattr("api.meetings._require_usable_diarizer", lambda: {"state": "ready"})
     runner = app.state.test_job_runner
 
     client = TestClient(app)

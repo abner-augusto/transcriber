@@ -25,12 +25,15 @@ def write_manifest(tmp_path: Path, data: dict) -> Path:
     return path
 
 
-@pytest.mark.parametrize("runtime", ["qwen3-asr", "vibevoice"])
+@pytest.mark.parametrize("runtime", ["qwen3-asr", "vibevoice", "nemotron-diarization"])
 def test_checked_in_manifests_are_valid_and_portable(runtime):
     manifest = load_manifest(runtime)
 
     assert manifest.runtime_id.rsplit("-v", 1)[-1].isdigit()
-    expected_transformers = "==5.16.1" if runtime == "qwen3-asr" else "==4.57.6"
+    expected_transformers = {
+        "qwen3-asr": "==5.16.1", "vibevoice": "==4.57.6",
+        "nemotron-diarization": "==5.18.0.dev0",
+    }[runtime]
     assert manifest.transformers == expected_transformers
     raw = (MANIFEST_DIR / f"{runtime}.json").read_text(encoding="utf-8")
     assert "C:/Users/" not in raw
@@ -161,7 +164,7 @@ def test_git_requirements_use_full_immutable_commits():
     )
     paths = sorted(requirement_dir.glob("*.txt"))
 
-    assert [path.name for path in paths] == ["qwen3-asr.txt", "vibevoice.txt"]
+    assert [path.name for path in paths] == ["nemotron-diarization.txt", "qwen3-asr.txt", "vibevoice.txt"]
     for path in paths:
         git_lines = [
             line for line in path.read_text(encoding="utf-8").splitlines()
@@ -187,3 +190,7 @@ def test_installers_install_cuda_torch_inside_each_engine_runtime():
     linux = (root / "install.sh").read_text(encoding="utf-8")
     assert 'uv pip install --reinstall --python $runtimePython torch==2.11.0 torchaudio==2.11.0 --index-url' in windows
     assert 'uv pip install --reinstall --python "$runtime_python" torch==2.11.0 torchaudio==2.11.0 --index-url' in linux
+    assert '"nemotron-diarization"' in windows and 'vibevoice nemotron-diarization' in linux
+    for installer in (windows, linux):
+        assert "nvidia/Nemotron-3-Diarization" in installer
+        assert "processor_config.json" in installer

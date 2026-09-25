@@ -5,7 +5,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from engine_runtimes.manifest import load_manifest
+from engine_runtimes.manifest import load_manifest, runtime_for_engine
 from engine_runtimes.protocol import EngineRequest, EngineResponse, read_json, write_json
 
 
@@ -21,12 +21,15 @@ def run(engine_id, factory):
         if request.operation == "load":
             adapter.load()
             transcription = None
+        elif request.operation == "diarize":
+            turns = adapter.diarize(request.audio_path)
+            transcription = None
         else:
             transcription = adapter.transcribe(request.audio_path, vocabulary=request.vocabulary)
         words = () if transcription is None else tuple(transcription.words)
         native = None if transcription is None else transcription.native
-        turns = None if native is None else tuple(native.turns)
-        manifest = load_manifest(engine_id)
+        turns = tuple(turns) if request.operation == "diarize" else (None if native is None else tuple(native.turns))
+        manifest = load_manifest(runtime_for_engine(engine_id))
         fingerprint = hashlib.sha256((manifest.runtime_id + "\n" + sys.executable + "\n" + sys.version).encode()).hexdigest()
         provenance = {} if transcription is None else transcription.provenance
         response = EngineResponse(tuple(words), turns, provenance, fingerprint)

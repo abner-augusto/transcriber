@@ -14,6 +14,14 @@ from typing import Any, Mapping
 
 
 MANIFEST_DIR = Path(__file__).with_name("manifests")
+
+# An Engine runs in the runtime (manifest and virtual environment) of the same name,
+# except where one is named after its model family rather than the Engine.
+_ENGINE_RUNTIMES = {"nemotron-3-diarization": "nemotron-diarization"}
+
+
+def runtime_for_engine(engine_id: str) -> str:
+    return _ENGINE_RUNTIMES.get(engine_id, engine_id)
 _ROOT_FIELDS = {
     "schema_version", "runtime_id", "python", "packages", "transformers",
     "sources", "torch", "model_types", "capabilities", "required_imports", "tested",
@@ -286,7 +294,7 @@ def validate_presets(manifest: RuntimeManifest, presets_dir: str | Path) -> list
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("runtime", choices=("qwen3-asr", "vibevoice"))
+    parser.add_argument("runtime", choices=("qwen3-asr", "vibevoice", "nemotron-diarization"))
     parser.add_argument("--checkpoint")
     parser.add_argument("--capability")
     parser.add_argument("--include-optional", action="store_true")
