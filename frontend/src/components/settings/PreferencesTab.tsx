@@ -1,4 +1,4 @@
-import { deleteVocabularyEntry } from "../../api";
+import { deleteMisheardForm, deleteVocabularyEntry } from "../../api";
 import type { PreferencesForm } from "./usePreferencesForm";
 
 interface Props {
@@ -122,6 +122,20 @@ export default function PreferencesTab({ form }: Props) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
+                {(v.misheard_as ?? []).map((m) => (
+                  <span key={m.form} title={`Heard as "${m.form}" ${m.count}x`}
+                    className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 group/form">
+                    ← {m.form}
+                    <button aria-label={`Stop correcting "${m.form}"`}
+                      onClick={async () => {
+                        const updated = await deleteMisheardForm(v.id, m.form);
+                        setLearnedVocab(learnedVocab.map((e) => (e.id === v.id ? updated : e)));
+                      }}
+                      className="opacity-0 group-hover/form:opacity-100 text-slate-600 hover:text-red-400 transition">
+                      ×
+                    </button>
+                  </span>
+                ))}
               </span>
             ))}
           </div>

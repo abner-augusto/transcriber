@@ -23,6 +23,21 @@ def delete_entry(entry_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@router.delete("/{entry_id}/misheard-forms/{form}")
+def delete_misheard_form(entry_id: str, form: str, db: Session = Depends(get_db)):
+    """Stop correcting one learned Misheard Form while keeping its term."""
+    entry = db.query(VocabularyEntry).filter(VocabularyEntry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(404, "Entry not found")
+    forms = entry.misheard_as or []
+    kept = [item for item in forms if item.get("form") != form]
+    if len(kept) == len(forms):
+        raise HTTPException(404, "Misheard Form not found")
+    entry.misheard_as = kept
+    db.commit()
+    return entry.to_dict()
+
+
 @router.get("/suggest")
 def suggest_vocabulary(db: Session = Depends(get_db)):
     """Return top learned terms formatted as a vocabulary string for Whisper prompts."""

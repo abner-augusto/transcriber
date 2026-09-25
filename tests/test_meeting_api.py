@@ -275,3 +275,45 @@ def test_segment_edits_learn_and_increment_misheard_form(db_session):
 
     db_session.refresh(entry)
     assert entry.misheard_as == [{"form": "Galo", "count": 2}]
+
+
+def test_undoing_a_correction_by_hand_teaches_nothing_and_clears_corrections(db_session):
+    meeting = Meeting(title="Undo", status=MeetingStatus.COMPLETED)
+    db_session.add_all([meeting, VocabularyEntry(term="Garrah")])
+    db_session.flush()
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0, end_time=1.0,
+        text="Garrah confirmou", original_text="Garrah confirmou", order=0,
+        corrections=[{
+            "start": 0.0, "end": 0.4, "heard": "Galo", "term": "Garrah", "rule": "similar",
+        }],
+    )
+    db_session.add(segment)
+    db_session.commit()
+    client = TestClient(app)
+
+    response = client.put(f"/api/segments/{segment.id}", json={"text": "Galo confirmou"})
+
+    assert response.status_code == 200
+    assert response.json()["corrections"] == []
+    vocabulary = client.get("/api/vocabulary").json()
+    assert [(entry["term"], entry["misheard_as"]) for entry in vocabulary] == [("Garrah", [])]
+
+
+def test_one_misheard_form_can_be_deleted_without_the_term(db_session):
+    entry = VocabularyEntry(
+        term="Garrah", misheard_as=[{"form": "Galo", "count": 2}, {"form": "Garra", "count": 1}],
+    )
+    db_session.add(entry)
+    db_session.commit()
+    client = TestClient(app)
+
+    response = client.delete(f"/api/vocabulary/{entry.id}/misheard-forms/Galo")
+
+    assert response.status_code == 200
+    vocabulary = client.get("/api/vocabulary").json()
+    assert [(e["term"], e["misheard_as"]) for e in vocabulary] == [
+        ("Garrah", [{"form": "Garra", "count": 1}])
+    ]
+    missing = client.delete(f"/api/vocabulary/{entry.id}/misheard-forms/Galo")
+    assert missing.status_code == 404

@@ -238,6 +238,7 @@ export interface VocabularyEntry {
   frequency: number;
   source_meeting_id: string | null;
   created_at: string;
+  misheard_as: { form: string; count: number }[];
 }
 
 export async function listVocabulary(): Promise<VocabularyEntry[]> {
@@ -247,6 +248,11 @@ export async function listVocabulary(): Promise<VocabularyEntry[]> {
 
 export async function deleteVocabularyEntry(id: string): Promise<void> {
   await api.delete(`/vocabulary/${id}`);
+}
+
+export async function deleteMisheardForm(id: string, form: string): Promise<VocabularyEntry> {
+  const { data } = await api.delete(`/vocabulary/${id}/misheard-forms/${encodeURIComponent(form)}`);
+  return data;
 }
 
 export async function suggestVocabulary(): Promise<{ terms: string[]; text: string }> {
