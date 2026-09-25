@@ -1,295 +1,52 @@
-# Installation - Linux
+# Linux and macOS installation
 
-## Quick install
+## Requirements
 
-```bash
-git clone https://github.com/fltman/transcriber.git
-cd transcriber
-bash install.sh   # Automated installer
-bash start.sh     # Start all services
-```
+- Linux or macOS (64-bit)
+- Python 3.11–3.14, Git, Node.js 18+, npm, CMake, FFmpeg, and `uv`
+- A C++ compiler and build tools
+- NVIDIA CUDA toolkit for GPU builds on Linux, or Apple Metal on macOS
+- A Hugging Face account with access to pyannote/speaker-diarization-3.1
 
-The script handles everything below automatically. Read on if you prefer manual setup or need to troubleshoot.
+Install `uv` using the [official instructions](https://docs.astral.sh/uv/getting-started/installation/).
 
-## Prerequisites
+## Install and start
 
-- **Ubuntu 22.04+**, Debian 12+, or similar (other distros work with adjusted package commands)
-- **Docker** and **Docker Compose**
-- **Python 3.11+**
-- **Node.js 18+**
-- **FFmpeg**
-- **CMake** and **build-essential**
-- **Ollama**, or an OpenRouter API key
-- **Hugging Face account** with access to pyannote/speaker-diarization-3.1
-
-### Optional: NVIDIA GPU acceleration
-
-If you have an NVIDIA GPU, install the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) and NVIDIA drivers for faster transcription. Without a GPU, whisper.cpp runs on CPU (slower but works fine).
-
-## Installation
-
-### 1. Install system dependencies
+From the repository root:
 
 ```bash
-# Ubuntu/Debian
-sudo apt update
-sudo apt install -y git build-essential cmake ffmpeg python3 python3-venv python3-pip curl
-
-# Fedora
-sudo dnf install -y git gcc-c++ cmake ffmpeg python3 python3-pip curl
-
-# Arch
-sudo pacman -S git base-devel cmake ffmpeg python python-pip curl
+chmod +x install.sh start.sh
+./install.sh
 ```
 
-Install Node.js 18+ (if not already installed):
+The installer builds whisper.cpp and parakeet.cpp, installs the locked backend
+dependencies, prepares isolated Engine environments, downloads the default
+Parakeet model, and builds the frontend. Set `HF_AUTH_TOKEN` in `.env` to enable
+speaker diarization. Accept the pyannote model terms before processing audio.
+
+Start the app:
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
+./start.sh
 ```
 
-### 2. Clone the repo
+FastAPI, the Job runner, and the built UI use one Python process on port 8000.
+For frontend development, run `npm run dev` from `frontend/`; Vite proxies API
+requests to port 8000.
 
-```bash
-git clone https://github.com/fltman/transcriber.git
-cd transcriber
-```
+## Migrate an older PostgreSQL database
 
-### 3. Build whisper.cpp
-
-```bash
-git clone https://github.com/ggerganov/whisper.cpp.git ../whisper.cpp
-cd ../whisper.cpp
-
-# CPU only
-cmake -B build
-cmake --build build --config Release
-
-# OR with CUDA (if you have an NVIDIA GPU)
-# cmake -B build -DWHISPER_CUDA=ON
-# cmake --build build --config Release
-
-cd ../transcriber
-```
-
-The binary will be at `../whisper.cpp/build/bin/whisper-cli`.
-
-#### DTW Timestamps in whisper.cpp
-whisper.cpp natively supports Dynamic Time Warping (`-dtw <preset>`) for precise token/word timestamps.
-- Check support with: `../whisper.cpp/build/bin/whisper-cli --help` (look for `-dtw MODEL`).
-- Transcriber automatically detects the model preset (e.g. `large.v3.turbo`, `medium`, `small`, `base`, `tiny`) and passes `-dtw <preset> -nfa`.
-- If DTW is unsupported on an older build, it gracefully falls back to standard token timestamps with a warning in the logs.
-
-### 4. Download Whisper models
-
-```bash
-mkdir -p models
-
-# Medium model (main transcription, higher quality)
-curl -L -o models/kb_whisper_ggml_medium.bin \
-  https://huggingface.co/KBLab/kb-whisper-medium/resolve/main/ggml-model.bin
-
-# Small model (faster)
-curl -L -o models/kb_whisper_ggml_small.bin \
-  https://huggingface.co/KBLab/kb-whisper-small/resolve/main/ggml-model.bin
-```
-
-### 5. Start PostgreSQL and Redis
-
-```bash
-docker compose up -d
-```
-
-This starts:
-- PostgreSQL on port **5433**
-- Redis on port **6380**
-
-Verify they're running:
-
-```bash
-docker compose ps
-```
-
-### 6. Create the .env file
-
-```bash
-cat > .env << 'EOF'
-DATABASE_URL=postgresql://transcriber:transcriber@localhost:5433/transcriber
-REDIS_URL=redis://localhost:6380/0
-
-# LLM provider: "ollama" or "openrouter"
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3:8b
-
-# Alternative: OpenRouter (uncomment and fill in)
-# LLM_PROVIDER=openrouter
-# OPENROUTER_API_KEY=your_key_here
-# OPENROUTER_MODEL=anthropic/claude-sonnet-4
-
-# Paths to whisper.cpp (adjust to your setup)
-WHISPER_CLI_PATH=../whisper.cpp/build/bin/whisper-cli
-WHISPER_MODEL_PATH=./models/kb_whisper_ggml_medium.bin
-WHISPER_SMALL_MODEL_PATH=./models/kb_whisper_ggml_small.bin
-
-STORAGE_PATH=./storage
-
-# Hugging Face token (needed for pyannote.audio speaker diarization)
-# Get yours at https://huggingface.co/settings/tokens
-# You must accept the model terms at https://huggingface.co/pyannote/speaker-diarization-3.1
-HF_AUTH_TOKEN=hf_your_token_here
-EOF
-```
-
-Edit the file and fill in your actual paths and tokens.
-
-### 7. Set up the Python backend
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python -m pip check
-
-for engine in qwen3-asr vibevoice; do
-  python3 -m venv "venv-engines/$engine"
-  "venv-engines/$engine/bin/python" -m pip install torch==2.11.0 torchaudio==2.11.0
-  "venv-engines/$engine/bin/python" -m pip install -r "requirements/engines/$engine.txt"
-  "venv-engines/$engine/bin/python" -m engine_runtimes.manifest "$engine" --include-optional --presets-dir model_presets
-done
-```
-
-If you have an NVIDIA GPU, install the CUDA version of PyTorch first:
-
-```bash
-for engine in qwen3-asr vibevoice; do
-  "venv-engines/$engine/bin/python" -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
-  "venv-engines/$engine/bin/python" -m pip install -r "requirements/engines/$engine.txt"
-done
-```
-
-The VibeVoice requirement uses an immutable source commit. Compatibility is
-recorded in `engine_runtimes/manifests`. Validate model metadata with:
-
-```bash
-venv-engines/qwen3-asr/bin/python -m engine_runtimes.manifest qwen3-asr --checkpoint /path/to/Qwen3-ASR-1.7B-hf
-venv-engines/vibevoice/bin/python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/VibeVoice-ASR-Streaming-7B
-```
-
-On a compatibility error, recreate the affected Engine runtime and reinstall its
-requirement file. Qwen3-ASR uses Transformers 5.16.1 with native forced alignment;
-VibeVoice uses Transformers 4.57.6, BitsAndBytes NF4, and proportional Word timestamps. Do not mix
-their dependency sets.
-
-**Note**: First install downloads several GB of model files for pyannote.audio and SpeechBrain.
-
-### 8. Set up the frontend
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-### 9. Set up Ollama (if using local LLM)
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen3:8b
-```
-
-## Running
-
-Start all four services. Use separate terminals or a terminal multiplexer like tmux:
-
-```bash
-# Terminal 1 - Backend API
-source venv/bin/activate
-uvicorn main:app --port 8000 --reload
-
-# Terminal 2 - Celery worker (background processing)
-source venv/bin/activate
-celery -A tasks.celery_app worker --loglevel=info --pool=solo
-
-# Terminal 3 - Frontend
-cd frontend
-npm run dev
-
-# Terminal 4 - Ollama (if using local LLM)
-ollama serve
-```
-
-Open **http://localhost:5174** in your browser.
-
-### Running with tmux (all in one terminal)
-
-```bash
-tmux new-session -d -s transcriber
-
-# Backend
-tmux send-keys 'source venv/bin/activate && uvicorn main:app --port 8000 --reload' Enter
-
-# Celery
-tmux split-window -v
-tmux send-keys 'source venv/bin/activate && celery -A tasks.celery_app worker --loglevel=info --pool=solo' Enter
-
-# Frontend
-tmux split-window -v
-tmux send-keys 'cd frontend && npm run dev' Enter
-
-# Ollama
-tmux split-window -v
-tmux send-keys 'ollama serve' Enter
-
-tmux select-layout tiled
-tmux attach -t transcriber
-```
+Stop the old app and worker, then retain a PostgreSQL dump. Install the
+optional migration driver and follow the exact checks in
+[the verification plan](plans/TEST-PLAN.md#plan-018-postgresql-to-sqlite). The
+copy command never modifies its PostgreSQL source or overwrites its target.
+Keep the database and dump until you open and search the migrated Meetings.
 
 ## Troubleshooting
 
-### Permission denied on Docker
-Add your user to the docker group:
-
-```bash
-sudo usermod -aG docker $USER
-# Log out and back in for it to take effect
-```
-
-### pyannote.audio fails to install
-Make sure you have Python 3.11+. On Ubuntu 22.04, you may need:
-
-```bash
-sudo apt install python3.11 python3.11-venv
-python3.11 -m venv venv
-```
-
-### Slow transcription without GPU
-CPU-only transcription with the medium model can take 2-5x the audio length. Consider using the small model (edit `WHISPER_MODEL_PATH` in `.env`) for faster results, or use a machine with an NVIDIA GPU.
-
-### Celery worker crashes
-Check that Redis is running (`docker compose ps`) and that the `REDIS_URL` in `.env` is correct.
-
-### Slow first run
-The first transcription downloads pyannote and SpeechBrain model files (several GB). Subsequent runs use cached models.
-
-## Migrating from PostgreSQL to SQLite
-
-Keep the PostgreSQL database and a `pg_dump` backup until you have opened the
-SQLite database and confirmed the Meetings, transcripts, and search results.
-The migration command refuses to overwrite its target and never writes to the
-source database. Stop the app and worker first.
-
-```bash
-docker compose exec postgres pg_dump -U transcriber -d transcriber -Fc -f /tmp/transcriber-before-sqlite.dump
-docker compose cp postgres:/tmp/transcriber-before-sqlite.dump ./transcriber-before-sqlite.dump
-./venv/bin/python -m scripts.migrate_to_sqlite --from "postgresql://transcriber:transcriber@localhost:5433/transcriber" --to ./storage/transcriber.db
-```
-
-Use the PostgreSQL URL from your `.env` if its credentials differ. The command
-prints copied row counts and confirms the Segment text checksum for each
-Meeting. If it reports a schema mismatch, checksum mismatch, or row-count
-mismatch, stop and keep using the source database; do not point the app at the
-partial `.migrating` file. After a successful report, change `DATABASE_URL` in
-`.env` to `sqlite:///./storage/transcriber.db`, start the app, and verify your
-Meetings and search before retiring PostgreSQL.
+- Install your distribution's compiler, CMake, and FFmpeg packages if a native
+  Engine build fails.
+- If CUDA is unavailable, the installer builds CPU versions of the native
+  Engines.
+- The first model use downloads several gigabytes. Later runs use local caches.
+- Check `http://127.0.0.1:8000/api/health` for database and Engine status.

@@ -10,8 +10,9 @@
 
 ## Status
 
-- **Execution**: BLOCKED until Plans 018 and 019 are complete and the user has
-  confirmed their data migration. See [local verification checklist](LOCAL-VERIFICATION.md).
+- **Execution**: IN PROGRESS — Plans 018 and 019 are complete and the local
+  data migration is verified. The clean Windows install remains a release gate.
+  See [verification plan](TEST-PLAN.md).
 
 - **Priority**: P3
 - **Effort**: M
@@ -22,15 +23,12 @@
 
 ## Decisions (do not re-litigate)
 
-- Delete: Celery adapters, `tasks/celery_app.py`, Redis usage,
-  `docker-compose.yml`, the all-in-one image under `docker/` (unused and
-  already missing parakeet.cpp and the isolated runtimes), `_start_celery.ps1`,
-  and `redis`, `celery`, `psycopg2-binary` from the dependencies (keep
-  `psycopg2` only if the migration command must remain; otherwise document
-  running it from a pinned older tag).
-- Core dependencies move to `pyproject.toml` + `uv.lock` (pinned, like the
-  Engine runtimes already are). Engine venvs are created with `uv venv` and
-  `uv pip sync` from their existing requirement files.
+- Delete the Celery adapters, `tasks/celery_app.py`, Redis usage, Docker files,
+  `_start_celery.ps1`, and Celery/Redis dependencies. Keep
+  `psycopg2-binary` only in the optional `postgres-migration` group.
+- Core dependencies move to `pyproject.toml` + `uv.lock`. Install with
+  `uv sync --locked`; Engine venvs use `uv venv` and `uv pip install` with
+  their checked-in requirement files and the matching CPU/CUDA Torch build.
 - FastAPI serves `frontend/dist` (`StaticFiles` + SPA fallback) on one port.
   `npm run dev` with the Vite proxy remains the development loop only.
 - `start.ps1` / `start.sh` start one process and open the browser; no Docker
@@ -48,12 +46,17 @@
    Linux (CI or this environment).
 3. Static frontend serving + SPA fallback; one start command.
 4. Delete Docker files and the Docker sections of the docs. Record the
-   decision as an ADR ("Single-process local runtime") since it reverses the
-   documented hybrid setup.
+   decision in [ADR-0008](../docs/adr/0008-single-process-local-runtime.md),
+   which replaces the earlier hybrid setup.
 
 ## Done criteria
 
-- [ ] Clean Windows install with no Docker Desktop, verified by the user
-- [ ] One process, one port, one start command
-- [ ] `rg -i "celery|redis|docker|postgres" --type py` matches nothing outside the migration command and history docs
-- [ ] ADR written
+- [ ] Clean Windows install with Docker Desktop stopped or absent, verified on a fresh checkout
+- [x] One FastAPI process, one port, one start command; Jobs run in their planned child process
+- [x] Celery and Redis packages/adapters are removed; PostgreSQL is an explicit migration extra only
+- [x] ADR written
+
+The latest local code verification passed 340 backend tests, 36 frontend tests,
+the production frontend build, and lock/syntax checks. The complete installer
+has not been run from a fresh checkout with Docker Desktop stopped or absent;
+that machine-level acceptance criterion remains open.

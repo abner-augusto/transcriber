@@ -29,7 +29,6 @@ class Job(Base):
     meeting_id: Mapped[str] = mapped_column(String, ForeignKey("meetings.id", ondelete="CASCADE"))
     job_type: Mapped[JobType] = mapped_column(Enum(JobType), nullable=False)
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.PENDING)
-    celery_task_id: Mapped[str] = mapped_column(String, nullable=True)
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     current_step: Mapped[str] = mapped_column(String, nullable=True)
     total_steps: Mapped[int] = mapped_column(Integer, nullable=True)

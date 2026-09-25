@@ -53,224 +53,60 @@ failing a Job in the worker.
 ## Architecture
 
 ```
-Browser ─── React/Vite ──┐
-                         ├── FastAPI ─── Celery Worker ─── whisper.cpp (Metal GPU)
-                         │      │              │
-                         │   WebSocket     pyannote.audio
-                         │   (progress)    SpeechBrain
-                         │      │           LLM (Ollama/OpenRouter)
-                         │      │
-                     PostgreSQL  Redis
-                      (data)   (queue + pubsub)
+Browser ─── FastAPI ─── SQLite + FTS5
+               │
+               ├── in-process Job queue
+               ├── spawned child process per Job
+               └── built React UI + WebSocket progress
 ```
 
-**Hybrid setup**: PostgreSQL and Redis run in Docker. Python backend and Celery worker run natively on macOS for Metal GPU access.
+FastAPI, the local Job runner, and the built frontend use one application
+process and one port. A child process handles each Job so model memory is
+released when the Job ends. Vite remains available for frontend development.
 
 ## Platform guides
 
-The instructions below are for **macOS with Apple Silicon**. For other platforms:
+For platform-specific prerequisites and troubleshooting:
 - [Windows installation guide](INSTALL_WINDOWS.md)
 - [Linux installation guide](INSTALL_LINUX.md)
 
 ## Prerequisites
 
-- **macOS** with Apple Silicon (for Metal GPU acceleration)
-- **Docker** and **Docker Compose**
-- **Python 3.11+**
-- **Node.js 18+**
-- **FFmpeg** (`brew install ffmpeg`)
-- **whisper.cpp** compiled with Metal support
-- **Ollama** with a model like `qwen3:8b` (recommended), or an OpenRouter API key
-- **Hugging Face token** with access to `pyannote/speaker-diarization-3.1`
+- Windows 10/11, Linux, or macOS
+- Python 3.11–3.14, `uv`, Node.js 18+, npm, CMake, FFmpeg, Git, and a C++ toolchain
+- NVIDIA CUDA or Apple Metal for GPU acceleration (optional)
+- Hugging Face access to `pyannote/speaker-diarization-3.1` for diarization
 
 ## Quick install
 
 ```bash
 git clone https://github.com/fltman/transcriber.git
 cd transcriber
-bash install.sh   # macOS/Linux automated installer
-bash start.sh     # Start all services
+./install.sh
+./start.sh
 ```
 
-On Windows, use `install.ps1` and `start.ps1` instead (see [Windows guide](INSTALL_WINDOWS.md)).
+On Windows, use `install.ps1` and `start.ps1` instead.
 
-The installer checks prerequisites, builds whisper.cpp, downloads models, sets up Python/Node dependencies, starts Docker, and creates the `.env` file. You only need to add your Hugging Face token afterwards.
+The installer builds whisper.cpp and parakeet.cpp, installs the locked Python
+dependencies and isolated Engine environments, downloads the default Parakeet
+model, builds the frontend, and creates `.env`. Add `HF_AUTH_TOKEN` there if
+speaker diarization is needed. The app opens at <http://127.0.0.1:8000>.
 
-## Manual installation
+For frontend development, run `npm run dev` in `frontend/`; Vite proxies API
+requests to port 8000.
 
-### 1. Clone the repo
+## Migrate an older PostgreSQL database
 
-```bash
-git clone https://github.com/fltman/transcriber.git
-cd transcriber
-```
+For existing PostgreSQL data, retain a database dump and follow the migration
+and verification steps in [plans/TEST-PLAN.md](plans/TEST-PLAN.md#plan-018-postgresql-to-sqlite).
+The importer reads the source without changing it and refuses to overwrite its
+SQLite target. Keep the dump until the migrated Meetings open and search works.
 
-### 2. Build whisper.cpp with Metal support
+## Tests and release checks
 
-```bash
-git clone https://github.com/ggerganov/whisper.cpp.git ../whisper.cpp
-cd ../whisper.cpp
-cmake -B build -DWHISPER_METAL=ON
-cmake --build build --config Release
-cd ../transcriber
-```
-
-### 3. Download Whisper models
-
-Download the KB-LAB Swedish GGML models:
-
-```bash
-mkdir -p models
-# Medium model (main transcription, higher quality)
-curl -L -o models/kb_whisper_ggml_medium.bin \
-  https://huggingface.co/KBLab/kb-whisper-medium/resolve/main/ggml-model.bin
-
-# Small model (faster)
-curl -L -o models/kb_whisper_ggml_small.bin \
-  https://huggingface.co/KBLab/kb-whisper-small/resolve/main/ggml-model.bin
-```
-
-### 4. Start PostgreSQL and Redis
-
-```bash
-docker-compose up -d
-```
-
-This starts:
-- PostgreSQL on port **5433**
-- Redis on port **6380**
-
-### 5. Create the .env file
-
-```bash
-cat > .env << 'EOF'
-DATABASE_URL=postgresql://transcriber:transcriber@localhost:5433/transcriber
-REDIS_URL=redis://localhost:6380/0
-
-# LLM provider: "ollama" or "openrouter"
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3:8b
-
-# Alternative: OpenRouter (uncomment and fill in)
-# LLM_PROVIDER=openrouter
-# OPENROUTER_API_KEY=your_key_here
-# OPENROUTER_MODEL=anthropic/claude-sonnet-4
-
-# Paths to whisper.cpp (adjust to your setup)
-WHISPER_CLI_PATH=../whisper.cpp/build/bin/whisper-cli
-WHISPER_MODEL_PATH=./models/kb_whisper_ggml_medium.bin
-WHISPER_SMALL_MODEL_PATH=./models/kb_whisper_ggml_small.bin
-
-STORAGE_PATH=./storage
-
-# Hugging Face token (needed for pyannote.audio speaker diarization)
-# Get yours at https://huggingface.co/settings/tokens
-# You must accept the model terms at https://huggingface.co/pyannote/speaker-diarization-3.1
-HF_AUTH_TOKEN=hf_your_token_here
-EOF
-```
-
-Edit the file and fill in your actual paths and tokens.
-
-### 6. Set up the Python backend
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python -m pip check
-
-for engine in qwen3-asr vibevoice; do
-  python3 -m venv "venv-engines/$engine"
-  "venv-engines/$engine/bin/python" -m pip install torch==2.11.0 torchaudio==2.11.0
-  "venv-engines/$engine/bin/python" -m pip install -r "requirements/engines/$engine.txt"
-  "venv-engines/$engine/bin/python" -m engine_runtimes.manifest "$engine" --include-optional --presets-dir model_presets
-done
-```
-
-Each Engine has an independent compatibility contract and tested
-Python/Torch/CUDA/Transformers matrix in `engine_runtimes/manifests/`. Qwen3-ASR uses native Transformers
-5.16.1 support, including the Qwen3 ForcedAligner; VibeVoice remains isolated on
-Transformers 4.57.6 and uses BitsAndBytes NF4 quantization. Do not
-upgrade either runtime independently of its manifest.
-
-To verify downloaded checkpoint metadata, configure its path and run, for example:
-
-```bash
-python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/VibeVoice-ASR-Streaming-7B
-python -m engine_runtimes.manifest vibevoice --checkpoint /path/to/Qwen3-ForcedAligner-0.6B-hf --capability forced-alignment
-```
-
-If validation fails, recreate the virtual environment and reinstall the checked-in
-requirements. The installer does not upgrade pip or select newer Engine revisions.
-
-After any dependency or model change, run the tiered Engine release gate. The
-metadata tier is deterministic and never loads weights, contacts the network, or
-allocates GPU memory:
-
-```bash
-python -m pytest -m "not model_load and not model_inference" -q
-python -m scripts.engine_doctor
-python -m scripts.engine_doctor --json
-```
-
-The following heavyweight checks are local-operator gates only. They never run in
-the ordinary suite, require both the explicit flag and independently selected
-Preset IDs, and reject non-local model/audio paths. Run one Preset at a time on
-resource-constrained machines:
-
-```bash
-python -m pytest -m model_load --run-engine-smoke --engine-smoke-preset qwen3-asr-1.7b -q
-python -m pytest -m model_inference --run-engine-smoke --engine-smoke-preset qwen3-asr-1.7b --engine-smoke-audio /path/to/tiny-local-speech.wav -q
-python -m scripts.engine_doctor --tier load --preset qwen3-asr-1.7b --run-engine-smoke
-python -m scripts.engine_doctor --tier inference --preset qwen3-asr-1.7b --audio /path/to/tiny-local-speech.wav --run-engine-smoke --json
-```
-
-Repeat `--engine-smoke-preset`/`--preset` to select additional Presets, or set
-`ENGINE_SMOKE_PRESETS` to a comma-separated list for pytest. Inference validates
-the `Word` contract and native `Turn` contract where advertised; it deliberately
-does not assert exact transcript wording. Use only redistributable test speech or
-your own local fixture—never commit private Meeting audio. Both heavy tiers force
-Hugging Face and Transformers offline mode before loading an Engine.
-
-### 7. Set up the frontend
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-### 8. Set up Ollama (if using local LLM)
-
-```bash
-# Install Ollama from https://ollama.com
-ollama pull qwen3:8b
-```
-
-## Running
-
-Start all services. You need **four terminals** (or use `&` to background them):
-
-```bash
-# Terminal 1 - Backend API
-source venv/bin/activate
-uvicorn main:app --port 8000 --reload
-
-# Terminal 2 - Celery worker (background processing)
-source venv/bin/activate
-celery -A tasks.celery_app worker --loglevel=info --pool=solo
-
-# Terminal 3 - Frontend
-cd frontend
-npm run dev
-
-# Terminal 4 - Ollama (if using local LLM)
-ollama serve
-```
-
-Open **http://localhost:5174** in your browser.
+The consolidated backend, frontend, migration, local-model, and clean-install
+checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 
 ## Usage
 
@@ -315,7 +151,7 @@ transcriber/
 │   ├── embedding_service.py   # SpeechBrain ECAPA-TDNN
 │   └── speaker_id_service.py  # Speaker Namer: Participant N + Voice Profiles
 ├── tasks/
-│   ├── celery_app.py          # Celery config
+│   ├── runners.py             # In-process progress bus and local Job runner
 │   ├── process_meeting.py     # Main pipeline
 │   ├── reprocess_task.py      # Re-diarize / re-identify
 │   └── shared.py              # build_segments: Words + Turns -> Segments
@@ -352,12 +188,12 @@ transcriber/
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Zustand |
-| Backend | FastAPI, SQLAlchemy, Celery |
-| Transcription | whisper.cpp with KB-LAB Swedish models |
-| Diarization | pyannote.audio 3.1 |
+| Backend | FastAPI, SQLAlchemy, SQLite, local Job runner |
+| Transcription | parakeet.cpp, faster-whisper, and optional local Engines |
+| Diarization | pyannote.audio |
 | Voice embeddings | SpeechBrain ECAPA-TDNN |
-| LLM | Ollama (qwen3:8b) or OpenRouter (Claude Sonnet 4) |
-| Infrastructure | PostgreSQL, Redis, Docker Compose |
+| Search | SQLite FTS5 with accent-insensitive matching |
+| Runtime | `uv` locked Python dependencies and one FastAPI process |
 | Media | FFmpeg |
 
 ## API endpoints
@@ -374,12 +210,11 @@ transcriber/
 | `PUT` | `/api/segments/{id}` | Edit segment text |
 | `PUT` | `/api/speakers/{id}` | Rename/recolor speaker |
 | `POST` | `/api/speakers/merge` | Merge two speakers |
-| `GET` | `/api/actions` | List actions |
-| `POST` | `/api/actions` | Create custom action |
-| `POST` | `/api/actions/{id}/run` | Run action on meeting |
-| `GET` | `/api/actions/results/{id}/export` | Export action result |
-| `POST` | `/api/meetings/{id}/encrypt` | Encrypt meeting |
-| `POST` | `/api/meetings/{id}/decrypt` | Decrypt meeting |
+| `POST` | `/api/meetings/{id}/rediarize` | Re-run speaker diarization |
+| `POST` | `/api/meetings/{id}/reidentify` | Re-identify speakers |
+| `POST` | `/api/meetings/{id}/reapply-vocabulary` | Reapply vocabulary corrections |
+| `GET` | `/api/search?q=...` | Search transcript segments |
+| `GET` | `/api/meetings/{id}/analytics` | Get meeting analytics |
 | `GET` | `/api/model-settings/presets` | List model presets |
 | `GET` | `/api/model-settings/assignments` | Get model assignments |
 | `PUT` | `/api/model-settings/assignments` | Update model assignments |

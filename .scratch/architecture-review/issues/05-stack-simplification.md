@@ -25,7 +25,7 @@ not.
 **Blocked by:** 02 (Job module), 04 (child process). The SQLite + FTS5 swap
 can be done independently and first.
 
-**Status:** in-progress (Plan 018 implementation; user data migration pending)
+**Status:** in-progress (Plans 018/019 verified; Plan 020 implementation complete, clean Windows install pending)
 
 **Plans:** `plans/018-sqlite-and-migration.md` (SQLite + FTS5, manual migration command)
 and `plans/020-remove-legacy-infrastructure.md` (remove Redis/Celery/Postgres/Docker, `uv`,
@@ -47,6 +47,6 @@ Segment text checksums must match before the app is pointed at SQLite.
   single-process change.
 
 **Acceptance criteria (draft):**
-- [ ] Fresh Windows install without Docker
-- [ ] Search matches accented and unaccented Portuguese spellings
-- [ ] `start.ps1` / `start.sh` start one process
+- [ ] Fresh Windows install with Docker Desktop stopped or absent
+- [x] Search matches accented and unaccented Portuguese spellings
+- [x] `start.ps1` / `start.sh` start the app on one port with local Jobs

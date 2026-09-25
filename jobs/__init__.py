@@ -92,12 +92,8 @@ def enqueue(db, meeting_id: str, kind: JobType) -> Job:
     db.add(job)
     db.commit()
 
-    external_id = _runner_adapter().submit(job)
-    if external_id is not None:
-        job.celery_task_id = external_id
-        db.commit()
-    else:
-        db.refresh(job)
+    _runner_adapter().submit(job)
+    db.refresh(job)
     return job
 
 

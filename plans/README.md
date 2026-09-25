@@ -42,16 +42,17 @@ the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`.
 | 015 | The Transcriber returns a Transcription (ticket 01) | P2 | M | 012 | IN PROGRESS |
 | 016 | One place for Preferences, RunConfig per Job (ticket 03) | P2 | L | 015 (soft) | DONE |
 | 017 | One Job module, Celery as first adapter (ticket 02) | P2 | M | 007 | DONE |
-| 018 | SQLite + FTS5, one-shot migration from Postgres (ticket 05) | P2 | M | — | IN PROGRESS (user migration pending) |
-| 019 | Local Job runner, child process per Job (ticket 04) | P2 | L | 017, 018 | BLOCKED: migration confirmation and load-time measurements |
-| 020 | Remove Redis/Celery/Postgres/Docker, `uv`, one start command (ticket 05) | P3 | M | 018, 019 | BLOCKED: plans 018 and 019 |
+| 018 | SQLite + FTS5, one-shot migration from Postgres (ticket 05) | P2 | M | — | DONE |
+| 019 | Local Job runner, child process per Job (ticket 04) | P2 | L | 017, 018 | DONE |
+| 020 | Remove Redis/Celery/Postgres/Docker, `uv`, one start command (ticket 05) | P3 | M | 018, 019 | IN PROGRESS (clean Windows install pending) |
 | 021 | Evaluate VibeVoice against the daily stack (ticket 07) | P3 | M | 012, 013 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
-Local-only gates and their evidence are collected in
-[`LOCAL-VERIFICATION.md`](LOCAL-VERIFICATION.md).
+All test commands, local gates, acceptance conditions, and evidence are
+centralized in [`TEST-PLAN.md`](TEST-PLAN.md). Current local outcomes are
+summarized in [`LOCAL-VERIFICATION.md`](LOCAL-VERIFICATION.md).
 
 ## Dependency notes
 
@@ -59,11 +60,13 @@ Local-only gates and their evidence are collected in
   **016** → **017** → **018** → **019** → **020**. 014, 015 and 016 all touch
   `tasks/process_meeting.py`; run them one after another, not in parallel.
   **021** needs the user's GPU and recordings and can run any time.
-- 018 needs the user to run the migration command on their data before 020.
-- **Run locally by the user, never by an agent**: 014 step 5 (Vocabulary
-  Correction bench on the corrected Meetings), 019 steps 1 and 6 (model load
-  time, VRAM, end-to-end Job), 020's clean Windows install, and **all of plan
-  021** (GPU and private recordings; transcripts stay off the repository).
+- 018's migration was run at the user's request; the retained source dump is
+  under ignored `storage/backups/`.
+- **Local-only gates**: 014 step 5 (Vocabulary Correction bench on the
+  corrected Meetings), 015's model load/inference smoke checks, 020's clean
+  Windows install, and **all of plan 021** (GPU and private recordings;
+  transcripts stay off the repository). Plans 018/019 local checks were run at
+  the user's request and are documented in `LOCAL-VERIFICATION.md`.
   An agent executing 014 or 019 implements everything up to the step that
   needs the machine and stops there: leave those acceptance boxes unchecked,
   write in the plan's Outcome note that the step is waiting for a local run,

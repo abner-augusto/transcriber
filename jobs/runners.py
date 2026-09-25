@@ -25,27 +25,14 @@ class ProgressBus(Protocol):
     def check(self) -> None: ...
 
 
-TASK_NAMES = {
+TASK_HANDLERS = {
     JobType.PROCESS_MEETING: "tasks.process_meeting.process_meeting_task",
     JobType.REDIARIZE: "tasks.reprocess_task.rediarize_task",
     JobType.REIDENTIFY: "tasks.reprocess_task.reidentify_task",
     JobType.REAPPLY_VOCABULARY: "tasks.reprocess_task.reapply_vocabulary_task",
 }
-TASK_HANDLERS = TASK_NAMES
 
 log = logging.getLogger(__name__)
-
-
-class CeleryJobRunner:
-    """Submit Jobs through the retained Celery adapter until Plan 020."""
-
-    def submit(self, job: Job) -> str:
-        from tasks.celery_app import celery_app
-
-        result = celery_app.send_task(
-            TASK_NAMES[job.job_type], args=[job.meeting_id, job.id]
-        )
-        return result.id
 
 
 class InlineJobRunner:
@@ -434,54 +421,3 @@ def _execute_job_in_child(handler_path: str, meeting_id: str, job_id: str, messa
 
     configure(progress_bus=QueueProgressBus(messages))
     _import_handler(handler_path)(meeting_id, job_id)
-
-
-class RedisProgressBus:
-    """Redis progress adapter retained until Plan 020 removes the old stack."""
-
-    def __init__(self, redis_url: str | None = None):
-        if redis_url is None:
-            from config import settings
-            redis_url = settings.redis_url
-        self.redis_url = redis_url
-        self._client = None
-
-    @staticmethod
-    def _channel(meeting_id: str) -> str:
-        return f"meeting:{meeting_id}"
-
-    def publish(self, meeting_id: str, event: dict) -> None:
-        import json
-        import redis
-
-        if self._client is None:
-            self._client = redis.Redis.from_url(self.redis_url)
-        self._client.publish(self._channel(meeting_id), json.dumps(event))
-
-    def check(self) -> None:
-        import redis
-
-        client = redis.Redis.from_url(self.redis_url)
-        try:
-            client.ping()
-        finally:
-            client.close()
-
-    async def subscribe(self, meeting_id: str) -> AsyncIterator[dict]:
-        import json
-        import redis.asyncio as aioredis
-
-        client = aioredis.from_url(self.redis_url)
-        pubsub = client.pubsub()
-        channel = self._channel(meeting_id)
-        await pubsub.subscribe(channel)
-        try:
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    yield json.loads(message["data"])
-        finally:
-            try:
-                await pubsub.unsubscribe(channel)
-                await pubsub.close()
-            finally:
-                await client.aclose()

@@ -1,308 +1,119 @@
-# Transcriber installer for Windows
-# Usage: powershell -ExecutionPolicy Bypass -File install.ps1
-
+# Install the local Transcriber runtime.
 $ErrorActionPreference = "Stop"
+$ProjectRoot = $PSScriptRoot
+Set-Location $ProjectRoot
 
-function Info($msg)  { Write-Host "[INFO] $msg" -ForegroundColor Cyan }
-function Ok($msg)    { Write-Host "[OK]   $msg" -ForegroundColor Green }
-function Warn($msg)  { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
-function Fail($msg)  { Write-Host "[FAIL] $msg" -ForegroundColor Red; exit 1 }
-function Assert-NativeSuccess($step, $exitCode) {
-    if ($exitCode -ne 0) { Fail "$step failed with exit code $exitCode" }
+function Assert-NativeSuccess($Step) {
+    if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE" }
 }
 
-Write-Host ""
-Write-Host "========================================"
-Write-Host "  Transcriber - Automated Installer"
-Write-Host "========================================"
-Write-Host ""
-
-# -------------------------------------------
-# Step 1: Check prerequisites
-# -------------------------------------------
-Info "Checking prerequisites..."
-
-$missing = @()
-
-if (-not (Get-Command git -ErrorAction SilentlyContinue))    { $missing += "git" }
-if (-not (Get-Command python -ErrorAction SilentlyContinue))  { $missing += "python" }
-if (-not (Get-Command node -ErrorAction SilentlyContinue))    { $missing += "node" }
-if (-not (Get-Command npm -ErrorAction SilentlyContinue))     { $missing += "npm" }
-if (-not (Get-Command cmake -ErrorAction SilentlyContinue))   { $missing += "cmake" }
-if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue))  { $missing += "ffmpeg" }
-if (-not (Get-Command docker -ErrorAction SilentlyContinue))  { $missing += "docker" }
-
-if ($missing.Count -gt 0) {
-    Write-Host ""
-    Warn "Missing required tools: $($missing -join ', ')"
-    Write-Host ""
-    Write-Host "  Install with winget:"
-    foreach ($tool in $missing) {
-        switch ($tool) {
-            "git"    { Write-Host "    winget install Git.Git" }
-            "python" { Write-Host "    winget install Python.Python.3.12" }
-            "node"   { Write-Host "    winget install OpenJS.NodeJS.LTS" }
-            "cmake"  { Write-Host "    winget install Kitware.CMake" }
-            "ffmpeg" { Write-Host "    winget install Gyan.FFmpeg" }
-            "docker" { Write-Host "    winget install Docker.DockerDesktop" }
-        }
+foreach ($tool in @("git", "python", "node", "npm", "cmake", "ffmpeg", "uv")) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        throw "Required tool '$tool' was not found. Install Python 3.11+, Node.js 18+, CMake, FFmpeg, Git, and uv."
     }
-    Write-Host ""
-    $reply = Read-Host "Continue anyway? (y/N)"
-    if ($reply -ne "y" -and $reply -ne "Y") { exit 1 }
 }
 
-# Check Python version
-try {
-    $pyVer = python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-    $pyMajor, $pyMinor = $pyVer -split '\.'
-    if ([int]$pyMajor -lt 3 -or ([int]$pyMajor -eq 3 -and [int]$pyMinor -lt 11)) {
-        Warn "Python 3.11+ recommended, found $pyVer"
-    } else {
-        Ok "Python $pyVer"
-    }
-} catch {
-    Warn "Could not check Python version"
-}
-
-Ok "Prerequisites check done"
-
-# -------------------------------------------
-# Step 2: Build whisper.cpp
-# -------------------------------------------
-Write-Host ""
-$whisperDir = Join-Path (Split-Path $PWD -Parent) "whisper.cpp"
+$whisperDir = Join-Path (Split-Path $ProjectRoot -Parent) "whisper.cpp"
 $whisperBin = Join-Path $whisperDir "build\bin\Release\whisper-cli.exe"
-
-if (Test-Path $whisperBin) {
-    Ok "whisper.cpp already built"
-} else {
-    Info "Building whisper.cpp..."
-
+if (-not (Test-Path $whisperBin)) {
     if (-not (Test-Path $whisperDir)) {
         git clone https://github.com/ggerganov/whisper.cpp.git $whisperDir
+        Assert-NativeSuccess "whisper.cpp clone"
     }
-
     Push-Location $whisperDir
-
-    # Check for NVIDIA GPU
-    $hasNvidia = Get-Command nvidia-smi -ErrorAction SilentlyContinue
-    if ($hasNvidia) {
-        Info "NVIDIA GPU detected, building with CUDA"
-        # Force VS 2022 generator — avoids picking up VS 2026 Preview if installed.
-        # GGML_CUDA=ON is the current flag (WHISPER_CUDA was deprecated).
-        cmake -B build -G "Visual Studio 17 2022" -DGGML_CUDA=ON
-    } else {
-        Info "No NVIDIA GPU detected, building CPU-only"
-        cmake -B build -G "Visual Studio 17 2022"
-    }
-
+    $cuda = if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) { "-DGGML_CUDA=ON" } else { "" }
+    if ($cuda) { cmake -B build -G "Visual Studio 17 2022" $cuda }
+    else { cmake -B build -G "Visual Studio 17 2022" }
+    Assert-NativeSuccess "whisper.cpp configuration"
     cmake --build build --config Release
+    Assert-NativeSuccess "whisper.cpp build"
     Pop-Location
+}
 
-    if (Test-Path $whisperBin) {
-        Ok "whisper.cpp built successfully"
-    } else {
-        Fail "whisper.cpp build failed. Make sure Visual Studio 2022 with C++ workload is installed."
+$parakeetDir = Join-Path (Split-Path $ProjectRoot -Parent) "parakeet.cpp"
+$parakeetBin = Join-Path $parakeetDir "build\examples\cli\Release\parakeet-cli.exe"
+if (-not (Test-Path $parakeetBin)) {
+    if (-not (Test-Path $parakeetDir)) {
+        git clone --recursive https://github.com/mudler/parakeet.cpp $parakeetDir
+        Assert-NativeSuccess "parakeet.cpp clone"
     }
+    Push-Location $parakeetDir
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        cmake -B build -DPARAKEET_GGML_CUDA=ON
+    } else {
+        cmake -B build
+    }
+    Assert-NativeSuccess "parakeet.cpp configuration"
+    cmake --build build --config Release
+    Assert-NativeSuccess "parakeet.cpp build"
+    Pop-Location
 }
 
-# -------------------------------------------
-# Step 3: Download Whisper models
-# -------------------------------------------
-Write-Host ""
-if (-not (Test-Path "models")) { New-Item -ItemType Directory -Path "models" | Out-Null }
-
-if (Test-Path "models\ggml-large-v3-turbo.bin") {
-    Ok "Large-v3-Turbo model already downloaded"
-} else {
-    Info "Downloading Whisper Large-v3-Turbo model (~800 MB)..."
-    curl.exe -L --progress-bar -o "models\ggml-large-v3-turbo.bin" `
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
-    Ok "Large-v3-Turbo model downloaded"
+if (-not (Test-Path ".venv\Scripts\python.exe")) {
+    uv venv --python python .venv
+    Assert-NativeSuccess "application virtual environment creation"
 }
-
-# -------------------------------------------
-# Step 4: Start Docker services
-# -------------------------------------------
-Write-Host ""
-$dockerRunning = docker compose ps --status running 2>$null | Select-String "postgres"
-if ($dockerRunning) {
-    Ok "Docker services already running"
-} else {
-    Info "Starting PostgreSQL and Redis..."
-    docker compose up -d
-    Ok "Docker services started"
-}
-
-# -------------------------------------------
-# Step 5: Python virtual environment
-# -------------------------------------------
-Write-Host ""
-if (Test-Path "venv") {
-    Ok "Python venv already exists"
-} else {
-    Info "Creating Python virtual environment..."
-    python -m venv venv
-    Ok "Created venv"
-}
-
-Info "Installing Python dependencies (this may take a while)..."
-& "venv\Scripts\activate.ps1"
-
-# Install torch with CUDA support if an NVIDIA GPU is present
+uv sync --locked --extra dev
+Assert-NativeSuccess "application dependency sync"
 if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-    Info "Installing PyTorch with CUDA 12.8 support..."
-    pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128 -q
-    Assert-NativeSuccess "PyTorch CUDA installation" $LASTEXITCODE
-} else {
-    Info "Installing PyTorch (CPU-only)..."
-    pip install torch==2.11.0 torchaudio==2.11.0 -q
-    Assert-NativeSuccess "PyTorch CPU installation" $LASTEXITCODE
+    uv pip install --reinstall --python .venv\Scripts\python.exe torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+    Assert-NativeSuccess "CUDA PyTorch installation"
 }
+New-Item -ItemType Directory -Force -Path "models\parakeet" | Out-Null
+& ".venv\Scripts\python.exe" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='mudler/parakeet-cpp-gguf', filename='tdt-0.6b-v3-q4_k.gguf', local_dir='models/parakeet')"
+if ($LASTEXITCODE -ne 0) { throw "Parakeet model download failed" }
 
-python -m pip install -r requirements.txt -q
-Assert-NativeSuccess "Application dependency installation" $LASTEXITCODE
-python -m pip check
-Assert-NativeSuccess "Dependency integrity validation" $LASTEXITCODE
 foreach ($engineRuntime in @("qwen3-asr", "vibevoice")) {
     $runtimeDir = Join-Path "venv-engines" $engineRuntime
     $runtimePython = Join-Path $runtimeDir "Scripts\python.exe"
     if (-not (Test-Path $runtimePython)) {
-        python -m venv $runtimeDir
-        Assert-NativeSuccess "$engineRuntime environment creation" $LASTEXITCODE
+        uv venv --python .venv\Scripts\python.exe $runtimeDir
+        Assert-NativeSuccess "$engineRuntime environment creation"
     }
     if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-        & $runtimePython -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128 -q
-        Assert-NativeSuccess "$engineRuntime CUDA PyTorch installation" $LASTEXITCODE
+        uv pip install --reinstall --python $runtimePython torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+        Assert-NativeSuccess "$engineRuntime CUDA PyTorch installation"
     } else {
-        & $runtimePython -m pip install torch==2.11.0 torchaudio==2.11.0 -q
-        Assert-NativeSuccess "$engineRuntime CPU PyTorch installation" $LASTEXITCODE
+        uv pip install --python $runtimePython torch==2.11.0 torchaudio==2.11.0
+        Assert-NativeSuccess "$engineRuntime PyTorch installation"
     }
-    & $runtimePython -m pip install -r "requirements/engines/$engineRuntime.txt" -q
-    Assert-NativeSuccess "$engineRuntime dependency installation" $LASTEXITCODE
-    & $runtimePython -m pip check
-    Assert-NativeSuccess "$engineRuntime dependency integrity validation" $LASTEXITCODE
+    uv pip install --python $runtimePython -r "requirements/engines/$engineRuntime.txt"
+    Assert-NativeSuccess "$engineRuntime dependency installation"
     & $runtimePython -m engine_runtimes.manifest $engineRuntime --include-optional --presets-dir model_presets
-    Assert-NativeSuccess "$engineRuntime runtime validation" $LASTEXITCODE
+    if ($LASTEXITCODE -ne 0) { throw "$engineRuntime runtime validation failed" }
 }
-Ok "Python dependencies installed and validated"
 
-# -------------------------------------------
-# Fix: speechbrain LazyModule path check fails on Windows
-# The guard that suppresses lazy k2 imports during inspect.stack() uses a
-# Unix-style path ("/inspect.py") so it never matches on Windows ("\\inspect.py"),
-# causing a crash when pyannote loads its models.
-# -------------------------------------------
-$sbImportUtils = "venv\Lib\site-packages\speechbrain\utils\importutils.py"
+# Work around speechbrain's Unix-only inspect.py path check on Windows.
+$sbImportUtils = ".venv\Lib\site-packages\speechbrain\utils\importutils.py"
 if (Test-Path $sbImportUtils) {
     $content = Get-Content $sbImportUtils -Raw
-    $patched = '        if importer_frame is not None and (
+    $pattern = 'if importer_frame is not None and importer_frame.filename.endswith\(\s*"/inspect\.py"\s*\):'
+    $replacement = @'
+if importer_frame is not None and (
             importer_frame.filename.endswith("/inspect.py")
             or importer_frame.filename.endswith("\\inspect.py")
-        ):'
-    $original = '        if importer_frame is not None and importer_frame.filename.endswith(
-            "/inspect.py"
-        ):'
-    if ($content -notmatch [regex]::Escape('endswith("\\inspect.py")')) {
-        $content = $content.Replace($original, $patched)
-        Set-Content $sbImportUtils $content -Encoding UTF8 -NoNewline
-        Ok "Applied speechbrain Windows path fix"
-    } else {
-        Ok "speechbrain Windows path fix already applied"
-    }
-} else {
-    Warn "speechbrain importutils.py not found — skipping patch"
+        ):
+'@
+    $content = [regex]::Replace($content, $pattern, $replacement, 1)
+    Set-Content $sbImportUtils $content -Encoding UTF8 -NoNewline
 }
 
-# -------------------------------------------
-# Step 6: Frontend
-# -------------------------------------------
-Write-Host ""
-if (Test-Path "frontend\node_modules") {
-    Ok "Frontend dependencies already installed"
-} else {
-    Info "Installing frontend dependencies..."
-    Push-Location frontend
-    npm install --silent
-    Pop-Location
-    Ok "Frontend dependencies installed"
-}
+Push-Location frontend
+npm ci
+Assert-NativeSuccess "frontend dependency installation"
+npm run build
+Assert-NativeSuccess "frontend build"
+Pop-Location
 
-# -------------------------------------------
-# Step 7: Create .env file
-# -------------------------------------------
-Write-Host ""
-if (Test-Path ".env") {
-    Ok ".env file already exists (not overwriting)"
-} else {
-    Info "Creating .env file..."
-    $whisperCliPath = $whisperBin -replace '\\', '/'
+if (-not (Test-Path ".env")) {
+    $whisperPath = $whisperBin -replace '\\', '/'
     @"
-DATABASE_URL=postgresql://transcriber:transcriber@localhost:5433/transcriber
-REDIS_URL=redis://localhost:6380/0
-
-# LLM Settings (OpenAI-compatible API)
-# For local Ollama: http://localhost:11434/v1
-# For OpenRouter: https://openrouter.ai/api/v1
-LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_API_KEY=
-LLM_MODEL=anthropic/claude-3.5-sonnet
-
-WHISPER_CLI_PATH=$whisperCliPath
-WHISPER_MODEL_PATH=./models/ggml-large-v3-turbo.bin
-WHISPER_SMALL_MODEL_PATH=./models/ggml-small.bin
-
-
+DATABASE_URL=sqlite:///./storage/transcriber.db
 STORAGE_PATH=./storage
-
-# Hugging Face token (needed for pyannote.audio speaker diarization)
-# Get yours at https://huggingface.co/settings/tokens
-# You must accept the model terms at https://huggingface.co/pyannote/speaker-diarization-3.1
-HF_AUTH_TOKEN=hf_your_token_here
+WHISPER_CLI_PATH=$whisperPath
+PARAKEET_CLI_PATH=../parakeet.cpp/build/examples/cli/Release/parakeet-cli.exe
+HF_AUTH_TOKEN=
 "@ | Set-Content -Path ".env" -Encoding UTF8
-    Ok ".env file created"
-    Warn "Edit .env and add your Hugging Face token before running!"
 }
 
-# -------------------------------------------
-# Step 8: Check for Ollama
-# -------------------------------------------
-Write-Host ""
-if (Get-Command ollama -ErrorAction SilentlyContinue) {
-    Ok "Ollama is installed"
-    $ollamaList = ollama list 2>$null
-    if ($ollamaList -match "qwen3:8b") {
-        Ok "qwen3:8b model is available"
-    } else {
-        Info "Pulling qwen3:8b model..."
-        ollama pull qwen3:8b
-    }
-} else {
-    Warn "Ollama not installed. Install from https://ollama.com or use OpenRouter instead."
-}
-
-# -------------------------------------------
-# Done
-# -------------------------------------------
-Write-Host ""
-Write-Host "========================================"
-Write-Host "  Installation complete!" -ForegroundColor Green
-Write-Host "========================================"
-Write-Host ""
-Write-Host "  Before first run, make sure to:"
-Write-Host "    1. Edit .env and set HF_AUTH_TOKEN"
-Write-Host "    2. Accept pyannote model terms at:"
-Write-Host "       https://huggingface.co/pyannote/speaker-diarization-3.1"
-Write-Host ""
-Write-Host "  To start the app, run:"
-Write-Host "    .\start.ps1"
-Write-Host ""
-Write-Host "  Or start manually in 4 terminals:"
-Write-Host "    venv\Scripts\activate; uvicorn main:app --port 8000 --reload"
-Write-Host "    venv\Scripts\activate; celery -A tasks.celery_app worker --loglevel=info --pool=solo"
-Write-Host "    cd frontend; npm run dev"
-Write-Host "    ollama serve"
-Write-Host ""
-Write-Host "  Then open http://localhost:5174"
-Write-Host ""
+Write-Host "Install complete. Set HF_AUTH_TOKEN in .env if speaker diarization is needed, then run .\start.ps1."

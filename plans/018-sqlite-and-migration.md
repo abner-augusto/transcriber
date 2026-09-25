@@ -105,8 +105,8 @@ historical reference; they are no longer an active migration mechanism.
   source/target schemas, row counts, and per-Meeting Segment text checksums,
   then renames the verified file into place. It does not write to the source
   or overwrite an existing target.
-- Verification: full backend suite passed (335 passed; 20 model smoke tests
-  deselected), and the SQLite/search/migration focused tests passed (8 passed).
+- Verification: the latest backend release suite passed (340 passed; 20 model
+  smoke checks deselected); SQLite migration-focused checks also passed.
 - **PostgreSQL migration completed 2026-09-25** at the user's request. A
   compressed `pg_dump` and byte-identical `.env` backup are in ignored
   `storage/backups/`; the original Postgres container and data remain intact.

@@ -1,10 +1,13 @@
 import shutil
+import logging
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from sqlalchemy.engine import make_url
 
 from config import settings
+
+log = logging.getLogger(__name__)
 
 
 def configure_sqlite_engine(sqlite_engine):
@@ -76,7 +79,7 @@ def cleanup_orphaned_storage():
         meeting_ids = {row[0] for row in db.query(Meeting.id).all()}
         removed = 0
         for d in storage.iterdir():
-            if d.is_dir() and d.name not in meeting_ids:
+            if d.is_dir() and d.name != "backups" and d.name not in meeting_ids:
                 shutil.rmtree(d, ignore_errors=True)
                 removed += 1
         if removed:

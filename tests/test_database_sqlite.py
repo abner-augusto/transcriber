@@ -8,7 +8,7 @@ from migrations.runner import upgrade
 import models  # noqa: F401: register every mapped table in Base.metadata
 
 
-def test_fresh_sqlite_database_initializes_without_postgres(tmp_path, monkeypatch):
+def test_fresh_sqlite_database_initializes_without_legacy_database(tmp_path, monkeypatch):
     engine = create_engine(
         URL.create("sqlite", database=str(tmp_path / "app.db")),
         connect_args={"check_same_thread": False},
@@ -28,4 +28,26 @@ def test_fresh_sqlite_database_initializes_without_postgres(tmp_path, monkeypatc
     assert {"segments_fts", "segments_fts_data", "segments_fts_idx"}.issubset(reflected)
     assert "schema_migrations" in reflected
 
+    engine.dispose()
+
+
+def test_orphan_cleanup_preserves_migration_backups(tmp_path, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+
+    storage = tmp_path / "storage"
+    backups = storage / "backups"
+    orphan = storage / "orphan-meeting"
+    backups.mkdir(parents=True)
+    orphan.mkdir()
+    (backups / "database.dump").write_bytes(b"retained")
+
+    engine = create_engine(URL.create("sqlite", database=str(tmp_path / "cleanup.db")))
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(database, "SessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setattr("config.get_storage_path", lambda: storage)
+
+    database.cleanup_orphaned_storage()
+
+    assert (backups / "database.dump").read_bytes() == b"retained"
+    assert not orphan.exists()
     engine.dispose()

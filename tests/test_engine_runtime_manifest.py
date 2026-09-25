@@ -185,5 +185,5 @@ def test_installers_install_cuda_torch_inside_each_engine_runtime():
 
     windows = (root / "install.ps1").read_text(encoding="utf-8")
     linux = (root / "install.sh").read_text(encoding="utf-8")
-    assert '& $runtimePython -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url' in windows
-    assert '"$runtime_python" -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url' in linux
+    assert 'uv pip install --reinstall --python $runtimePython torch==2.11.0 torchaudio==2.11.0 --index-url' in windows
+    assert 'uv pip install --reinstall --python "$runtime_python" torch==2.11.0 torchaudio==2.11.0 --index-url' in linux

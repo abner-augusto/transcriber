@@ -107,7 +107,7 @@ def test_timeout_must_be_positive(tmp_path):
         launch_engine(python=str(tmp_path / "missing.exe"), module="runner", request=_request(tmp_path), timeout=0)
 
 
-def test_core_api_and_celery_do_not_import_heavy_python_engines():
+def test_core_api_and_jobs_do_not_import_heavy_python_engines():
     root = Path(__file__).resolve().parents[1]
     targets = [root / "engines" / "__init__.py", root / "engines" / "isolated_python.py",
                *sorted((root / "tasks").glob("*.py")), *sorted((root / "api").glob("*.py"))]
