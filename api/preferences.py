@@ -1,4 +1,4 @@
-"""Vocabulary Profiles API — CRUD for reusable term Presets."""
+"""Vocabulary Profiles API — CRUD for reusable, named lists of Vocabulary terms."""
 
 import uuid
 

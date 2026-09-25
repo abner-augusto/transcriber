@@ -134,8 +134,8 @@ def get_settings():
 
 @app.put("/api/settings/preferences")
 def update_preferences(body: dict):
-    from preferences import public, update_from_settings_api
-    update_from_settings_api(body)
+    from preferences import apply_preferences_request, public
+    apply_preferences_request(body)
     return public()
 
 

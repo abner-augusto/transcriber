@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 
 MIN_SPEAKER_SWITCH_PENALTY = 0.0
 MAX_SPEAKER_SWITCH_PENALTY = 2.0
+MAX_DEFAULT_VOCABULARY_LENGTH = 2000
 
 
 # Where releases before plan 016 kept Preferences: the repository root, which is
@@ -69,7 +70,7 @@ class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_preset: str | None = None
-    default_vocabulary: str = Field(default="", max_length=2000)
+    default_vocabulary: str = Field(default="", max_length=MAX_DEFAULT_VOCABULARY_LENGTH)
     speaker_profiles_enabled: bool = False
     hf_auth_token: str = ""
     speaker_switch_penalty: float = Field(
@@ -238,11 +239,15 @@ def update(
     return updated
 
 
-def update_from_settings_api(body: dict) -> Preferences:
-    """Keep the existing settings endpoint's ignore/clamp behavior in one place."""
+def apply_preferences_request(body: dict) -> Preferences:
+    """Apply a PUT /api/settings/preferences body.
+
+    The route's contract is to ignore a value it cannot use rather than reject
+    the request; bounds come from the models, so they are stated once.
+    """
     patch: dict[str, Any] = {}
     if "default_vocabulary" in body:
-        patch["default_vocabulary"] = (body["default_vocabulary"] or "").strip()[:2000]
+        patch["default_vocabulary"] = (body["default_vocabulary"] or "").strip()[:MAX_DEFAULT_VOCABULARY_LENGTH]
     if "speaker_profiles_enabled" in body:
         patch["speaker_profiles_enabled"] = bool(body["speaker_profiles_enabled"])
     if isinstance(body.get("vocabulary_correction"), dict):
@@ -255,45 +260,41 @@ def update_from_settings_api(body: dict) -> Preferences:
             patch["hf_auth_token"] = value
     if "diarization" in body:
         raw = body["diarization"] if isinstance(body["diarization"], dict) else {}
-        bounds = {"clustering_threshold": (0.0, 1.0), "Fa": (0.0, 5.0), "Fb": (0.0, 5.0)}
-        clean = {}
-        for key, (low, high) in bounds.items():
-            value = raw.get(key)
-            if value is None or value == "":
-                continue
-            try:
-                number = float(value)
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(number) and low <= number <= high:
-                clean[key] = number
-        patch["diarization"] = clean
+        patch["diarization"] = {
+            key: number
+            for key in DiarizationPrefs.model_fields
+            if (number := _accepted_number(DiarizationPrefs, key, raw.get(key))) is not None
+        }
     if "speaker_switch_penalty" in body:
-        try:
-            penalty = float(body["speaker_switch_penalty"])
-        except (TypeError, ValueError):
-            penalty = None
-        if (
-            penalty is not None
-            and math.isfinite(penalty)
-            and MIN_SPEAKER_SWITCH_PENALTY <= penalty <= MAX_SPEAKER_SWITCH_PENALTY
-        ):
+        penalty = _accepted_number(Preferences, "speaker_switch_penalty", body["speaker_switch_penalty"])
+        if penalty is not None:
             patch["speaker_switch_penalty"] = penalty
     if "forced_alignment" in body:
         raw_alignment = body["forced_alignment"]
+        if isinstance(raw_alignment, bool):
+            raw_alignment = {"enabled": raw_alignment}
         if isinstance(raw_alignment, dict):
             patch["forced_alignment"] = {
+                **ForcedAlignmentPrefs().model_dump(),
+                **{key: str(raw_alignment[key]) for key in ("model", "device") if key in raw_alignment},
                 "enabled": bool(raw_alignment.get("enabled", False)),
-                "model": str(raw_alignment.get("model", "mms-fa")),
-                "device": str(raw_alignment.get("device", "auto")),
-            }
-        elif isinstance(raw_alignment, bool):
-            patch["forced_alignment"] = {
-                "enabled": raw_alignment,
-                "model": "mms-fa",
-                "device": "auto",
             }
     return update(patch)
+
+
+def _accepted_number(model: type[BaseModel], field: str, value) -> float | None:
+    """``value`` as a finite float the model's field accepts, else None."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    try:
+        model.__pydantic_validator__.validate_assignment(model.model_construct(), field, number)
+    except ValidationError:
+        return None
+    return number
 
 
 def public(*, storage_dir: Path | None = None) -> dict:
