@@ -1,3 +1,5 @@
+import pytest
+
 from engines import Turn, Word, DiarizationResult
 from models import JobType, Meeting, VocabularyEntry
 from tasks.process_meeting import process_meeting_task
@@ -89,3 +91,55 @@ def test_reapply_vocabulary_updates_segments_and_keeps_existing_speakers(
     ] == [(speaker_id, "Manual name", "manual", 1, 0.5)]
     assert meeting.segments[0].text == "Garrah"
     assert meeting.segments[0].corrections[0]["rule"] == "misheard"
+
+
+def _processed_segment(monkeypatch, tmp_path, words: list[Word], vocabulary: str):
+    harness = h.install(
+        monkeypatch, tmp_path,
+        transcriber=FakeTranscriber(words),
+        diarization=DiarizationResult(turns=[Turn(0, 10, "SPEAKER_00")]),
+    )
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+        update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
+    ))
+    meeting_id = harness.meeting(vocabulary=vocabulary)
+    job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
+    assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
+    (segment,) = harness.load(meeting_id).segments
+    return segment
+
+
+@pytest.mark.parametrize(
+    ("heard", "vocabulary", "expected_text", "expected_terms"),
+    [
+        pytest.param(
+            [" Garrah,", " confirmou."], "Vocabulary: Garrah",
+            "Garrah, confirmou.", [],
+            id="term-already-spelled-right-before-punctuation",
+        ),
+        pytest.param(
+            [" (Garra)", " confirmou."], "Vocabulary: Garrah",
+            "(Garrah) confirmou.", ["Garrah"],
+            id="punctuation-around-a-corrected-word-survives",
+        ),
+        pytest.param(
+            [" Stefanopoulos", " chegou."], "Vocabulary: Stephanopoulos",
+            "Stephanopoulos chegou.", ["Stephanopoulos"],
+            id="ph-sounds-like-f",
+        ),
+        pytest.param(
+            [" Ga", " rr", " ah"], "Vocabulary: Garrah, Banco Central do Brasil",
+            "Ga rr ah", [],
+            id="one-word-term-matches-at-most-two-words",
+        ),
+    ],
+)
+def test_vocabulary_correction_rules_seen_in_processed_segments(
+    monkeypatch, tmp_path, heard, vocabulary, expected_text, expected_terms
+):
+    words = [Word(0.1 + i * 0.3, 0.35 + i * 0.3, text) for i, text in enumerate(heard)]
+
+    segment = _processed_segment(monkeypatch, tmp_path, words, vocabulary)
+
+    assert segment.text == expected_text
+    assert [correction["term"] for correction in segment.corrections] == expected_terms

@@ -84,25 +84,32 @@ class VocabularyCorrection:
             }
         ]
         max_words = max(
-            [len(term.split()) + 1 for term in self.terms]
-            + [len(form.heard.split()) + 1 for form in eligible]
+            [_window_limit(term) for term in self.terms]
+            + [_window_limit(form.heard) for form in eligible]
             + [1]
         )
         matches: list[tuple[int, int, str, Literal["similar", "misheard"]]] = []
         for end in range(start + 1, min(len(words), start + max_words) + 1):
+            window = end - start
             if end > start + 1 and any(
                 words[index].start - words[index - 1].end > MAX_MERGE_GAP_SECONDS
                 for index in range(start + 1, end)
             ):
                 break
             heard_norm = normalize_vocabulary_text("".join(word.text for word in words[start:end]))
-            heard_spelling = "".join(word.text for word in words[start:end]).strip()
+            heard_spelling = _without_edge_punctuation(
+                "".join(word.text for word in words[start:end])
+            )
             if not heard_norm:
                 continue
             for form in eligible:
+                if window > _window_limit(form.heard):
+                    continue
                 if heard_norm == normalize_vocabulary_text(form.heard):
                     matches.append((end, 2, form.term, "misheard"))
             for term in self.terms:
+                if window > _window_limit(term):
+                    continue
                 term_norm = normalize_vocabulary_text(term)
                 if len(_letters(term_norm)) < 4 or (
                     heard_norm == term_norm and heard_spelling == term
@@ -132,10 +139,7 @@ def parse_vocabulary(text: str | None) -> list[str]:
     for line in text.splitlines() or [text]:
         if ":" in line:
             label, value = line.split(":", 1)
-            normalized_label = normalize_vocabulary_text(label)
-            if normalized_label in {"speaker", "speakers", "participante", "participantes"}:
-                line = value
-            elif normalized_label in {"vocabulary", "term", "terms", "termo", "termos", "vocabulario"}:
+            if normalize_vocabulary_text(label) in _VOCABULARY_LABELS:
                 line = value
         for item in re.split(r"[,;\n]", line):
             term = item.strip()
@@ -144,6 +148,12 @@ def parse_vocabulary(text: str | None) -> list[str]:
             }:
                 terms.append(term)
     return terms
+
+
+_VOCABULARY_LABELS = {
+    "speaker", "speakers", "participante", "participantes",
+    "vocabulary", "term", "terms", "termo", "termos", "vocabulario",
+}
 
 
 def normalize_vocabulary_text(value: str) -> str:
@@ -157,6 +167,15 @@ def _letters(value: str) -> str:
     return "".join(ch for ch in value if ch.isalpha())
 
 
+def _window_limit(phrase: str) -> int:
+    """A phrase may be heard split into at most one more Word than it has."""
+    return len(phrase.split()) + 1
+
+
+def _without_edge_punctuation(spelling: str) -> str:
+    return re.sub(r"^\W+|\W+$", "", spelling)
+
+
 def _phonetic_key(value: str) -> str:
     """Small PT-BR key: folds common spelling variants, not a full phonetic model."""
     # Map cedilla before NFKD strips it and leaves a plain c behind.
@@ -165,22 +184,21 @@ def _phonetic_key(value: str) -> str:
         char for char in key
         if not unicodedata.combining(char) and char.isalnum()
     )
-    key = key.replace("ch", "\0")
+    key = key.replace("ph", "f").replace("ch", "\0")
     key = re.sub(r"(?<![cln])h", "", key)  # preserve ch, lh, and nh
-    key = key.replace("ç", "s")
     key = re.sub(r"ss|sc(?=[ei])|c(?=[ei])", "s", key)
     key = re.sub(r"qu(?=[ei])|c", "k", key)
     key = re.sub(r"g(?=[ei])|j", "j", key)
     # ``ch`` was temporarily protected above, so restore its x sound here.
     key = key.replace("\0", "x")
     key = re.sub(r"(?<=[aeiou])z(?=[aeiou])", "s", key)
-    key = key.replace("w", "v").replace("y", "i").replace("ph", "f")
+    key = key.replace("w", "v").replace("y", "i")
     return re.sub(r"(.)\1+", r"\1", key)
 
 
 def _replacement_word(words: list[Word], term: str) -> Word:
     first, last = words[0], words[-1]
-    leading = re.match(r"\s*", first.text).group(0)
+    leading = re.match(r"\W*", first.text).group(0)
     trailing_match = re.search(r"[^\w\s]+$", last.text)
     trailing = trailing_match.group(0) if trailing_match else ""
     confidences = [word.confidence for word in words if word.confidence is not None]
