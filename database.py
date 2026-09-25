@@ -1,21 +1,40 @@
-import logging
 import shutil
-from datetime import datetime
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.engine import make_url
 
 from config import settings
 
-log = logging.getLogger(__name__)
 
-engine = create_engine(
-    settings.database_url,
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30,
-    pool_pre_ping=True,  # verify connections before use
-)
+def configure_sqlite_engine(sqlite_engine):
+    """Apply connection-local SQLite settings required by the application."""
+    @event.listens_for(sqlite_engine, "connect")
+    def _configure_sqlite(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
+_database_url = make_url(settings.database_url)
+if _database_url.get_backend_name() == "sqlite":
+    if _database_url.database not in (None, ":memory:"):
+        from pathlib import Path
+
+        Path(_database_url.database).expanduser().resolve().parent.mkdir(
+            parents=True, exist_ok=True
+        )
+    engine = create_engine(
+        _database_url,
+        connect_args={"check_same_thread": False},
+    )
+    configure_sqlite_engine(engine)
+else:
+    # Kept so the one-shot migration command can import the model metadata while
+    # the user's existing .env still points at PostgreSQL. The application itself
+    # refuses to start against a non-SQLite database in init_db().
+    engine = create_engine(_database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -32,29 +51,15 @@ def get_db():
 
 
 def init_db():
+    if engine.dialect.name != "sqlite":
+        raise RuntimeError(
+            "The application now uses SQLite. Migrate PostgreSQL with "
+            "scripts.migrate_to_sqlite and update DATABASE_URL."
+        )
     Base.metadata.create_all(bind=engine)
+    from migrations.runner import upgrade
 
-    migrations = [
-        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS vocabulary TEXT",
-        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS participants TEXT",
-        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS preset_id VARCHAR",
-        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS mic_audio_filepath VARCHAR",
-        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS system_audio_filepath VARCHAR",
-        "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS is_dual_track BOOLEAN",
-        "ALTER TABLE segments ADD COLUMN IF NOT EXISTS confidence FLOAT",
-        "ALTER TABLE segments ADD COLUMN IF NOT EXISTS corrections JSON",
-        "ALTER TABLE vocabulary_entries ADD COLUMN IF NOT EXISTS misheard_as JSON",
-        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS run_config JSON",
-        # Full-text search index on segment text
-        "CREATE INDEX IF NOT EXISTS ix_segments_text_search ON segments USING gin (to_tsvector('simple', text))",
-    ]
-    with engine.connect() as conn:
-        for sql in migrations:
-            try:
-                conn.execute(text(sql))
-            except Exception as e:
-                log.debug(f"Migration skipped: {sql[:60]}... ({e})")
-        conn.commit()
+    upgrade(engine)
 
 
 def cleanup_orphaned_storage():

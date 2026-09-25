@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
@@ -7,18 +9,22 @@ from database import get_db
 router = APIRouter(prefix="/api", tags=["search"])
 
 
+def _fts_prefix_query(query: str) -> str:
+    """Build an AND query of safely quoted FTS5 token prefixes."""
+    terms = re.findall(r"[^\W_]+", query, flags=re.UNICODE)
+    return " AND ".join(f'"{term}"*' for term in terms)
+
+
 @router.get("/search")
 def search_segments(
     q: str = Query(..., min_length=1, max_length=200),
     db: Session = Depends(get_db),
 ):
-    """Full-text search across all meeting segments.
+    """Search segment text with accent-insensitive FTS5 and prefix matching."""
+    fts_query = _fts_prefix_query(q)
+    if not fts_query:
+        return []
 
-    Uses PostgreSQL tsvector for efficient matching. Returns segments
-    grouped by meeting with context (speaker name, timestamps).
-    """
-    # Use plainto_tsquery for safe user input (no special syntax needed)
-    # Also fall back to ILIKE for partial word matching
     results = db.execute(
         sa_text("""
             SELECT
@@ -26,23 +32,20 @@ def search_segments(
                 m.title AS meeting_title,
                 sp.display_name AS speaker_name,
                 sp.color AS speaker_color,
-                ts_rank(to_tsvector('simple', s.text), plainto_tsquery('simple', :q)) AS rank
-            FROM segments s
+                bm25(segments_fts) AS rank
+            FROM segments_fts
+            JOIN segments s ON s.rowid = segments_fts.rowid
             JOIN meetings m ON m.id = s.meeting_id
             LEFT JOIN speakers sp ON sp.id = s.speaker_id
-            WHERE to_tsvector('simple', s.text) @@ plainto_tsquery('simple', :q)
-               OR s.text ILIKE :like_q
-            ORDER BY rank DESC, m.created_at DESC, s."order"
+            WHERE segments_fts MATCH :fts_query
+            ORDER BY rank ASC, m.created_at DESC, s."order"
             LIMIT 100
         """),
-        {"q": q, "like_q": f"%{q}%"},
+        {"fts_query": fts_query},
     )
 
-    rows = results.fetchall()
-
-    # Group by meeting
     meetings_map: dict[str, dict] = {}
-    for row in rows:
+    for row in results.fetchall():
         mid = row.meeting_id
         if mid not in meetings_map:
             meetings_map[mid] = {

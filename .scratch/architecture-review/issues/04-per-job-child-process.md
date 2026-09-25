@@ -14,9 +14,10 @@ faster-whisper cache). Freeing VRAM depends on a hard-coded list in
 to register holds VRAM until the worker restarts. A native crash (CUDA, ffmpeg
 binding) takes the worker down.
 
-**Blocked by:** 02 (the child process is the local-worker adapter of the Job module).
+**Blocked by:** Plan 018's user data migration confirmation and the local
+model-load measurements in Plan 019 Step 1. Plan 017 (issue 02) is complete.
 
-**Status:** ready-for-agent
+**Status:** blocked (user-only prerequisites)
 
 **Plan:** `plans/019-local-job-runner.md` (one Python process, child process per Job,
 progress over a queue, timeout = max(60 min, 3× audio), PENDING Jobs resume on restart).

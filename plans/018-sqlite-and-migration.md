@@ -9,6 +9,10 @@
 
 ## Status
 
+- **Execution**: IN PROGRESS — SQLite, FTS5, numbered migrations, and the
+  migration command are implemented; the user's PostgreSQL migration and data
+  review remain pending.
+
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: HIGH (the user's data; many Meetings recorded)
@@ -45,9 +49,10 @@ text-search config does not remove accents, which hurts Portuguese search.
 ## Steps
 
 1. **Schema management**: choose Alembic vs numbered SQL (record the choice
-   here). Baseline revision = today's models plus the columns added by
-   `init_db`; delete the ALTER list and `migrations/*.sql` once the baseline
-   reproduces them (compare `sqlite3 .schema` against the models).
+  here). Baseline revision = today's models plus the columns added by
+  `init_db`; remove the ALTER list and move the old PostgreSQL-only SQL out of
+  `migrations/` once the baseline reproduces them (compare SQLite schema
+  against the models).
 2. **Engine settings**: SQLite `connect_args={"check_same_thread": False}`,
    `PRAGMA journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000` on
    connect. Drop the Postgres pool args.
@@ -63,13 +68,44 @@ text-search config does not remove accents, which hurts Portuguese search.
 
 ## Done criteria
 
-- [ ] Fresh install works with no Postgres
-- [ ] Migration command copies a populated database with matching counts and checksums
-- [ ] Search finds accented and unaccented spellings
-- [ ] One schema-migration mechanism
+- [x] Fresh SQLite schema initializes without Postgres
+- [x] Migration command copies a populated SQLite fixture with matching row
+      counts and Segment text checksums; the user's Postgres run remains below
+- [x] Search finds accented and unaccented spellings
+- [x] One schema-migration mechanism
 - [ ] The user ran the migration on their data and confirmed (record date here)
+
+## Schema management decision
+
+Use SQLAlchemy model metadata as the initial schema baseline, followed by a
+small numbered Python migration runner for SQLite-only schema operations such
+as FTS5 virtual tables and triggers. Alembic would add a dependency without
+helping the one-user app's small, local schema changes. The old hand-run
+PostgreSQL SQL scripts were moved to `docs/archive/postgres-migrations/` for
+historical reference; they are no longer an active migration mechanism.
 
 ## STOP conditions
 
 - Any table fails count or checksum verification. Never "fix" data silently.
 - A model uses a Postgres-only type that SQLite cannot represent losslessly.
+
+## Outcome
+
+- SQLite WAL, foreign-key enforcement, and 5-second busy timeout are configured
+  for every application connection. The default database path is
+  `storage/transcriber.db`.
+- `database.init_db()` creates the SQLite model baseline and applies numbered
+  schema migrations. It refuses to start the application on PostgreSQL; the
+  separate migration command can still read it while the existing `.env` is
+  unchanged.
+- FTS5 search supports accent-insensitive token matching, token prefixes,
+  relevance ranking, Meeting grouping, and index triggers for segment edits.
+- `scripts.migrate_to_sqlite` copies to a new temporary SQLite file, checks
+  source/target schemas, row counts, and per-Meeting Segment text checksums,
+  then renames the verified file into place. It does not write to the source
+  or overwrite an existing target.
+- Verification: full backend suite passed (335 passed; 20 model smoke tests
+  deselected), and the SQLite/search/migration focused tests passed (8 passed).
+- **User gate remains:** run the migration on the existing Postgres data,
+  inspect the summary and representative Meetings/search results, and record
+  confirmation before marking the plan DONE.

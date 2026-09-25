@@ -7,7 +7,7 @@ os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql://transcriber:transcriber@localhost:5433/transcriber"
+    database_url: str = "sqlite:///./storage/transcriber.db"
     redis_url: str = "redis://localhost:6380/0"
 
     # Engine binaries. The models they run are named by a Preset, not here — see presets.py.

@@ -10,6 +10,9 @@
 
 ## Status
 
+- **Execution**: BLOCKED until Plans 018 and 019 are complete and the user has
+  confirmed their data migration. See [local verification checklist](LOCAL-VERIFICATION.md).
+
 - **Priority**: P3
 - **Effort**: M
 - **Risk**: MED (installers and docs)

@@ -13,6 +13,9 @@
 
 ## Status
 
+- **Execution**: BLOCKED pending the user's Plan 018 migration confirmation
+  and Step 1 model-load measurements. See [local verification checklist](LOCAL-VERIFICATION.md).
+
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: HIGH (process model on Windows `spawn`)

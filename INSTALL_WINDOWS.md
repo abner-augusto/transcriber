@@ -225,6 +225,27 @@ Make sure Docker Desktop is running and WSL 2 is enabled. Check with `docker ps`
 
 ### Slow first run
 The first transcription downloads pyannote and SpeechBrain model files (several GB). Subsequent runs use cached models.
+
+## Migrating from PostgreSQL to SQLite
+
+Keep the PostgreSQL database and a `pg_dump` backup until you have opened the
+SQLite database and confirmed the Meetings, transcripts, and search results.
+The migration command refuses to overwrite its target and never writes to the
+source database. Stop the app and worker first.
+
+```powershell
+docker compose exec postgres pg_dump -U transcriber -d transcriber -Fc -f /tmp/transcriber-before-sqlite.dump
+docker compose cp postgres:/tmp/transcriber-before-sqlite.dump .\transcriber-before-sqlite.dump
+.\venv\Scripts\python.exe -m scripts.migrate_to_sqlite --from "postgresql://transcriber:transcriber@localhost:5433/transcriber" --to .\storage\transcriber.db
+```
+
+Use the PostgreSQL URL from your `.env` if its credentials differ. The command
+prints copied row counts and confirms the Segment text checksum for each
+Meeting. If it reports a schema mismatch, checksum mismatch, or row-count
+mismatch, stop and keep using the source database; do not point the app at the
+partial `.migrating` file. After a successful report, change `DATABASE_URL` in
+`.env` to `sqlite:///./storage/transcriber.db`, start the app, and verify your
+Meetings and search before retiring PostgreSQL.
  enabled. Check with `docker ps`.
 
 ### Slow first run
