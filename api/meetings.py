@@ -102,11 +102,10 @@ async def create_meeting(
         raise HTTPException(400, f"Unknown preset '{preset_id}'")
 
     # Use global default vocabulary if none provided
-    from preferences import load_preferences
+    from preferences import load
     effective_vocab = vocabulary.strip()[:2000] if vocabulary else None
     if not effective_vocab:
-        prefs = load_preferences()
-        default_vocab = prefs.get("default_vocabulary", "")
+        default_vocab = load().default_vocabulary
         if default_vocab:
             effective_vocab = default_vocab
 

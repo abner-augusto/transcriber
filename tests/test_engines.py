@@ -22,11 +22,24 @@ from engines.parakeet_cpp import parse_words as parse_parakeet
 from engines.whisper_cpp import MIN_TAIL_SECONDS as WHISPER_MIN_TAIL_SECONDS
 from engines.whisper_cpp import WhisperCppTranscriber
 from engines.whisper_cpp import parse_words as parse_whisper
+from preferences import DiarizationPrefs, VocabularyCorrectionPrefs, WhisperDtwPrefs
+from run_config import RunConfig
 
 from .fakes import FakeDiarizer, FakeTranscriber
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_RATE = 16000
+
+
+def _run_config(preset):
+    return RunConfig(
+        preset=preset,
+        whisper_dtw=WhisperDtwPrefs(),
+        diarization=DiarizationPrefs(),
+        speaker_switch_penalty=0.5,
+        speaker_profiles_enabled=False,
+        vocabulary_correction=VocabularyCorrectionPrefs(),
+    )
 
 
 def test_a_fake_satisfies_the_ports():
@@ -180,25 +193,25 @@ def test_whisper_leaves_audio_it_can_swallow_whole_alone(tmp_path, monkeypatch):
 
 
 def test_a_preset_names_the_engine_it_runs_on():
-    transcriber = make_transcriber({
+    transcriber = make_transcriber(_run_config({
         "id": "whisper-large-v3-turbo",
         "engine": "whisper.cpp",
         "model_path": "./models/ggml-large-v3-turbo.bin",
         "language": "pt",
-    })
+    }))
 
     assert isinstance(transcriber, Transcriber)
     assert transcriber.language == "pt"
 
 
 def test_faster_whisper_preset_creation():
-    transcriber = make_transcriber({
+    transcriber = make_transcriber(_run_config({
         "id": "faster-whisper-large-v3-turbo",
         "engine": "faster-whisper",
         "model_path": "large-v3-turbo",
         "language": "pt",
         "vad_filter": True,
-    })
+    }))
 
     assert isinstance(transcriber, Transcriber)
     assert transcriber.language == "pt"
@@ -206,19 +219,32 @@ def test_faster_whisper_preset_creation():
 
 
 def test_faster_whisper_load_uses_the_selected_model_configuration(monkeypatch):
-    transcriber = make_transcriber({
+    transcriber = make_transcriber(_run_config({
         "id": "faster-whisper-large-v3-turbo",
         "engine": "faster-whisper",
         "model_path": "large-v3-turbo",
         "device": "cuda",
         "compute_type": "float16",
-    })
+    }))
     loaded = []
     monkeypatch.setattr(transcriber, "get_model", lambda *args: loaded.append(args))
 
     transcriber.load()
 
     assert loaded == [("large-v3-turbo", "cuda", "float16")]
+
+
+def test_whisper_transcriber_receives_resolved_dtw_configuration():
+    run_config = _run_config({
+        "id": "whisper-large-v3-turbo",
+        "engine": "whisper.cpp",
+        "model_path": "./models/ggml-large-v3-turbo.bin",
+    }).model_copy(update={"whisper_dtw": WhisperDtwPrefs(enabled=False, preset="small")})
+
+    transcriber = make_transcriber(run_config)
+
+    assert transcriber.dtw_enabled is False
+    assert transcriber.dtw_preset == "small"
 
 
 @pytest.mark.parametrize("engine,transcriber_type", [
@@ -268,7 +294,7 @@ def test_faster_whisper_words_parsing():
 
 def test_an_unknown_engine_fails_loudly():
     with pytest.raises(ValueError, match="Unknown transcription engine"):
-        make_transcriber({"id": "x", "engine": "deepgram", "model_path": "x"})
+        make_transcriber(_run_config({"id": "x", "engine": "deepgram", "model_path": "x"}))
 
 
 def test_whisper_dtw_preset_detection_from_model_name():
@@ -440,22 +466,22 @@ def test_make_transcriber_supports_qwen3_and_vibevoice():
     """Core constructs thin adapters without importing either Engine runtime."""
     from engines.isolated_python import IsolatedPythonTranscriber
 
-    qwen = make_transcriber({
+    qwen = make_transcriber(_run_config({
         "id": "test-qwen",
         "engine": "qwen3-asr",
         "model_path": "models/qwen",
         "language": "Portuguese",
-    })
+    }))
     assert isinstance(qwen, IsolatedPythonTranscriber)
     assert qwen.engine_id == "qwen3-asr"
     assert qwen.model_path == "models/qwen"
     assert qwen.options["language"] == "Portuguese"
 
-    vibe = make_transcriber({
+    vibe = make_transcriber(_run_config({
         "id": "test-vibe",
         "engine": "vibevoice",
         "model_path": "models/vibe",
-    })
+    }))
     assert isinstance(vibe, IsolatedPythonTranscriber)
     assert vibe.engine_id == "vibevoice"
     assert vibe.model_path == "models/vibe"

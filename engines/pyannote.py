@@ -13,8 +13,6 @@ import logging
 import torch
 import soundfile as sf
 
-from preferences import get_secret, load_preferences
-
 from .ports import DiarizationResult, Turn
 from .overlap import compute_overlaps
 
@@ -24,8 +22,8 @@ COMMUNITY_MODEL_ID = "pyannote/speaker-diarization-community-1"
 FALLBACK_MODEL_ID = "pyannote/speaker-diarization-3.1"
 TARGET_SAMPLE_RATE = 16000
 
-# Optional diarization clustering overrides, read from preferences.json under
-# "diarization". When nothing is set the pipeline keeps pyannote's own calibrated
+# Optional diarization clustering overrides passed by the Job's RunConfig. When
+# nothing is set the pipeline keeps pyannote's own calibrated
 # defaults. The clustering threshold is the main knob: lower splits more readily
 # (one person can become several speakers), higher merges more readily. Fa/Fb are
 # VBx-style and only some pipelines expose them — an unknown key is ignored below.
@@ -49,15 +47,18 @@ class PyannoteDiarizer:
     _applied_overrides = _UNSET
     _ignored_overrides = _UNSET
 
+    def __init__(self, clustering: dict | None = None, auth_token: str = ""):
+        self.clustering = dict(clustering or {})
+        self.auth_token = auth_token
+
     @classmethod
-    def get_pipeline(cls):
+    def get_pipeline(cls, clustering: dict | None = None, auth_token: str = ""):
         if cls._pipeline is None:
             from pyannote.audio import Pipeline
 
             kwargs = {}
-            token = get_secret("hf_auth_token")
-            if token:
-                kwargs["token"] = token
+            if auth_token:
+                kwargs["token"] = auth_token
 
             try:
                 cls._pipeline = Pipeline.from_pretrained(COMMUNITY_MODEL_ID, **kwargs)
@@ -83,7 +84,7 @@ class PyannoteDiarizer:
             elif torch.backends.mps.is_available():
                 cls._pipeline.to(torch.device("mps"))
 
-        cls._sync_clustering_overrides()
+        cls._sync_clustering_overrides(clustering or {})
         return cls._pipeline
 
     @classmethod
@@ -101,8 +102,8 @@ class PyannoteDiarizer:
         log.info("[pyannote] Unloaded diarization pipeline")
 
     @classmethod
-    def _sync_clustering_overrides(cls):
-        """Re-read preferences.json and re-instantiate if the clustering knobs changed.
+    def _sync_clustering_overrides(cls, cfg: dict):
+        """Re-instantiate if the current Job's clustering knobs changed.
 
         Runs on every get_pipeline() call, not just at build time — the Celery worker
         is a long-lived process, so a slider change in the UI has to reach the already
@@ -116,7 +117,6 @@ class PyannoteDiarizer:
         if cls._default_params is None:
             return
 
-        cfg = load_preferences().get("diarization") or {}
         default_clustering = dict(cls._default_params.get("clustering", {}))
 
         requested_overrides = {}
@@ -182,7 +182,7 @@ class PyannoteDiarizer:
         min_speakers: int | None = None,
         max_speakers: int | None = None,
     ) -> DiarizationResult:
-        pipeline = self.get_pipeline()
+        pipeline = self.get_pipeline(self.clustering, self.auth_token)
 
         try:
             clustering = dict(pipeline.parameters(instantiated=True).get("clustering", {}))

@@ -1,4 +1,3 @@
-import math
 import shutil
 from pathlib import Path
 
@@ -48,7 +47,9 @@ def startup():
     cleanup_orphaned_storage()
     import logging
     _log = logging.getLogger(__name__)
-    if not _settings.hf_auth_token or _settings.hf_auth_token == "hf_your_token_here":
+    from preferences import hf_token
+    token = hf_token()
+    if not token or token == "hf_your_token_here":
         _log.warning("HF_AUTH_TOKEN not set — speaker diarization will fail. "
                      "Set it in .env (get one at https://huggingface.co/settings/tokens)")
 
@@ -112,8 +113,8 @@ def health():
 
 @app.get("/api/settings")
 def get_settings():
-    from preferences import get_public_preferences
-    prefs = get_public_preferences()
+    from preferences import public
+    prefs = public()
     return {
         "preferences": prefs,
     }
@@ -121,64 +122,7 @@ def get_settings():
 
 @app.put("/api/settings/preferences")
 def update_preferences(body: dict):
-    from preferences import save_preferences, load_preferences, get_public_preferences
-    from preferences import MIN_SPEAKER_SWITCH_PENALTY, MAX_SPEAKER_SWITCH_PENALTY
-    current = load_preferences()
-    # Only update known fields
-    if "default_vocabulary" in body:
-        current["default_vocabulary"] = (body["default_vocabulary"] or "").strip()[:2000]
-    if "speaker_profiles_enabled" in body:
-        current["speaker_profiles_enabled"] = bool(body["speaker_profiles_enabled"])
-    if isinstance(body.get("vocabulary_correction"), dict):
-        enabled = body["vocabulary_correction"].get("enabled")
-        if isinstance(enabled, bool):
-            current["vocabulary_correction"] = {"enabled": enabled}
-    if "hf_auth_token" in body:
-        val = (body["hf_auth_token"] or "").strip()
-        # Don't overwrite with the masked value
-        if val and "*" not in val:
-            current["hf_auth_token"] = val
-    if "diarization" in body:
-        raw = body["diarization"] if isinstance(body["diarization"], dict) else {}
-        # Drop unset / out-of-range knobs so an empty block means "model default".
-        bounds = {"clustering_threshold": (0.0, 1.0), "Fa": (0.0, 5.0), "Fb": (0.0, 5.0)}
-        clean = {}
-        for key, (lo, hi) in bounds.items():
-            v = raw.get(key)
-            if v is None or v == "":
-                continue
-            try:
-                num = float(v)
-            except (TypeError, ValueError):
-                continue
-            if lo <= num <= hi:
-                clean[key] = num
-        current["diarization"] = clean
-    if "speaker_switch_penalty" in body:
-        try:
-            penalty = float(body["speaker_switch_penalty"])
-        except (TypeError, ValueError):
-            penalty = None
-        if (
-            penalty is not None
-            and math.isfinite(penalty)
-            and MIN_SPEAKER_SWITCH_PENALTY <= penalty <= MAX_SPEAKER_SWITCH_PENALTY
-        ):
-            current["speaker_switch_penalty"] = penalty
-    if "forced_alignment" in body:
-        raw_fa = body["forced_alignment"]
-        if isinstance(raw_fa, dict):
-            current["forced_alignment"] = {
-                "enabled": bool(raw_fa.get("enabled", False)),
-                "model": str(raw_fa.get("model", "mms-fa")),
-                "device": str(raw_fa.get("device", "auto")),
-            }
-        elif isinstance(raw_fa, bool):
-            current["forced_alignment"] = {
-                "enabled": raw_fa,
-                "model": "mms-fa",
-                "device": "auto",
-            }
-    save_preferences(current)
-    return get_public_preferences()
+    from preferences import public, update_from_settings_api
+    update_from_settings_api(body)
+    return public()
 

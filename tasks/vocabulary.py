@@ -4,11 +4,8 @@ from models import VocabularyEntry
 from transcript.vocabulary_correction import MisheardForm, VocabularyCorrection
 
 
-def vocabulary_correction_for_meeting(db, meeting):
-    from preferences import load_preferences
-
-    preferences = load_preferences().get("vocabulary_correction", {})
-    if isinstance(preferences, dict) and preferences.get("enabled", True) is False:
+def vocabulary_correction_for_meeting(db, meeting, *, enabled: bool = True):
+    if not enabled:
         return None
     forms = load_misheard_forms(db)
     return VocabularyCorrection.for_meeting(meeting.vocabulary, forms)

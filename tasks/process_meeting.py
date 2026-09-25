@@ -12,12 +12,12 @@ from .shared import (
     rebuild_speakers_and_segments,
 )
 from engines import make_aligner, make_diarizer, make_transcriber, raw_transcription
-from presets import resolve_preset
 from services.audio_service import AudioService
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
 from transcript.segments import derive_segments
 from .vocabulary import vocabulary_correction_for_meeting
+from run_config import RunConfig
 
 
 @celery_app.task(bind=True)
@@ -28,25 +28,16 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
             audio_service = AudioService()
             speaker_id_service = SpeakerIdService()
 
-            preset = resolve_preset(meeting.preset_id)
-            transcriber = make_transcriber(preset)
-            diarizer = make_diarizer()
-
-            from preferences import get_speaker_switch_penalty, load_preferences
-            prefs = load_preferences()
-            switch_penalty = get_speaker_switch_penalty()
-            fa_pref = prefs.get("forced_alignment", {})
-            fa_enabled = bool(
-                preset.get("forced_alignment")
-                or (isinstance(fa_pref, dict) and fa_pref.get("enabled"))
-                or (isinstance(fa_pref, bool) and fa_pref)
-            )
-            fa_config = dict(fa_pref) if isinstance(fa_pref, dict) else {}
-            if isinstance(preset.get("forced_alignment"), dict):
-                fa_config.update(preset["forced_alignment"])
+            run_config = RunConfig.model_validate(job.run_config)
+            preset = run_config.preset
+            transcriber = make_transcriber(run_config)
+            from preferences import hf_token
+            diarizer = make_diarizer(run_config, hf_token=hf_token())
+            switch_penalty = run_config.speaker_switch_penalty
+            fa_enabled = run_config.forced_alignment is not None
             # Validate the selected engine before any processing work begins.
             if fa_enabled:
-                make_aligner(fa_config)
+                make_aligner(run_config)
 
             # Step 1: Extract audio
             update_progress(db, job, meeting, 2, "Extracting audio...")
@@ -75,7 +66,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                 if fa_enabled:
                     update_progress(db, job, meeting, 46, "Refining word timestamps (CTC alignment)...")
                     from engines import align_words
-                    words = align_words(audio_path, words, config=fa_config)
+                    words = align_words(audio_path, words, run_config=run_config)
                     transcription = replace(transcription, words=words)
 
                 meeting.raw_transcription = raw_transcription(
@@ -123,7 +114,9 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
 
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
             update_progress(db, job, meeting, 75, "Synchronizing speakers with text...")
-            correction = vocabulary_correction_for_meeting(db, meeting)
+            correction = vocabulary_correction_for_meeting(
+                db, meeting, enabled=run_config.vocabulary_correction.enabled
+            )
             aligned = derive_segments(
                 words, diarization, switch_penalty=switch_penalty, correction=correction
             )
@@ -137,6 +130,7 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
                 diarization.turns,
                 audio_path,
                 host_label=diarization.host_label,
+                speaker_profiles_enabled=run_config.speaker_profiles_enabled,
             )
             if hasattr(speaker_id_service, "unload"):
                 speaker_id_service.unload()

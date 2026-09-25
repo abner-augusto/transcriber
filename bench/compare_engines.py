@@ -84,7 +84,8 @@ def main() -> int:
 
     results = []
     for preset in chosen:
-        transcriber = make_transcriber(preset)
+        from run_config import run_config_for_preset
+        transcriber = make_transcriber(run_config_for_preset(preset))
         transcriber.load()
         started = time.perf_counter()
         try:

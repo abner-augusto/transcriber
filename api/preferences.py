@@ -1,19 +1,13 @@
-"""Vocabulary Profiles API — CRUD for reusable term presets stored in preferences.json."""
+"""Vocabulary Profiles API — CRUD for reusable term Presets."""
 
 import uuid
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from preferences import load_preferences, save_preferences
+import preferences
 
 router = APIRouter(prefix="/api/preferences/vocabulary-profiles", tags=["vocabulary-profiles"])
-
-
-class VocabularyProfile(BaseModel):
-    id: str
-    name: str
-    terms: str
 
 
 class CreateProfileRequest(BaseModel):
@@ -29,9 +23,7 @@ class UpdateProfileRequest(BaseModel):
 @router.get("")
 def list_profiles():
     """List all saved vocabulary profiles."""
-    prefs = load_preferences()
-    profiles = prefs.get("vocabulary_profiles", [])
-    return profiles
+    return [profile.model_dump() for profile in preferences.load().vocabulary_profiles]
 
 
 @router.post("")
@@ -44,8 +36,8 @@ def create_profile(req: CreateProfileRequest):
     if not terms:
         raise HTTPException(400, "Terms are required")
 
-    prefs = load_preferences()
-    profiles = prefs.get("vocabulary_profiles", [])
+    prefs = preferences.load()
+    profiles = [profile.model_dump() for profile in prefs.vocabulary_profiles]
 
     # Prevent duplicate names (case-insensitive)
     for p in profiles:
@@ -54,16 +46,15 @@ def create_profile(req: CreateProfileRequest):
 
     profile = {"id": str(uuid.uuid4()), "name": name, "terms": terms[:2000]}
     profiles.append(profile)
-    prefs["vocabulary_profiles"] = profiles
-    save_preferences(prefs)
+    preferences.update({"vocabulary_profiles": profiles})
     return profile
 
 
 @router.put("/{profile_id}")
 def update_profile(profile_id: str, req: UpdateProfileRequest):
     """Update an existing vocabulary profile."""
-    prefs = load_preferences()
-    profiles = prefs.get("vocabulary_profiles", [])
+    prefs = preferences.load()
+    profiles = [profile.model_dump() for profile in prefs.vocabulary_profiles]
 
     idx = next((i for i, p in enumerate(profiles) if p["id"] == profile_id), None)
     if idx is None:
@@ -85,22 +76,20 @@ def update_profile(profile_id: str, req: UpdateProfileRequest):
             raise HTTPException(400, "Terms cannot be empty")
         profiles[idx]["terms"] = terms[:2000]
 
-    prefs["vocabulary_profiles"] = profiles
-    save_preferences(prefs)
+    preferences.update({"vocabulary_profiles": profiles})
     return profiles[idx]
 
 
 @router.delete("/{profile_id}")
 def delete_profile(profile_id: str):
     """Delete a vocabulary profile."""
-    prefs = load_preferences()
-    profiles = prefs.get("vocabulary_profiles", [])
+    prefs = preferences.load()
+    profiles = [profile.model_dump() for profile in prefs.vocabulary_profiles]
 
     idx = next((i for i, p in enumerate(profiles) if p["id"] == profile_id), None)
     if idx is None:
         raise HTTPException(404, "Profile not found")
 
     profiles.pop(idx)
-    prefs["vocabulary_profiles"] = profiles
-    save_preferences(prefs)
+    preferences.update({"vocabulary_profiles": profiles})
     return {"ok": True}

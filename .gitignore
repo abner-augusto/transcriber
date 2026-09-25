@@ -63,6 +63,7 @@ desktop.ini
 *.swp
 *.swo
 preferences.json
+/preferences.json.migrated
 
 # Bench output (transcripts + converted wavs)
 bench/out/

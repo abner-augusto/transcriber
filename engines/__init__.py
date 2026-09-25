@@ -38,18 +38,26 @@ DIARIZER_ENGINE = "pyannote"
 
 def validate_alignment_engine(engine: str | None) -> str:
     """Return a supported alignment engine or fail with an actionable message."""
-    from config import settings
-
-    selected = engine or settings.forced_alignment_model
+    selected = engine or "mms-fa"
     if selected not in ALIGNMENT_ENGINES:
         raise ValueError(f"Unknown alignment engine '{selected}'. Known: {', '.join(ALIGNMENT_ENGINES)}")
     return selected
 
 
-def make_transcriber(preset: dict) -> Transcriber:
-    """The Transcriber a Preset asks for."""
+def _as_run_config(value):
+    from run_config import RunConfig
+
+    if isinstance(value, RunConfig):
+        return value
+    return RunConfig.model_validate(value)
+
+
+def make_transcriber(run_config) -> Transcriber:
+    """Build the Transcriber selected by a Job's resolved RunConfig."""
     from config import settings
 
+    run_config = _as_run_config(run_config)
+    preset = run_config.preset
     engine = preset.get("engine")
     model_path = preset.get("model_path")
     if not model_path:
@@ -70,30 +78,13 @@ def make_transcriber(preset: dict) -> Transcriber:
 
     if engine == "whisper.cpp":
         from .whisper_cpp import WhisperCppTranscriber
-        from preferences import load_preferences
-
-        prefs = load_preferences()
-        whisper_dtw_pref = prefs.get("whisper_dtw", {})
-
-        dtw_enabled = preset.get(
-            "dtw",
-            whisper_dtw_pref.get("enabled", settings.whisper_dtw_enabled)
-            if isinstance(whisper_dtw_pref, dict)
-            else settings.whisper_dtw_enabled,
-        )
-        dtw_preset = preset.get(
-            "dtw_preset",
-            whisper_dtw_pref.get("preset", settings.whisper_dtw_preset)
-            if isinstance(whisper_dtw_pref, dict)
-            else settings.whisper_dtw_preset,
-        )
 
         return WhisperCppTranscriber(
             cli_path=settings.whisper_cli_path,
             model_path=model_path,
             language=preset.get("language", "auto"),
-            dtw_enabled=bool(dtw_enabled),
-            dtw_preset=dtw_preset or None,
+            dtw_enabled=run_config.whisper_dtw.enabled,
+            dtw_preset=run_config.whisper_dtw.preset or None,
         )
 
     if engine == "parakeet.cpp":
@@ -129,11 +120,15 @@ def make_transcriber(preset: dict) -> Transcriber:
     raise ValueError(f"Unknown transcription engine '{engine}'. Known: {TRANSCRIBER_ENGINES}")
 
 
-def make_diarizer() -> Diarizer:
+def make_diarizer(run_config, *, hf_token: str = "") -> Diarizer:
     """The Diarizer. There is only one, and swapping it means one more branch here."""
     from .pyannote import PyannoteDiarizer
 
-    return PyannoteDiarizer()
+    config = _as_run_config(run_config)
+    return PyannoteDiarizer(
+        clustering=config.diarization.model_dump(exclude_none=True),
+        auth_token=hf_token,
+    )
 
 
 def engine_status(preset: dict) -> dict:
@@ -147,18 +142,28 @@ def probe_engine(preset: dict, deep: bool = False):
     return _probe(preset, deep=deep)
 
 
-def make_aligner(config: dict | None = None) -> Aligner:
+def make_aligner(run_config) -> Aligner:
     """The Aligner. Uses CTC forced alignment to refine Word timestamps."""
     from .alignment import make_aligner as _make_aligner
 
-    return _make_aligner(config)
+    config = _as_run_config(run_config)
+    return _make_aligner(
+        config.forced_alignment.model_dump() if config.forced_alignment is not None else None
+    )
 
 
-def align_words(audio_path: str, words: list[Word], config: dict | None = None) -> list[Word]:
+def align_words(audio_path: str, words: list[Word], run_config=None) -> list[Word]:
     """Align Words against audio using CTC forced alignment with graceful fallback."""
     from .alignment import align_words as _align_words
 
-    return _align_words(audio_path, words, config)
+    if run_config is None or isinstance(run_config, dict) and "preset" not in run_config:
+        return _align_words(audio_path, words, run_config)
+    config = _as_run_config(run_config)
+    return _align_words(
+        audio_path,
+        words,
+        config.forced_alignment.model_dump() if config.forced_alignment is not None else None,
+    )
 
 
 def alignment_engine_status(config: dict | None = None) -> dict:

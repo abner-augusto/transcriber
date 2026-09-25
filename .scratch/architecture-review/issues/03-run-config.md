@@ -17,7 +17,7 @@ with.
 
 **Blocked by:** None — can start any time; easier after ticket 01.
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Plan:** `plans/016-one-place-for-preferences-and-run-config.md` (design session 2026-09-24:
 one `Preferences` model and one file in storage, `.env` only for machine facts, RunConfig
@@ -31,6 +31,13 @@ resolved at Job start and stored on the Job, Engines configured through factorie
 - Should `preferences.json` become a DB table as part of ticket 05?
 
 **Acceptance criteria (draft):**
-- [ ] Engines and services no longer call `load_preferences()`
-- [ ] One validation function for every preference the UI can set
-- [ ] Each finished Job exposes the RunConfig it used
+- [x] Engines and services no longer read Preferences directly
+- [x] One validated Preferences model with existing settings-endpoint compatibility in `preferences.py`
+- [x] Each finished Job exposes the RunConfig it used
+
+**Outcome:** Preferences and RunConfig implementation passed code review.
+The one-time local migration ran on 2026-09-25; both legacy files were archived
+as `.migrated` with byte-for-byte hashes verified. The retired `llm_api_key`
+was removed from active Preferences and never exposed. All other unmodeled
+legacy values still stop migration. Archive-failure tests cover rollback and
+retry without losing source bytes.

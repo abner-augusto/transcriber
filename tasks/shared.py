@@ -10,6 +10,7 @@ from config import settings
 from database import SessionLocal
 from models import Job, Meeting, MeetingStatus, Speaker, Segment
 from models.job import JobStatus
+from run_config import resolve_run_config
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ def meeting_job(meeting_id: str, job_id: str):
         if not meeting or not job:
             raise MeetingNotFoundError("Meeting or Job not found")
 
+        job.run_config = resolve_run_config(meeting).model_dump(mode="json", exclude_none=True)
         job.status = JobStatus.RUNNING
         job.started_at = datetime.utcnow()
         meeting.status = MeetingStatus.PROCESSING

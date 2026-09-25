@@ -14,12 +14,16 @@ from engines.alignment import (
     MMSCTCAligner,
     normalize_token_text,
 )
+from preferences import (
+    DiarizationPrefs, ForcedAlignmentPrefs, VocabularyCorrectionPrefs, WhisperDtwPrefs,
+)
+from run_config import RunConfig
 
 SAMPLE_RATE = 16000
 
 
 def test_aligner_satisfies_port():
-    aligner = make_aligner()
+    aligner = make_aligner(_test_run_config())
     assert isinstance(aligner, Aligner)
 
 
@@ -32,10 +36,22 @@ def test_alignment_engine_status():
 
 def test_alignment_factory_rejects_unknown_model():
     with pytest.raises(ValueError, match="Unknown alignment engine"):
-        make_aligner({"model": "not-an-engine"})
+        make_aligner(_test_run_config(ForcedAlignmentPrefs(enabled=True, model="not-an-engine")))
 
     status = alignment_engine_status({"model": "not-an-engine"})
     assert status["available"] is False
+
+
+def _test_run_config(alignment=None):
+    return RunConfig(
+        preset={},
+        forced_alignment=alignment,
+        whisper_dtw=WhisperDtwPrefs(),
+        diarization=DiarizationPrefs(),
+        speaker_switch_penalty=0.5,
+        speaker_profiles_enabled=False,
+        vocabulary_correction=VocabularyCorrectionPrefs(),
+    )
 
 
 def test_normalize_token_text_portuguese_accents_and_punctuation():

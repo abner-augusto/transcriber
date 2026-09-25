@@ -30,8 +30,9 @@ def load_preset(preset: dict) -> dict:
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     from engines import make_transcriber
+    from run_config import run_config_for_preset
 
-    transcriber = make_transcriber(preset)
+    transcriber = make_transcriber(run_config_for_preset(preset))
     try:
         transcriber.load()
         return {"status": "passed", "engine": preset["engine"], "preset_id": preset["id"]}
@@ -76,8 +77,9 @@ def infer_preset(preset: dict, audio_path: Path) -> dict:
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     from engines import make_transcriber
+    from run_config import run_config_for_preset
 
-    transcriber = make_transcriber(preset)
+    transcriber = make_transcriber(run_config_for_preset(preset))
     try:
         transcriber.load()
         transcription = transcriber.transcribe(str(audio_path), vocabulary=None)

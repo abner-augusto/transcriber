@@ -26,7 +26,6 @@ import numpy as np
 import soundfile as sf
 import torch
 
-from config import settings
 from . import validate_alignment_engine
 from .ports import Aligner, Word
 
@@ -418,7 +417,7 @@ class MMSCTCAligner:
 def make_aligner(preset_or_config: Optional[dict] = None) -> Aligner:
     """Instantiate a configured Aligner."""
     device = None
-    model = settings.forced_alignment_model
+    model = "mms-fa"
     if preset_or_config:
         device = preset_or_config.get("device")
         model = preset_or_config.get("model", model)
@@ -441,7 +440,7 @@ def align_words(audio_path: str, words: list[Word], config: Optional[dict] = Non
 
 def alignment_engine_status(config: Optional[dict] = None) -> dict:
     """Check availability of the forced alignment dependencies and model."""
-    model = settings.forced_alignment_model
+    model = "mms-fa"
     if config:
         model = config.get("model", model)
     try:

@@ -93,6 +93,16 @@ A named, user-editable configuration naming an Engine and the model it should lo
 Preset is how the user chooses an Engine.
 _Avoid_: profile (collides with Voice Profile), config, settings
 
+**Preferences**:
+The user's saved choices that apply by default across Meetings, such as the default Preset,
+Vocabulary, and whether to use Voice Profiles.
+_Avoid_: settings (can mean machine configuration)
+
+**RunConfig**:
+The record of the Preferences and Preset that applied when a Job began running. It says which
+choices that Job used, even if the user changes Preferences later.
+_Avoid_: configuration snapshot, job settings
+
 **Job**:
 One unit of background processing over a single Meeting, carrying its own progress and status.
 _Avoid_: task (reserved for the Celery mechanism that runs a Job)

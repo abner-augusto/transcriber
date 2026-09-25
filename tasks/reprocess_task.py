@@ -7,7 +7,8 @@ from .shared import (
     rebuild_speakers_and_segments,
 )
 from engines import make_diarizer
-from preferences import get_speaker_switch_penalty
+from preferences import hf_token
+from run_config import RunConfig
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
 from transcript.diarization import MeetingDiarization
@@ -17,7 +18,7 @@ from .vocabulary import vocabulary_correction_for_meeting
 from models import Speaker, Segment
 
 
-def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
+def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarization: bool):
     """Shared execution logic for re-diarization and re-identification.
 
     When rerun_diarization is True, runs the Diarization stage again for fresh Turns —
@@ -35,7 +36,7 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
     speaker_id_service = SpeakerIdService()
 
     if rerun_diarization:
-        diarizer = make_diarizer()
+        diarizer = make_diarizer(run_config, hf_token=hf_token())
         update_progress(db, job, meeting, 10, "Running new speaker identification...")
         diarization = diarize_meeting(meeting, audio_path, diarizer=diarizer, vad_service=VadService())
         meeting.raw_diarization = diarization.to_stored()
@@ -55,9 +56,11 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
         55 if rerun_diarization else 20,
         "Synchronizing speakers with text...",
     )
-    correction = vocabulary_correction_for_meeting(db, meeting)
+    correction = vocabulary_correction_for_meeting(
+        db, meeting, enabled=run_config.vocabulary_correction.enabled
+    )
     aligned = derive_segments(
-        words, diarization, switch_penalty=get_speaker_switch_penalty(), correction=correction
+        words, diarization, switch_penalty=run_config.speaker_switch_penalty, correction=correction
     )
 
     # Speaker naming (Participant N, overridden by voice profile matches)
@@ -72,6 +75,7 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
         diarization.turns,
         audio_path,
         host_label=diarization.host_label,
+        speaker_profiles_enabled=run_config.speaker_profiles_enabled,
     )
     if hasattr(speaker_id_service, "unload"):
         speaker_id_service.unload()
@@ -96,7 +100,9 @@ def rediarize_task(self, meeting_id: str, job_id: str):
     """
     try:
         with meeting_job(meeting_id, job_id) as (db, meeting, job):
-            _reprocess_meeting(db, meeting, job, rerun_diarization=True)
+            _reprocess_meeting(
+                db, meeting, job, RunConfig.model_validate(job.run_config), rerun_diarization=True
+            )
         return {"status": "completed", "meeting_id": meeting_id}
     except MeetingNotFoundError:
         return {"error": "Meeting or Job not found"}
@@ -112,7 +118,9 @@ def reidentify_task(self, meeting_id: str, job_id: str):
     """
     try:
         with meeting_job(meeting_id, job_id) as (db, meeting, job):
-            _reprocess_meeting(db, meeting, job, rerun_diarization=False)
+            _reprocess_meeting(
+                db, meeting, job, RunConfig.model_validate(job.run_config), rerun_diarization=False
+            )
         return {"status": "completed", "meeting_id": meeting_id}
     except MeetingNotFoundError:
         return {"error": "Meeting or Job not found"}
@@ -169,16 +177,19 @@ def reapply_vocabulary_task(self, meeting_id: str, job_id: str):
     """Re-derive Segments from stored Words and Turns without changing Speakers."""
     try:
         with meeting_job(meeting_id, job_id) as (db, meeting, job):
+            run_config = RunConfig.model_validate(job.run_config)
             words = words_from_stored(meeting.raw_transcription)
             if not words:
                 raise RuntimeError("No existing transcription found. Run full processing first.")
             diarization = MeetingDiarization.from_stored(meeting.raw_diarization)
             if diarization is None:
                 raise RuntimeError("No existing diarization found. Run full processing first.")
-            correction = vocabulary_correction_for_meeting(db, meeting)
+            correction = vocabulary_correction_for_meeting(
+                db, meeting, enabled=run_config.vocabulary_correction.enabled
+            )
             aligned = derive_segments(
                 words, diarization,
-                switch_penalty=get_speaker_switch_penalty(),
+                switch_penalty=run_config.speaker_switch_penalty,
                 correction=correction,
             )
             update_progress(db, job, meeting, 80, "Saving corrected Segments...")

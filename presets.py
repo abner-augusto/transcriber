@@ -17,12 +17,11 @@ import logging
 import re
 from pathlib import Path
 
-from config import get_storage_path
-
 log = logging.getLogger(__name__)
 
 PRESETS_DIR = Path(__file__).parent / "model_presets"
 FALLBACK_PRESET_ID = "whisper-large-v3-turbo"
+_UNSET = object()
 
 
 def list_presets() -> list[dict]:
@@ -43,7 +42,9 @@ def get_preset(preset_id: str) -> dict | None:
     return next((p for p in list_presets() if p["id"] == preset_id), None)
 
 
-def resolve_preset(preset_id: str | None = None) -> dict:
+def resolve_preset(
+    preset_id: str | None = None, *, default_preset: str | None | object = _UNSET
+) -> dict:
     """The Preset to actually transcribe with.
 
     Prefers the Meeting's override, falls back to the default, and finally to any
@@ -54,7 +55,8 @@ def resolve_preset(preset_id: str | None = None) -> dict:
         raise RuntimeError(f"No presets found in {PRESETS_DIR}")
 
     by_id = {p["id"]: p for p in presets}
-    for candidate in (preset_id, default_preset_id(), FALLBACK_PRESET_ID):
+    configured_default = default_preset_id() if default_preset is _UNSET else default_preset
+    for candidate in (preset_id, configured_default, FALLBACK_PRESET_ID):
         if candidate and candidate in by_id:
             return by_id[candidate]
 
@@ -63,15 +65,17 @@ def resolve_preset(preset_id: str | None = None) -> dict:
 
 
 def default_preset_id() -> str:
-    return _load_settings().get("default_preset", FALLBACK_PRESET_ID)
+    from preferences import load
+
+    return load().default_preset or FALLBACK_PRESET_ID
 
 
 def set_default_preset(preset_id: str) -> None:
     if not get_preset(preset_id):
         raise ValueError(f"Preset not found: {preset_id}")
-    settings = _load_settings()
-    settings["default_preset"] = preset_id
-    _save_settings(settings)
+    from preferences import update
+
+    update({"default_preset": preset_id})
 
 
 def create_preset(data: dict) -> dict:
@@ -114,26 +118,7 @@ def delete_preset(preset_id: str) -> None:
         raise FileNotFoundError(f"Preset not found: {preset_id}")
     path.unlink()
 
-    settings = _load_settings()
-    if settings.get("default_preset") == preset_id:
-        del settings["default_preset"]
-        _save_settings(settings)
+    from preferences import load, update
 
-
-def _settings_path() -> Path:
-    return get_storage_path() / "settings.json"
-
-
-def _load_settings() -> dict:
-    path = _settings_path()
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        log.warning(f"Unreadable settings.json, using defaults: {e}")
-        return {}
-
-
-def _save_settings(settings: dict) -> None:
-    _settings_path().write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    if load().default_preset == preset_id:
+        update({"default_preset": None})

@@ -53,6 +53,7 @@ export interface Job {
   progress: number;
   current_step: string | null;
   error: string | null;
+  run_config: Record<string, unknown> | null;
   started_at: string | null;
   completed_at: string | null;
   created_at: string | null;

@@ -41,6 +41,7 @@ class SpeakerIdService:
         turns: list[Turn],
         audio_path: str,
         host_label: str | None = None,
+        speaker_profiles_enabled: bool = False,
     ) -> dict[str, dict]:
         """Return {speaker_label: {name, confidence, identified_by}} for every label.
 
@@ -57,7 +58,7 @@ class SpeakerIdService:
                 "identified_by": "host_track",
             }
 
-        profiles = self._load_profiles(db)
+        profiles = self._load_profiles(db, enabled=speaker_profiles_enabled)
         if profiles and audio_path:
             self._apply_voice_profiles(speaker_info, profiles, turns, audio_path, host_label)
 
@@ -75,10 +76,8 @@ class SpeakerIdService:
             for i, label in enumerate(sorted(set(speaker_labels)))
         }
 
-    def _load_profiles(self, db) -> list:
-        from preferences import load_preferences
-
-        if not load_preferences().get("speaker_profiles_enabled", True):
+    def _load_profiles(self, db, *, enabled: bool) -> list:
+        if not enabled:
             return []
 
         from models.speaker_profile import SpeakerProfile

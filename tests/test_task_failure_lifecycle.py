@@ -61,19 +61,18 @@ def _assert_failed_once(session_factory, meeting_id, job_id, events):
 
 def test_processing_failure_propagates_after_persisting_failure(monkeypatch, tmp_path):
     from tasks.process_meeting import process_meeting_task
+    from .task_harness import TEST_RUN_CONFIG
 
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_and_job(session_factory, JobType.PROCESS_MEETING)
     events = []
 
+    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
+    monkeypatch.setattr("preferences.hf_token", lambda: "")
     monkeypatch.setattr(
-        "tasks.process_meeting.resolve_preset",
-        lambda preset_id: {"id": "test", "name": "Test", "engine": "test"},
+        "tasks.process_meeting.make_transcriber", lambda run_config: FailingTranscriber()
     )
-    monkeypatch.setattr(
-        "tasks.process_meeting.make_transcriber", lambda preset: FailingTranscriber()
-    )
-    monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda: object())
+    monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda run_config, **kwargs: object())
     monkeypatch.setattr(
         "services.audio_service.AudioService.extract_audio",
         lambda self, filepath, current_meeting_id: filepath,
@@ -102,12 +101,16 @@ def test_reprocessing_failure_propagates_after_persisting_failure(
     monkeypatch, tmp_path, task_name, job_type
 ):
     import tasks.reprocess_task as reprocess_module
+    from .task_harness import TEST_RUN_CONFIG
 
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_and_job(session_factory, job_type)
     events = []
 
-    def fail_reprocessing(db, meeting, job, rerun_diarization):
+    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
+    monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")
+
+    def fail_reprocessing(db, meeting, job, run_config, rerun_diarization):
         raise RuntimeError("engine failed")
 
     monkeypatch.setattr(reprocess_module, "_reprocess_meeting", fail_reprocessing)
@@ -125,15 +128,19 @@ def test_successful_reprocessing_return_and_lifecycle_are_unchanged(
     monkeypatch, tmp_path
 ):
     import tasks.reprocess_task as reprocess_module
+    from .task_harness import TEST_RUN_CONFIG
 
     session_factory = _database(tmp_path, monkeypatch)
     meeting_id, job_id = _meeting_and_job(session_factory, JobType.REIDENTIFY)
     events = []
 
+    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
+    monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")
+
     monkeypatch.setattr(
         reprocess_module,
         "_reprocess_meeting",
-        lambda db, meeting, job, rerun_diarization: None,
+        lambda db, meeting, job, run_config, rerun_diarization: None,
     )
     monkeypatch.setattr(
         "tasks.shared.publish_event",

@@ -14,6 +14,8 @@ from database import Base
 from engines import DiarizationResult, Transcription, Turn, Word
 from models import Job, Meeting, MeetingStatus
 from models.job import JobStatus, JobType
+from preferences import DiarizationPrefs, VocabularyCorrectionPrefs, WhisperDtwPrefs
+from run_config import RunConfig
 from services.audio_service import DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT
 
 from .fakes import FakeDiarizer, FakeTranscriber
@@ -91,6 +93,15 @@ VAD_BY_FILE = {
 }
 DEFAULT_VAD = [(0.0, 4.0)]
 
+TEST_RUN_CONFIG = RunConfig(
+    preset={"id": "harness", "name": "Harness", "engine": "test", "model_path": "test-model"},
+    whisper_dtw=WhisperDtwPrefs(),
+    diarization=DiarizationPrefs(),
+    speaker_switch_penalty=0.5,
+    speaker_profiles_enabled=False,
+    vocabulary_correction=VocabularyCorrectionPrefs(),
+)
+
 
 def install(monkeypatch, tmp_path, *, transcriber, diarization: DiarizationResult) -> TaskHarness:
     """Patch the task modules and return a harness bound to a fresh SQLite database."""
@@ -106,6 +117,15 @@ def install(monkeypatch, tmp_path, *, transcriber, diarization: DiarizationResul
 
     diarizer = FakeDiarizer(diarization)
     harness = TaskHarness(session_factory=session_factory, storage=storage, diarizer=diarizer)
+    preset = (
+        {"id": "vibevoice-7b", "name": "VibeVoice", "engine": "vibevoice", "model_path": "test-model"}
+        if isinstance(transcriber, NativeTranscriber)
+        else {
+            "id": "whisper-large-v3-turbo", "name": "Whisper", "engine": "whisper.cpp",
+            "model_path": "test-model",
+        }
+    )
+    run_config = TEST_RUN_CONFIG.model_copy(update={"preset": preset})
 
     def compute_vad_segments(self, path):
         harness.vad_calls.append(str(path))
@@ -116,9 +136,12 @@ def install(monkeypatch, tmp_path, *, transcriber, diarization: DiarizationResul
 
     monkeypatch.setattr("tasks.shared.SessionLocal", session_factory)
     monkeypatch.setattr("tasks.shared.publish_event", lambda meeting_id, data: None)
-    monkeypatch.setattr("tasks.process_meeting.make_transcriber", lambda preset: transcriber)
-    monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda: diarizer)
-    monkeypatch.setattr("tasks.reprocess_task.make_diarizer", lambda: diarizer)
+    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: run_config)
+    monkeypatch.setattr("tasks.process_meeting.make_transcriber", lambda run_config: transcriber)
+    monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda run_config, **kwargs: diarizer)
+    monkeypatch.setattr("tasks.reprocess_task.make_diarizer", lambda run_config, **kwargs: diarizer)
+    monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")
+    monkeypatch.setattr("preferences.hf_token", lambda: "")
     monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid: fp)
     monkeypatch.setattr(
         "services.audio_service.AudioService.extract_dual_audio",

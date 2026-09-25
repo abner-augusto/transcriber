@@ -44,6 +44,7 @@ def init_db():
         "ALTER TABLE segments ADD COLUMN IF NOT EXISTS confidence FLOAT",
         "ALTER TABLE segments ADD COLUMN IF NOT EXISTS corrections JSON",
         "ALTER TABLE vocabulary_entries ADD COLUMN IF NOT EXISTS misheard_as JSON",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS run_config JSON",
         # Full-text search index on segment text
         "CREATE INDEX IF NOT EXISTS ix_segments_text_search ON segments USING gin (to_tsvector('simple', text))",
     ]

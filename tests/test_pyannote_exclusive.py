@@ -50,7 +50,7 @@ def test_pyannote_diarize_with_community1_exclusive_output(monkeypatch):
     mock_pipeline.return_value = mock_output
     mock_pipeline.parameters.return_value = {"clustering": {"threshold": 0.7}}
 
-    monkeypatch.setattr(PyannoteDiarizer, "get_pipeline", classmethod(lambda cls: mock_pipeline))
+    monkeypatch.setattr(PyannoteDiarizer, "get_pipeline", classmethod(lambda cls, clustering=None, auth_token="": mock_pipeline))
     monkeypatch.setattr(
         "engines.pyannote._load_audio_tensor",
         lambda path: (np.zeros((1, 16000)), 16000),
@@ -86,7 +86,7 @@ def test_pyannote_diarize_fallback_when_exclusive_unavailable(monkeypatch):
     mock_pipeline.return_value = mock_output
     mock_pipeline.parameters.return_value = {"clustering": {"threshold": 0.7}}
 
-    monkeypatch.setattr(PyannoteDiarizer, "get_pipeline", classmethod(lambda cls: mock_pipeline))
+    monkeypatch.setattr(PyannoteDiarizer, "get_pipeline", classmethod(lambda cls, clustering=None, auth_token="": mock_pipeline))
     monkeypatch.setattr(
         "engines.pyannote._load_audio_tensor",
         lambda path: (np.zeros((1, 16000)), 16000),
@@ -126,7 +126,7 @@ def test_pyannote_diarize_serialized_format(monkeypatch):
     mock_pipeline.return_value = mock_output
     mock_pipeline.parameters.return_value = {}
 
-    monkeypatch.setattr(PyannoteDiarizer, "get_pipeline", classmethod(lambda cls: mock_pipeline))
+    monkeypatch.setattr(PyannoteDiarizer, "get_pipeline", classmethod(lambda cls, clustering=None, auth_token="": mock_pipeline))
     monkeypatch.setattr(
         "engines.pyannote._load_audio_tensor",
         lambda path: (np.zeros((1, 16000)), 16000),
@@ -144,8 +144,8 @@ def test_pyannote_diarize_serialized_format(monkeypatch):
     ]
 
 
-def test_clustering_preferences_applied_only_when_supported(caplog, monkeypatch):
-    """Clustering preferences are applied only if supported by the pipeline defaults, logging effective & ignored."""
+def test_runconfig_clustering_applied_only_when_supported(caplog):
+    """RunConfig clustering is applied only if supported, logging effective & ignored."""
     mock_pipeline = MagicMock()
     PyannoteDiarizer._pipeline = mock_pipeline
     PyannoteDiarizer._default_params = {
@@ -154,19 +154,13 @@ def test_clustering_preferences_applied_only_when_supported(caplog, monkeypatch)
     PyannoteDiarizer._applied_overrides = _UNSET
     PyannoteDiarizer._ignored_overrides = _UNSET
 
-    # Preferences contain one supported parameter (threshold) and unsupported parameters (Fa, Fb, unknown_param)
-    test_prefs = {
-        "diarization": {
+    with caplog.at_level(logging.INFO):
+        PyannoteDiarizer._sync_clustering_overrides({
             "clustering_threshold": 0.55,
             "Fa": 0.2,
             "Fb": 0.8,
             "unsupported_knob": 42.0,
-        }
-    }
-    monkeypatch.setattr("engines.pyannote.load_preferences", lambda: test_prefs)
-
-    with caplog.at_level(logging.INFO):
-        PyannoteDiarizer._sync_clustering_overrides()
+        })
 
     # Verify instantiate was called ONLY with supported parameters
     mock_pipeline.instantiate.assert_called_once_with({
@@ -183,8 +177,8 @@ def test_clustering_preferences_applied_only_when_supported(caplog, monkeypatch)
     assert any("Applied clustering overrides {'threshold': 0.55}" in i for i in infos)
 
 
-def test_clustering_preferences_cleared_restores_defaults(caplog, monkeypatch):
-    """Unsetting preferences restores default pipeline hyperparameters."""
+def test_cleared_runconfig_clustering_restores_defaults(caplog):
+    """An empty RunConfig restores the shipped hyperparameters."""
     mock_pipeline = MagicMock()
     PyannoteDiarizer._pipeline = mock_pipeline
     PyannoteDiarizer._default_params = {
@@ -193,10 +187,8 @@ def test_clustering_preferences_cleared_restores_defaults(caplog, monkeypatch):
     PyannoteDiarizer._applied_overrides = {"threshold": 0.55}
     PyannoteDiarizer._ignored_overrides = {}
 
-    monkeypatch.setattr("engines.pyannote.load_preferences", lambda: {})
-
     with caplog.at_level(logging.INFO):
-        PyannoteDiarizer._sync_clustering_overrides()
+        PyannoteDiarizer._sync_clustering_overrides({})
 
     mock_pipeline.instantiate.assert_called_once_with({
         "clustering": {"threshold": 0.704},
@@ -270,12 +262,16 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
     from tasks.process_meeting import process_meeting_task
     from tasks.reprocess_task import rediarize_task, reidentify_task
     from .fakes import FakeDiarizer, FakeTranscriber
+    from .task_harness import TEST_RUN_CONFIG
 
     test_engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(bind=test_engine)
     TestingSessionLocal = sessionmaker(bind=test_engine)
 
     monkeypatch.setattr("tasks.shared.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr("tasks.shared.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
+    monkeypatch.setattr("preferences.hf_token", lambda: "")
+    monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")
 
     db = TestingSessionLocal()
 
@@ -313,9 +309,9 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
         exclusive_turns=exclusive_turns,
     )
 
-    monkeypatch.setattr("tasks.process_meeting.make_transcriber", lambda preset: FakeTranscriber(words))
-    monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda: FakeDiarizer(diar_result))
-    monkeypatch.setattr("tasks.reprocess_task.make_diarizer", lambda: FakeDiarizer(diar_result))
+    monkeypatch.setattr("tasks.process_meeting.make_transcriber", lambda run_config: FakeTranscriber(words))
+    monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda run_config, **kwargs: FakeDiarizer(diar_result))
+    monkeypatch.setattr("tasks.reprocess_task.make_diarizer", lambda run_config, **kwargs: FakeDiarizer(diar_result))
     monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid: fp)
     monkeypatch.setattr("services.audio_service.AudioService.get_duration", lambda self, fp: 10.0)
     monkeypatch.setattr("services.vad_service.VadService.compute_vad_segments", lambda self, fp: [(0.0, 4.0)])

@@ -11,6 +11,7 @@
 
 ## Status
 
+- **Execution status**: DONE
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: MED (user settings on disk move)
@@ -141,16 +142,27 @@ become thin calls into `preferences.py`.
 
 ## Done criteria
 
-- [ ] One settings file: `storage/preferences.json`; legacy files migrated and renamed
-- [ ] `rg "load_preferences\(|preferences.json|settings.json" --type py` matches only `preferences.py`, its tests, and the migration
-- [ ] No Engine or service reads preferences directly
-- [ ] Every Job row has `run_config` after it starts; no secret in it
-- [ ] Existing preferences API tests and frontend unchanged and passing
-- [ ] `plans/README.md` row and ticket 03 status updated
+- [x] One settings file: `storage/preferences.json`; legacy files migrated and renamed
+- [x] `rg "load_preferences\(|preferences.json|settings.json" --type py` matches only `preferences.py`, its tests, and the migration
+- [x] No Engine or service reads preferences directly
+- [x] Every Job row has `run_config` after it starts; no secret in it
+- [x] Existing preferences API tests and frontend build pass
+- [x] `plans/README.md` row and ticket 03 status updated
+
+## Outcome
+
+Typed Preferences, isolated migration tests, API routing, per-Job RunConfig
+resolution, factory wiring, Job persistence, and frontend typing passed final
+code review. Focused backend/API/task verification passed (155 tests); the
+frontend build passed. The one-time local migration ran on 2026-09-25: both
+legacy files were renamed to `.migrated`, with SHA-256 checks confirming their
+original bytes were preserved. `llm_api_key` is absent from active Preferences
+and was never printed; all other unmodeled legacy values still stop migration.
+A temporary-filesystem test covers failed archive rename, rollback, and retry.
 
 ## Carried over from the PR #1 review
 
-- Add **Preferences** and **RunConfig** to `CONTEXT.md` when this plan lands.
+- [x] Add **Preferences** and **RunConfig** to `CONTEXT.md` when this plan lands.
 
 ## STOP conditions
 

@@ -4,6 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+import preferences
+from preferences import Preferences
 
 
 @pytest.fixture
@@ -11,8 +13,15 @@ def client(monkeypatch):
     """Isolated client with preferences backed by an in-memory dict."""
     prefs = {"vocabulary_profiles": []}
 
-    monkeypatch.setattr("api.preferences.load_preferences", lambda: dict(prefs))
-    monkeypatch.setattr("api.preferences.save_preferences", lambda value: prefs.update(value))
+    def load():
+        return Preferences.model_validate(prefs)
+
+    def update(patch):
+        prefs.update(patch)
+        return Preferences.model_validate(prefs)
+
+    monkeypatch.setattr(preferences, "load", load)
+    monkeypatch.setattr(preferences, "update", update)
 
     yield TestClient(app)
 
