@@ -25,7 +25,7 @@ if (-not (Test-Path $whisperBin)) {
     if ($cuda) { cmake -B build -G "Visual Studio 17 2022" $cuda }
     else { cmake -B build -G "Visual Studio 17 2022" }
     Assert-NativeSuccess "whisper.cpp configuration"
-    cmake --build build --config Release
+    cmake --build build --config Release --parallel 8
     Assert-NativeSuccess "whisper.cpp build"
     Pop-Location
 }
@@ -44,7 +44,7 @@ if (-not (Test-Path $parakeetBin)) {
         cmake -B build
     }
     Assert-NativeSuccess "parakeet.cpp configuration"
-    cmake --build build --config Release
+    cmake --build build --config Release --parallel 8
     Assert-NativeSuccess "parakeet.cpp build"
     Pop-Location
 }
