@@ -159,7 +159,7 @@ Vocabulary; "Galo" → "Garrah" via misheard (eligible and ineligible cases);
 when no term is similar; 3-letter terms ignored; gap > 0.5 s blocks a merge;
 Word timing/confidence rules; no correction returns the same Words.
 
-**Verify**: `.\venv\Scripts\python.exe -m pytest tests/test_vocabulary_correction.py -q`
+**Verify**: `.\.venv\Scripts\python.exe -m pytest tests/test_vocabulary_tasks.py -q`
 
 ### Step 2: Wire into Segment derivation and persistence
 
@@ -227,10 +227,10 @@ Outcome section.
 
 | Purpose | Command | Expected |
 |---------|---------|----------|
-| Correction tests | `.\venv\Scripts\python.exe -m pytest tests/test_vocabulary_correction.py -q` | pass |
+| Correction tests | `.\.venv\Scripts\python.exe -m pytest tests/test_vocabulary_tasks.py -q` | pass |
 | Backend suite | `.\venv\Scripts\python.exe -m pytest tests -m "not model_load and not model_inference" -q` | pass |
 | Frontend | `npm test` and `npm run build` in `frontend` | pass |
-| Bench | `.\venv\Scripts\python.exe bench/vocabulary_correction.py` | table + JSON |
+| Bench | `.\.venv\Scripts\python.exe -m bench.vocabulary_correction` | table + JSON |
 
 ## Done criteria
 
@@ -271,6 +271,6 @@ Outcome section.
   Forms learned from the other Meetings' edits (leave-one-out). The stored
   forms came from the same edits and would have counted in-sample hits.
 - **Local bench gate still required:** run
-  `.\venv\Scripts\python.exe bench/vocabulary_correction.py` on the user's edited Meetings;
+  `.\.venv\Scripts\python.exe -m bench.vocabulary_correction` on the user's edited Meetings;
   record its per-Meeting and total hits, false changes, and misses here. Do not
   mark this plan or ticket complete until that gate is reviewed.

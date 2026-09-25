@@ -4,8 +4,8 @@
 
 After editing Segments on the local Meetings you want to evaluate, run:
 
-```text
-venv\Scripts\python.exe bench\vocabulary_correction.py
+```powershell
+.\.venv\Scripts\python.exe -m bench.vocabulary_correction
 ```
 
 The script compares each edited Segment with Segments re-derived from the
