@@ -10,6 +10,7 @@ export default function PreferencesTab({ form }: Props) {
     defaultVocab, setDefaultVocab, voiceProfilesEnabled, setVoiceProfilesEnabled,
     hfToken, setHfToken, clusterThreshold, setClusterThreshold,
     switchPenalty, setSwitchPenalty, voiceProfiles, learnedVocab, setLearnedVocab,
+    vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled,
     vocabProfiles, newProfileName, setNewProfileName, newProfileTerms, setNewProfileTerms,
     savingVocabProfile, handleCreateVocabProfile, handleDeleteVocabProfile, handleDeleteVoiceProfile,
   } = form;
@@ -92,6 +93,18 @@ export default function PreferencesTab({ form }: Props) {
           className="w-full bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
           rows={3} maxLength={2000} placeholder="Names, technical terms, abbreviations..." />
       </div>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input type="checkbox" checked={vocabularyCorrectionEnabled}
+          onChange={(e) => setVocabularyCorrectionEnabled(e.target.checked)}
+          className="mt-0.5 accent-violet-600" />
+        <span>
+          <span className="block text-sm font-medium text-slate-300">Apply Vocabulary Correction</span>
+          <span className="block text-xs text-slate-500 mt-0.5">
+            Correct likely misheard Vocabulary terms when Segments are built.
+          </span>
+        </span>
+      </label>
 
       {learnedVocab.length > 0 && (
         <div>

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import String, Float, Integer, Boolean, Text, ForeignKey, Index
+from sqlalchemy import String, Float, Integer, Boolean, Text, ForeignKey, Index, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -22,6 +22,7 @@ class Segment(Base):
     order: Mapped[int] = mapped_column(Integer, nullable=False)
     is_edited: Mapped[bool] = mapped_column(Boolean, default=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=True)
+    corrections: Mapped[list] = mapped_column(JSON, nullable=True, default=list)
 
     meeting = relationship("Meeting", back_populates="segments")
     speaker = relationship("Speaker", back_populates="segments")
@@ -41,4 +42,5 @@ class Segment(Base):
             "order": self.order,
             "is_edited": self.is_edited,
             "confidence": self.confidence,
+            "corrections": self.corrections or [],
         }

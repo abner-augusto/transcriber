@@ -12,6 +12,7 @@ class JobType(str, enum.Enum):
     PROCESS_MEETING = "process_meeting"
     REDIARIZE = "rediarize"
     REIDENTIFY = "reidentify"
+    REAPPLY_VOCABULARY = "reapply_vocabulary"
 
 
 class JobStatus(str, enum.Enum):

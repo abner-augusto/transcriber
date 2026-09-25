@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import Segment
+from transcript.vocabulary_correction import normalize_vocabulary_text
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["segments"])
@@ -72,6 +73,7 @@ def _learn_from_correction(db: Session, old_text: str, new_text: str, meeting_id
 
     # Find words that differ (simple word-level diff)
     corrections = set()
+    learned_forms = []
     # Use difflib for proper alignment
     import difflib
     matcher = difflib.SequenceMatcher(None, old_words, new_words)
@@ -83,6 +85,7 @@ def _learn_from_correction(db: Session, old_text: str, new_text: str, meeting_id
             # Only learn if it looks like a real correction (not a total rewrite)
             if len(new_phrase) < 100 and abs(len(new_phrase) - len(old_phrase)) < len(old_phrase):
                 corrections.add(new_phrase)
+                learned_forms.append((old_phrase, new_phrase))
         elif op == "insert":
             new_phrase = " ".join(new_words[j1:j2])
             if len(new_phrase) < 100:
@@ -105,6 +108,29 @@ def _learn_from_correction(db: Session, old_text: str, new_text: str, meeting_id
                 source_meeting_id=meeting_id,
             )
             db.add(entry)
+
+    for old_phrase, new_phrase in learned_forms:
+        if len(new_phrase) >= 100 or abs(len(new_phrase) - len(old_phrase)) >= len(old_phrase):
+            continue
+        if new_phrase.islower() and len(new_phrase) < 5:
+            continue
+        entry = next((
+            row for row in db.query(VocabularyEntry).all()
+            if normalize_vocabulary_text(row.term) == normalize_vocabulary_text(new_phrase)
+        ), None)
+        if entry is None:
+            continue
+        forms = [dict(form) for form in (entry.misheard_as or [])]
+        normalized_old = normalize_vocabulary_text(old_phrase)
+        existing_form = next(
+            (form for form in forms if normalize_vocabulary_text(form.get("form", "")) == normalized_old),
+            None,
+        )
+        if existing_form:
+            existing_form["count"] += 1
+        else:
+            forms.append({"form": old_phrase, "count": 1})
+        entry.misheard_as = forms
 
     try:
         db.commit()

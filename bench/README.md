@@ -1,5 +1,28 @@
 # WDER benchmark
 
+## Vocabulary Correction benchmark
+
+After editing Segments on the local Meetings you want to evaluate, run:
+
+```text
+venv\Scripts\python.exe bench\vocabulary_correction.py
+```
+
+The script compares each edited Segment with Segments re-derived from the
+Meeting's stored Words, once without Vocabulary Correction and once with the
+Meeting's current Vocabulary and learned Misheard Forms. It aligns Segments by
+their start and end times (within 1.5 seconds), then reports corrected user
+changes (**hits**), corrections the user did not make (**false changes**), and
+user changes still left wrong (**misses**). Counts are tokens, totaled per
+Meeting and across the report.
+
+The default JSON report is written to `bench/out/vocabulary_correction.json`.
+To choose another local output path, pass `--output path\to\report.json`.
+The table and JSON contain only Meeting IDs, Engine names, and counts; they do
+not include transcript text, Meeting titles, Vocabulary, or correction forms.
+Keep the report local because Meeting IDs and Engine usage are still local
+Meeting metadata.
+
 The benchmark compares normalized reference words with hypothesis words and scores
 Speaker mismatches only on text-aligned words. It finds the best one-to-one mapping
 between hypothesis and reference Speaker labels, so engine-local labels do not affect

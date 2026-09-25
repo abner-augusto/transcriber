@@ -16,6 +16,7 @@ from services.audio_service import AudioService
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
 from transcript.segments import derive_segments
+from .vocabulary import vocabulary_correction_for_meeting
 
 
 @celery_app.task(bind=True)
@@ -131,7 +132,10 @@ def process_meeting_task(self, meeting_id: str, job_id: str):
 
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
             update_progress(db, job, meeting, 75, "Synchronizing speakers with text...")
-            aligned = derive_segments(words, diarization, switch_penalty=switch_penalty)
+            correction = vocabulary_correction_for_meeting(db, meeting)
+            aligned = derive_segments(
+                words, diarization, switch_penalty=switch_penalty, correction=correction
+            )
             update_progress(db, job, meeting, 80, "Synchronization complete")
 
             # Step 5: Speaker naming (Participant N, overridden by voice profile matches)

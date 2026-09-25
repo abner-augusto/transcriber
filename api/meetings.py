@@ -398,6 +398,40 @@ def reidentify_meeting(meeting_id: str, db: Session = Depends(get_db)):
     return job.to_dict()
 
 
+@router.post("/{meeting_id}/reapply-vocabulary")
+def reapply_vocabulary(meeting_id: str, db: Session = Depends(get_db)):
+    """Re-derive Segments from stored Words and Turns using current Vocabulary."""
+    from sqlalchemy import update as sql_update
+    from tasks.reprocess_task import reapply_vocabulary_task
+
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    if meeting.status == MeetingStatus.PROCESSING:
+        raise HTTPException(400, "Already processing")
+    if not meeting.raw_transcription or not meeting.raw_diarization:
+        raise HTTPException(400, "No transcription/diarization data. Run full processing first.")
+
+    rows = db.execute(
+        sql_update(Meeting)
+        .where(Meeting.id == meeting_id)
+        .where(Meeting.status != MeetingStatus.PROCESSING)
+        .values(status=MeetingStatus.PROCESSING)
+    )
+    if rows.rowcount == 0:
+        db.rollback()
+        raise HTTPException(409, "Meeting is already being processed")
+
+    job = Job(meeting_id=meeting.id, job_type=JobType.REAPPLY_VOCABULARY, status=JobStatus.PENDING)
+    db.add(job)
+    db.commit()
+
+    result = reapply_vocabulary_task.delay(meeting.id, job.id)
+    job.celery_task_id = result.id
+    db.commit()
+    return job.to_dict()
+
+
 @router.get("/{meeting_id}/jobs")
 def list_jobs(meeting_id: str, db: Session = Depends(get_db)):
     jobs = db.query(Job).filter(Job.meeting_id == meeting_id).order_by(Job.created_at.desc()).all()

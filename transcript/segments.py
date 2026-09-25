@@ -11,6 +11,7 @@ import math
 
 from engines import Turn, Word
 from .diarization import MeetingDiarization
+from .vocabulary_correction import Correction, VocabularyCorrection
 
 
 # A Segment ends at a sentence, at a speaker change, at a long pause, or when it has
@@ -283,6 +284,7 @@ def derive_segments(
     words: list[Word],
     diarization: MeetingDiarization | None,
     switch_penalty: float = SPEAKER_SWITCH_PENALTY,
+    correction: VocabularyCorrection | None = None,
 ) -> list[dict]:
     """The Segments a reader sees for a Meeting's Words and its diarization.
 
@@ -290,7 +292,24 @@ def derive_segments(
     else its Turns. With no diarization every Word is UNKNOWN.
     """
     turns = diarization.attribution_turns if diarization is not None else []
-    return build_segments(words, turns, switch_penalty=switch_penalty)
+    corrected_words, corrections = correction.apply(words) if correction else (words, [])
+    segments = build_segments(corrected_words, turns, switch_penalty=switch_penalty)
+    for segment in segments:
+        segment_corrections = [
+            item for item in corrections
+            if item.start >= segment["start"] and item.end <= segment["end"]
+        ]
+        segment["corrections"] = [
+            {
+                "start": item.start,
+                "end": item.end,
+                "heard": item.heard,
+                "term": item.term,
+                "rule": item.rule,
+            }
+            for item in segment_corrections
+        ]
+    return segments
 
 
 def _breaks_before(current: list[tuple[Word, str]], word: Word, speaker: str) -> bool:

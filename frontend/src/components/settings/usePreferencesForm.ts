@@ -18,6 +18,7 @@ export function usePreferencesForm() {
   const [hfToken, setHfToken] = useState("");
   const [clusterThreshold, setClusterThreshold] = useState<number | null>(null);
   const [switchPenalty, setSwitchPenalty] = useState(0.8);
+  const [vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled] = useState(true);
   const [voiceProfiles, setVoiceProfiles] = useState<SpeakerProfile[]>([]);
   const [learnedVocab, setLearnedVocab] = useState<VocabularyEntry[]>([]);
   const [vocabProfiles, setVocabProfiles] = useState<VocabularyProfile[]>([]);
@@ -36,6 +37,7 @@ export function usePreferencesForm() {
     setHfToken(p.hf_auth_token || "");
     setClusterThreshold(p.diarization?.clustering_threshold ?? null);
     setSwitchPenalty(p.speaker_switch_penalty ?? 0.8);
+    setVocabularyCorrectionEnabled(p.vocabulary_correction?.enabled ?? true);
     setVoiceProfiles(await listSpeakerProfiles());
     setLearnedVocab(await listVocabulary());
     setVocabProfiles(await listVocabularyProfiles());
@@ -78,6 +80,7 @@ export function usePreferencesForm() {
       speaker_profiles_enabled: voiceProfilesEnabled,
       hf_auth_token: hfToken,
       speaker_switch_penalty: switchPenalty,
+      vocabulary_correction: { enabled: vocabularyCorrectionEnabled },
       diarization: clusterThreshold == null ? {} : { clustering_threshold: clusterThreshold },
     });
   }
@@ -88,6 +91,7 @@ export function usePreferencesForm() {
     hfToken, setHfToken,
     clusterThreshold, setClusterThreshold,
     switchPenalty, setSwitchPenalty,
+    vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled,
     voiceProfiles,
     learnedVocab, setLearnedVocab,
     vocabProfiles,

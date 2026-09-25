@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Integer, DateTime, ForeignKey
+from sqlalchemy import String, Integer, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -14,6 +14,7 @@ class VocabularyEntry(Base):
     term: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     frequency: Mapped[int] = mapped_column(Integer, default=1)
     source_meeting_id: Mapped[str] = mapped_column(String, ForeignKey("meetings.id", ondelete="SET NULL"), nullable=True)
+    misheard_as: Mapped[list] = mapped_column(JSON, nullable=True, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -23,5 +24,6 @@ class VocabularyEntry(Base):
             "term": self.term,
             "frequency": self.frequency,
             "source_meeting_id": self.source_meeting_id,
+            "misheard_as": self.misheard_as or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

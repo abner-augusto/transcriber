@@ -38,7 +38,7 @@ the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`.
 |------|-------|----------|--------|------------|--------|
 | 012 | One Diarization stage for full processing and Reprocessing | P1 | M | — | DONE |
 | 013 | Move Segment derivation out of `tasks/shared.py` | P2 | S | 012 | DONE |
-| 014 | Vocabulary Correction (ticket 06) | P1 | L | 012, 013 | TODO |
+| 014 | Vocabulary Correction (ticket 06) | P1 | L | 012, 013 | IN PROGRESS |
 | 015 | The Transcriber returns a Transcription (ticket 01) | P2 | M | 012 | TODO |
 | 016 | One place for Preferences, RunConfig per Job (ticket 03) | P2 | L | 015 (soft) | TODO |
 | 017 | One Job module, Celery as first adapter (ticket 02) | P2 | M | 007 | TODO |

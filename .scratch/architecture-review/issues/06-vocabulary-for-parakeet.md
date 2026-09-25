@@ -14,7 +14,7 @@ it.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 **Plan:** `plans/014-vocabulary-correction.md` (design session 2026-09-24: post-correction at
 Segment derivation, Misheard Forms learned from edits, Re-apply Vocabulary Reprocessing).

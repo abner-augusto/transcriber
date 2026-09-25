@@ -14,16 +14,16 @@ _Avoid_: session, recording, upload, call
 
 **Vocabulary**:
 Domain-specific words and names — supplied by the user or learned from their corrections — that
-are given to the Transcriber so it spells them correctly. Once plan 014 lands, they are also
-applied afterwards by Vocabulary Correction to the Words it still got wrong.
+are given to the Transcriber so it spells them correctly. Vocabulary Correction also applies
+them afterwards to Words it still got wrong.
 _Avoid_: prompt, hints, glossary, dictionary
 
-**Misheard Form** _(planned, plan 014)_:
+**Misheard Form**:
 A way the Transcriber has been seen to get a Vocabulary term wrong ("Galo" for "Garrah"), learned
 when the user corrects a Segment. Belongs to the term, not to one Meeting.
 _Avoid_: alias, typo, mapping
 
-**Vocabulary Correction** _(planned, plan 014)_:
+**Vocabulary Correction**:
 Replacing Words the Transcriber misheard with the Vocabulary term they were meant to be. Applied
 when Segments are derived, so the Words stay as the Transcriber heard them and a Correction can
 be re-applied without transcribing again. Records what it changed, where, and by which rule.
@@ -93,6 +93,6 @@ _Avoid_: task (reserved for the Celery mechanism that runs a Job)
 
 **Reprocessing**:
 Re-running diarization or speaker naming over a Meeting that has already been transcribed,
-without transcribing it again — typically after saving a new Voice Profile. Plan 014 adds
-re-applying Vocabulary Correction after teaching the tool a new Vocabulary term.
+without transcribing it again — typically after saving a new Voice Profile. Re-applying
+Vocabulary Correction is also available after changing the Meeting's Vocabulary.
 _Avoid_: rerun, refresh

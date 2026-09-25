@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMeeting, startProcessing, getJobs, rediarizeMeeting, reidentifyMeeting, updateMeetingTitle, updateMeeting } from "../api";
+import { getMeeting, startProcessing, getJobs, rediarizeMeeting, reidentifyMeeting, reapplyVocabulary, updateMeetingTitle, updateMeeting } from "../api";
 import { useStore } from "../store";
 import type { ProgressUpdate } from "../types";
 import TranscriptView from "../components/TranscriptView";
@@ -193,6 +193,14 @@ export default function MeetingPage() {
     loadMeeting();
   }
 
+  async function handleReapplyVocabulary() {
+    if (!id) return;
+    setShowReprocess(false);
+    await reapplyVocabulary(id);
+    setProgress({ type: "progress", progress: 0, step: "Re-applying vocabulary...", status: "processing" });
+    loadMeeting();
+  }
+
   if (!currentMeeting) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -313,6 +321,13 @@ export default function MeetingPage() {
                     >
                       <div className="text-sm text-white font-medium">Re-identify speakers</div>
                       <div className="text-xs text-slate-500 mt-0.5">Re-run AI speaker naming only</div>
+                    </button>
+                    <button
+                      onClick={handleReapplyVocabulary}
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition"
+                    >
+                      <div className="text-sm text-white font-medium">Re-apply vocabulary</div>
+                      <div className="text-xs text-slate-500 mt-0.5">Rebuild Segments with saved Vocabulary</div>
                     </button>
                     <div className="border-t border-slate-700 my-1" />
                     <button

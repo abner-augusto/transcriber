@@ -499,8 +499,12 @@ def test_derive_segments_attributes_against_exclusive_turns_when_there_are_any()
         engine="pyannote", turns=turns, exclusive_turns=[], overlaps=compute_overlaps(turns)
     )
 
-    assert derive_segments(words, with_exclusive) == build_segments(words, exclusive)
-    assert derive_segments(words, empty_exclusive) == build_segments(words, turns)
+    assert derive_segments(words, with_exclusive) == [
+        {**segment, "corrections": []} for segment in build_segments(words, exclusive)
+    ]
+    assert derive_segments(words, empty_exclusive) == [
+        {**segment, "corrections": []} for segment in build_segments(words, turns)
+    ]
 
 
 def test_derive_segments_without_a_diarization_leaves_every_word_unknown():

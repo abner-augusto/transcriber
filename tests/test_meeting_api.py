@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
 from main import app
-from models import Meeting, MeetingStatus
+from models import Meeting, MeetingStatus, Segment, VocabularyEntry
 from models.job import Job
 
 
@@ -117,3 +117,48 @@ def test_blocked_preset_cannot_create_or_queue_job(db_session, monkeypatch):
     assert meeting.status == MeetingStatus.UPLOADED
     assert db_session.query(Job).count() == 0
     assert queued == []
+
+
+def test_reapply_vocabulary_endpoint_claims_meeting_and_queues_job(db_session, monkeypatch):
+    from types import SimpleNamespace
+
+    meeting = Meeting(
+        title="Vocabulary", status=MeetingStatus.COMPLETED,
+        raw_transcription={"words": [{"start": 0.0, "end": 0.4, "text": " Galo"}]},
+        raw_diarization={"turns": []},
+    )
+    db_session.add(meeting)
+    db_session.commit()
+    queued = []
+    monkeypatch.setattr(
+        "tasks.reprocess_task.reapply_vocabulary_task.delay",
+        lambda *args: (queued.append(args), SimpleNamespace(id="celery-1"))[1],
+    )
+
+    response = TestClient(app).post(f"/api/meetings/{meeting.id}/reapply-vocabulary")
+
+    assert response.status_code == 200
+    assert response.json()["job_type"] == "reapply_vocabulary"
+    assert queued == [(meeting.id, response.json()["id"])]
+
+
+def test_segment_edits_learn_and_increment_misheard_form(db_session):
+    meeting = Meeting(title="Learning", status=MeetingStatus.COMPLETED)
+    entry = VocabularyEntry(term="Garrah")
+    db_session.add_all([meeting, entry])
+    db_session.flush()
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0, end_time=0.5,
+        text="Galo", original_text="Galo", order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+
+    client = TestClient(app)
+    for _ in range(2):
+        response = client.put(f"/api/segments/{segment.id}", json={"text": "Garrah"})
+        assert response.status_code == 200
+        assert response.json()["text"] == "Garrah"
+
+    db_session.refresh(entry)
+    assert entry.misheard_as == [{"form": "Galo", "count": 2}]

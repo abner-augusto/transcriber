@@ -13,6 +13,8 @@ from services.vad_service import VadService
 from transcript.diarization import MeetingDiarization
 from transcript.segments import derive_segments
 from transcript.words import words_from_stored
+from .vocabulary import vocabulary_correction_for_meeting
+from models import Speaker, Segment
 
 
 def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
@@ -53,7 +55,10 @@ def _reprocess_meeting(db, meeting, job, rerun_diarization: bool):
         55 if rerun_diarization else 20,
         "Synchronizing speakers with text...",
     )
-    aligned = derive_segments(words, diarization, switch_penalty=get_speaker_switch_penalty())
+    correction = vocabulary_correction_for_meeting(db, meeting)
+    aligned = derive_segments(
+        words, diarization, switch_penalty=get_speaker_switch_penalty(), correction=correction
+    )
 
     # Speaker naming (Participant N, overridden by voice profile matches)
     update_progress(
@@ -108,6 +113,76 @@ def reidentify_task(self, meeting_id: str, job_id: str):
     try:
         with meeting_job(meeting_id, job_id) as (db, meeting, job):
             _reprocess_meeting(db, meeting, job, rerun_diarization=False)
+        return {"status": "completed", "meeting_id": meeting_id}
+    except MeetingNotFoundError:
+        return {"error": "Meeting or Job not found"}
+
+
+def _rebuild_segments_only(db, meeting, aligned):
+    """Replace derived Segments while retaining the Meeting's existing Speakers."""
+    old_segments = (
+        db.query(Segment).filter(Segment.meeting_id == meeting.id)
+        .order_by(Segment.order).all()
+    )
+    edited = [
+        {"start": row.start_time, "end": row.end_time, "text": row.text}
+        for row in old_segments if row.is_edited
+    ]
+    speakers = {
+        speaker.label: speaker
+        for speaker in db.query(Speaker).filter(Speaker.meeting_id == meeting.id).all()
+    }
+    speaker_segments = {label: [] for label in speakers}
+    db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
+    db.flush()
+    for index, derived in enumerate(aligned):
+        text = derived["text"]
+        is_edited = False
+        for old in edited:
+            if abs(derived["start"] - old["start"]) < 1.5 and abs(derived["end"] - old["end"]) < 1.5:
+                text = old["text"]
+                is_edited = True
+                break
+        db.add(Segment(
+            meeting_id=meeting.id,
+            speaker_id=speakers.get(derived["speaker"]).id if derived["speaker"] in speakers else None,
+            start_time=derived["start"],
+            end_time=derived["end"],
+            text=text,
+            original_text=derived["text"],
+            order=index,
+            is_edited=is_edited,
+            confidence=derived.get("confidence"),
+            corrections=[] if is_edited else derived.get("corrections", []),
+        ))
+        if derived["speaker"] in speaker_segments:
+            speaker_segments[derived["speaker"]].append(derived)
+    for label, speaker in speakers.items():
+        assigned = speaker_segments[label]
+        speaker.segment_count = len(assigned)
+        speaker.total_speaking_time = sum(item["end"] - item["start"] for item in assigned)
+    db.commit()
+
+
+@celery_app.task(bind=True)
+def reapply_vocabulary_task(self, meeting_id: str, job_id: str):
+    """Re-derive Segments from stored Words and Turns without changing Speakers."""
+    try:
+        with meeting_job(meeting_id, job_id) as (db, meeting, job):
+            words = words_from_stored(meeting.raw_transcription)
+            if not words:
+                raise RuntimeError("No existing transcription found. Run full processing first.")
+            diarization = MeetingDiarization.from_stored(meeting.raw_diarization)
+            if diarization is None:
+                raise RuntimeError("No existing diarization found. Run full processing first.")
+            correction = vocabulary_correction_for_meeting(db, meeting)
+            aligned = derive_segments(
+                words, diarization,
+                switch_penalty=get_speaker_switch_penalty(),
+                correction=correction,
+            )
+            update_progress(db, job, meeting, 80, "Saving corrected Segments...")
+            _rebuild_segments_only(db, meeting, aligned)
         return {"status": "completed", "meeting_id": meeting_id}
     except MeetingNotFoundError:
         return {"error": "Meeting or Job not found"}

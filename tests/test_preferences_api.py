@@ -57,3 +57,15 @@ def test_update_preferences_ignores_invalid_switch_penalty(monkeypatch):
     update_preferences({"speaker_switch_penalty": 2.1})
 
     assert saved["speaker_switch_penalty"] == 0.8
+
+
+def test_vocabulary_correction_preference_accepts_only_a_boolean(monkeypatch):
+    saved = {}
+    monkeypatch.setattr("preferences.load_preferences", lambda: dict(saved))
+    monkeypatch.setattr("preferences.save_preferences", lambda value: saved.update(value))
+    monkeypatch.setattr("preferences.get_public_preferences", lambda: saved)
+
+    update_preferences({"vocabulary_correction": {"enabled": False}})
+    assert saved["vocabulary_correction"] == {"enabled": False}
+    update_preferences({"vocabulary_correction": {"enabled": "false"}})
+    assert saved["vocabulary_correction"] == {"enabled": False}

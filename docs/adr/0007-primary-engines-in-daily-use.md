@@ -35,13 +35,15 @@ evaluated before it is trusted for real Meetings.
   `bench/` comparison on the user's own recordings, not the ADR-0005 numbers
   alone.
 
-## A fact to keep in mind
+## Vocabulary coverage
 
-`engines/parakeet_cpp.py` **ignores Vocabulary** ("Parakeet takes no
-prompt"). Parakeet's accuracy on names comes from the model itself, not from
-the terms the user supplies. Vocabulary reaches faster-whisper
-(`initial_prompt`), whisper.cpp (`--prompt`), qwen3-asr, and vibevoice only.
-Making Vocabulary useful for Parakeet is tracked in
+`engines/parakeet_cpp.py` ignores Vocabulary because its CLI has no prompt
+option. Engine-level Vocabulary hints still reach faster-whisper
+(`initial_prompt`), whisper.cpp (`--prompt`), qwen3-asr, and vibevoice.
+Engine-agnostic Vocabulary Correction also runs during Segment derivation for
+every Engine, using the Meeting's terms and learned Misheard Forms. Its
+user-recording benchmark is pending; no accuracy result is claimed here. The
+implementation and local benchmark are tracked in plan 014 and
 `.scratch/architecture-review/issues/06-vocabulary-for-parakeet.md`.
 
 ## Consequences

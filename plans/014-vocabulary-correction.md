@@ -17,6 +17,8 @@
 
 ## Status
 
+- **Execution**: IN PROGRESS — implementation through Step 4; local bench gate remains.
+
 - **Priority**: P1 (the most-used Engine gets no Vocabulary today)
 - **Effort**: L
 - **Risk**: MED
@@ -232,13 +234,13 @@ Outcome section.
 
 ## Done criteria
 
-- [ ] `transcript/vocabulary_correction.py` imports nothing from `tasks`, `services`, `config`, `database`, `redis`
-- [ ] Stored `raw_transcription` Words are unchanged by correction
-- [ ] Corrections are stored per Segment and recomputed on every rebuild
-- [ ] Re-apply Vocabulary keeps Speaker names
+- [x] `transcript/vocabulary_correction.py` imports nothing from `tasks`, `services`, `config`, `database`, `redis`
+- [x] Stored `raw_transcription` Words are unchanged by correction
+- [x] Corrections are stored per Segment and recomputed on every rebuild
+- [x] Re-apply Vocabulary keeps Speaker names
 - [ ] Bench numbers from the user's Meetings recorded in this plan
-- [ ] `plans/README.md` row and ticket 06 status updated
-- [ ] `CONTEXT.md`: drop the "(planned, plan 014)" markers and the "once plan 014 lands" wording
+- [x] `plans/README.md` row and ticket 06 status updated
+- [x] `CONTEXT.md`: drop the "(planned, plan 014)" markers and the "once plan 014 lands" wording
 
 ## STOP conditions
 
@@ -253,3 +255,19 @@ Outcome section.
 - Ticket 08 (suggestions on the Meeting page) reads `segments.corrections`.
 - If decoder biasing is ever added to parakeet.cpp, keep this step: it also
   covers Misheard Forms and every other Engine.
+
+## Outcome
+
+- Steps 1–4 implemented and focused verification passed.
+- Focused backend verification: 54 tests passed across Vocabulary Correction,
+  task harness, meeting API, Segment derivation, and Preferences.
+- Latest focused backend verification: 51 tests passed, including speaker
+  attribution stats, API learning persistence, metadata-only bench output, and
+  accent-only correction scoring.
+- Frontend verification: 36 tests passed; `npm run build` passed.
+- The bench script and run instructions are implemented; no user database was
+  opened during this work.
+- **Local bench gate still required:** run
+  `.\venv\Scripts\python.exe bench/vocabulary_correction.py` on the user's edited Meetings;
+  record its per-Meeting and total hits, false changes, and misses here. Do not
+  mark this plan or ticket complete until that gate is reviewed.

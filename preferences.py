@@ -31,6 +31,7 @@ _DEFAULTS = {
     # Recognised keys: "clustering_threshold" (0-1), "Fa", "Fb".
     "diarization": {},
     "vocabulary_profiles": [],
+    "vocabulary_correction": {"enabled": True},
 }
 
 # Values that should be masked when sending to frontend

@@ -129,6 +129,10 @@ def update_preferences(body: dict):
         current["default_vocabulary"] = (body["default_vocabulary"] or "").strip()[:2000]
     if "speaker_profiles_enabled" in body:
         current["speaker_profiles_enabled"] = bool(body["speaker_profiles_enabled"])
+    if isinstance(body.get("vocabulary_correction"), dict):
+        enabled = body["vocabulary_correction"].get("enabled")
+        if isinstance(enabled, bool):
+            current["vocabulary_correction"] = {"enabled": enabled}
     if "hf_auth_token" in body:
         val = (body["hf_auth_token"] or "").strip()
         # Don't overwrite with the masked value

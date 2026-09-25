@@ -49,6 +49,11 @@ export async function reidentifyMeeting(id: string): Promise<Job> {
   return data;
 }
 
+export async function reapplyVocabulary(id: string): Promise<Job> {
+  const { data } = await api.post(`/meetings/${id}/reapply-vocabulary`);
+  return data;
+}
+
 export async function duplicateMeeting(id: string, presetId: string): Promise<Meeting> {
   const { data } = await api.post(`/meetings/${id}/duplicate`, { preset_id: presetId });
   return data;
@@ -212,6 +217,7 @@ export interface Preferences {
   hf_auth_token: string;
   speaker_switch_penalty?: number;
   diarization?: DiarizationPrefs;
+  vocabulary_correction?: { enabled: boolean };
 }
 
 export async function getPreferences(): Promise<Preferences> {
