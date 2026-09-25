@@ -49,6 +49,17 @@ Postgres lock they described.
 | 020 | Remove Redis/Celery/Postgres/Docker, `uv`, one start command (ticket 05) | P3 | M | 018, 019 | IN PROGRESS (clean Windows install pending) |
 | 021 | Evaluate VibeVoice against the daily stack (ticket 07) | P3 | M | 012, 013 | TODO |
 
+### Selectable Diarizer (2026-09-25)
+
+Source: the 2026-09-25 bench session. With the Words held fixed, Nemotron 3
+Diarization beat pyannote on WDER in two of the user's Meetings
+(`bench/diarizer_wder.py`; numbers in plan 022).
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 022 | Nemotron 3 Diarization as a second Diarizer Engine | P2 | M | — | TODO |
+| 023 | A Diarization tab in Settings | P2 | S | 022 | TODO |
+
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
@@ -75,6 +86,9 @@ summarized in [`LOCAL-VERIFICATION.md`](LOCAL-VERIFICATION.md).
   and never write placeholder or estimated numbers. Plan 021 stays `TODO`
   until the user reports results.
 
+- 022 → 023 in order. 023 is frontend only and stops if 022's
+  `diarizers` payload is missing. 022's Step 8 and 023's Step 5 are
+  local-only gates (GPU and the user's Meetings).
 - 007, 008, 009, and 011 can run in parallel.
 - 010 must wait for 007 (the `PROCESSING` claim is only a real lock after
   recovery leaves the API) and 012 (do not fold dual-track diarization into
