@@ -44,7 +44,7 @@ def test_run_config_resolves_result_choices_without_secrets(
         vocabulary_correction=VocabularyCorrectionPrefs(enabled=False),
     )
 
-    config = resolve_run_config(Meeting(preset_id="preset-a"), preferences=prefs)
+    config = resolve_run_config("preset-a", preferences=prefs)
     stored = config.model_dump(mode="json", exclude_none=True)
 
     assert config.preset == preset
@@ -67,7 +67,7 @@ def test_run_config_uses_preference_dtw_when_preset_does_not_override(monkeypatc
     monkeypatch.setattr(presets, "resolve_preset", lambda preset_id, **kwargs: preset)
 
     config = resolve_run_config(
-        Meeting(preset_id="preset-a"),
+        "preset-a",
         preferences=Preferences(whisper_dtw=WhisperDtwPrefs(enabled=False, preset="medium")),
     )
 

@@ -10,6 +10,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from config import get_storage_path, settings
+from engines import DEFAULT_ALIGNMENT_ENGINE
 from transcript.segments import SPEAKER_SWITCH_PENALTY as DEFAULT_SPEAKER_SWITCH_PENALTY
 
 log = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class ForcedAlignmentPrefs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    model: str = "mms-fa"
+    model: str = DEFAULT_ALIGNMENT_ENGINE
     device: str = "auto"
 
 

@@ -26,7 +26,7 @@ import numpy as np
 import soundfile as sf
 import torch
 
-from . import validate_alignment_engine
+from . import DEFAULT_ALIGNMENT_ENGINE, validate_alignment_engine
 from .ports import Aligner, Word
 
 log = logging.getLogger(__name__)
@@ -403,7 +403,7 @@ class MMSCTCAligner:
 def make_aligner(preset_or_config: Optional[dict] = None) -> Aligner:
     """Instantiate a configured Aligner."""
     device = None
-    model = "mms-fa"
+    model = DEFAULT_ALIGNMENT_ENGINE
     if preset_or_config:
         device = preset_or_config.get("device")
         model = preset_or_config.get("model", model)
@@ -426,7 +426,7 @@ def align_words(audio_path: str, words: list[Word], config: Optional[dict] = Non
 
 def alignment_engine_status(config: Optional[dict] = None) -> dict:
     """Check availability of the forced alignment dependencies and model."""
-    model = "mms-fa"
+    model = DEFAULT_ALIGNMENT_ENGINE
     if config:
         model = config.get("model", model)
     try:
@@ -437,14 +437,14 @@ def alignment_engine_status(config: Optional[dict] = None) -> dict:
         import torchaudio.pipelines as pipelines  # noqa: F401
         return {
             "available": True,
-            "engine": "mms-fa",
+            "engine": DEFAULT_ALIGNMENT_ENGINE,
             "description": "Meta MMS Multilingual CTC Forced Aligner (pt-BR compatible)",
             "reason": None,
         }
     except Exception as e:
         return {
             "available": False,
-            "engine": "mms-fa",
+            "engine": DEFAULT_ALIGNMENT_ENGINE,
             "description": "Meta MMS Multilingual CTC Forced Aligner (pt-BR compatible)",
             "reason": str(e),
         }

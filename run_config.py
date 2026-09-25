@@ -26,14 +26,15 @@ class RunConfig(BaseModel):
     vocabulary_correction: VocabularyCorrectionPrefs
 
 
-def resolve_run_config(meeting, *, preferences: Preferences | None = None) -> RunConfig:
-    """Capture the Preferences and Preset that apply when a Job begins running."""
+def resolve_run_config(preset_id: str | None, *, preferences: Preferences | None = None) -> RunConfig:
+    """Capture the Preferences and the Preset that apply when a Job begins running.
+
+    ``preset_id`` is the Meeting's chosen Preset, or None for the default one.
+    """
     import presets
 
     prefs = preferences or load()
-    preset = dict(
-        presets.resolve_preset(meeting.preset_id, default_preset=prefs.default_preset)
-    )
+    preset = dict(presets.resolve_preset(preset_id, default_preset=prefs.default_preset))
 
     raw_alignment = preset.get("forced_alignment")
     alignment_enabled = bool(raw_alignment) or prefs.forced_alignment.enabled
@@ -59,10 +60,3 @@ def resolve_run_config(meeting, *, preferences: Preferences | None = None) -> Ru
         speaker_profiles_enabled=prefs.speaker_profiles_enabled,
         vocabulary_correction=prefs.vocabulary_correction,
     )
-
-
-def run_config_for_preset(preset: dict, *, preferences: Preferences | None = None) -> RunConfig:
-    """Build the same snapshot for a standalone local Engine tool or bench row."""
-    from types import SimpleNamespace
-
-    return resolve_run_config(SimpleNamespace(preset_id=preset["id"]), preferences=preferences)

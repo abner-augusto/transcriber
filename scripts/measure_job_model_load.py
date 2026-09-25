@@ -19,14 +19,14 @@ def measure(component: str) -> None:
 
     if component in {"parakeet", "faster-whisper"}:
         from engines import make_transcriber
-        from run_config import run_config_for_preset
+        from run_config import resolve_run_config
 
         preset_id = (
             "parakeet-tdt-0.6b-v3"
             if component == "parakeet"
             else "faster-whisper-large-v3"
         )
-        transcriber = make_transcriber(run_config_for_preset(get_preset(preset_id)))
+        transcriber = make_transcriber(resolve_run_config(preset_id))
         _measure(f"{component}_adapter_load", transcriber.load)
         if component == "parakeet":
             print(
@@ -39,11 +39,11 @@ def measure(component: str) -> None:
     if component == "pyannote":
         from engines import make_diarizer
         from preferences import hf_token
-        from run_config import run_config_for_preset
+        from run_config import resolve_run_config
 
         preset = get_preset("faster-whisper-large-v3")
         diarizer = make_diarizer(
-            run_config_for_preset(preset),
+            resolve_run_config(preset["id"]),
             hf_token=hf_token(),
         )
         _measure(

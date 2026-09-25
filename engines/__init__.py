@@ -20,6 +20,11 @@ from .ports import (
 )
 from .overlap import compute_overlaps
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from run_config import RunConfig
+
 
 __all__ = [
     "Word", "Turn", "DiarizationResult", "Transcription", "raw_transcription",
@@ -30,32 +35,29 @@ __all__ = [
 
 TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp", "qwen3-asr", "vibevoice"]
 
-ALIGNMENT_ENGINES = ["mms-fa"]
+DEFAULT_ALIGNMENT_ENGINE = "mms-fa"
+ALIGNMENT_ENGINES = [DEFAULT_ALIGNMENT_ENGINE]
 
 DIARIZER_ENGINE = "pyannote"
 
 
 def validate_alignment_engine(engine: str | None) -> str:
     """Return a supported alignment engine or fail with an actionable message."""
-    selected = engine or "mms-fa"
+    selected = engine or DEFAULT_ALIGNMENT_ENGINE
     if selected not in ALIGNMENT_ENGINES:
         raise ValueError(f"Unknown alignment engine '{selected}'. Known: {', '.join(ALIGNMENT_ENGINES)}")
     return selected
 
 
-def _as_run_config(value):
-    from run_config import RunConfig
-
-    if isinstance(value, RunConfig):
-        return value
-    return RunConfig.model_validate(value)
+def _alignment_config(run_config: "RunConfig") -> dict | None:
+    alignment = run_config.forced_alignment
+    return alignment.model_dump() if alignment is not None else None
 
 
-def make_transcriber(run_config) -> Transcriber:
+def make_transcriber(run_config: "RunConfig") -> Transcriber:
     """Build the Transcriber selected by a Job's resolved RunConfig."""
     from config import settings
 
-    run_config = _as_run_config(run_config)
     preset = run_config.preset
     engine = preset.get("engine")
     model_path = preset.get("model_path")
@@ -119,13 +121,12 @@ def make_transcriber(run_config) -> Transcriber:
     raise ValueError(f"Unknown transcription engine '{engine}'. Known: {TRANSCRIBER_ENGINES}")
 
 
-def make_diarizer(run_config, *, hf_token: str = "") -> Diarizer:
+def make_diarizer(run_config: "RunConfig", *, hf_token: str = "") -> Diarizer:
     """The Diarizer. There is only one, and swapping it means one more branch here."""
     from .pyannote import PyannoteDiarizer
 
-    config = _as_run_config(run_config)
     return PyannoteDiarizer(
-        clustering=config.diarization.model_dump(exclude_none=True),
+        clustering=run_config.diarization.model_dump(exclude_none=True),
         auth_token=hf_token,
     )
 
@@ -141,28 +142,18 @@ def probe_engine(preset: dict, deep: bool = False):
     return _probe(preset, deep=deep)
 
 
-def make_aligner(run_config) -> Aligner:
+def make_aligner(run_config: "RunConfig") -> Aligner:
     """The Aligner. Uses CTC forced alignment to refine Word timestamps."""
     from .alignment import make_aligner as _make_aligner
 
-    config = _as_run_config(run_config)
-    return _make_aligner(
-        config.forced_alignment.model_dump() if config.forced_alignment is not None else None
-    )
+    return _make_aligner(_alignment_config(run_config))
 
 
-def align_words(audio_path: str, words: list[Word], run_config=None) -> list[Word]:
+def align_words(audio_path: str, words: list[Word], run_config: "RunConfig | None" = None) -> list[Word]:
     """Align Words against audio using CTC forced alignment with graceful fallback."""
     from .alignment import align_words as _align_words
 
-    if run_config is None or isinstance(run_config, dict) and "preset" not in run_config:
-        return _align_words(audio_path, words, run_config)
-    config = _as_run_config(run_config)
-    return _align_words(
-        audio_path,
-        words,
-        config.forced_alignment.model_dump() if config.forced_alignment is not None else None,
-    )
+    return _align_words(audio_path, words, _alignment_config(run_config) if run_config else None)
 
 
 def alignment_engine_status(config: dict | None = None) -> dict:

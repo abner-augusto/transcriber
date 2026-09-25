@@ -121,7 +121,7 @@ def running(meeting_id: str, job_id: str):
             raise MeetingNotFoundError("Meeting or Job not found")
 
         from run_config import resolve_run_config
-        job.run_config = resolve_run_config(meeting).model_dump(mode="json", exclude_none=True)
+        job.run_config = resolve_run_config(meeting.preset_id).model_dump(mode="json", exclude_none=True)
         job.status = JobStatus.RUNNING
         job.started_at = datetime.utcnow()
         meeting.status = MeetingStatus.PROCESSING

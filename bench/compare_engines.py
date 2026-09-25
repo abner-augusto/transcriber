@@ -84,14 +84,12 @@ def main() -> int:
 
     results = []
     for preset in chosen:
-        from run_config import run_config_for_preset
-        transcriber = make_transcriber(run_config_for_preset(preset))
+        from run_config import resolve_run_config
+        transcriber = make_transcriber(resolve_run_config(preset["id"]))
         transcriber.load()
         started = time.perf_counter()
-        try:
-            transcription = transcriber.transcribe(str(wav), vocabulary=args.vocabulary)
-            elapsed = time.perf_counter() - started
-        finally:
+        transcription = transcriber.transcribe(str(wav), vocabulary=args.vocabulary)
+        elapsed = time.perf_counter() - started
         words = transcription.words
 
         text = "".join(w.text for w in words).strip()
