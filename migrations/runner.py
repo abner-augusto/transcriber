@@ -3,6 +3,11 @@
 from sqlalchemy import text
 
 
+# Segment search indexes the implicit rowid of ``segments``, whose primary key is
+# TEXT. SQLite documents that VACUUM *may* renumber such rowids; SQLite 3.50
+# preserves them (checked 2026-09-25, including VACUUM INTO). If search ever
+# returns the wrong Segments after a VACUUM or an external tool rewrote the file,
+# run: INSERT INTO segments_fts(segments_fts) VALUES ('rebuild');
 _MIGRATIONS = (
     (
         1,
@@ -36,7 +41,12 @@ _MIGRATIONS = (
 
 
 def upgrade(engine) -> None:
-    """Apply each unapplied migration in order, recording it transactionally."""
+    """Apply each unapplied migration in order and record it.
+
+    pysqlite runs DDL outside the surrounding transaction, so a migration is not
+    atomic. Every statement is idempotent instead: a migration interrupted before
+    it is recorded is simply applied again on the next start.
+    """
     if engine.dialect.name != "sqlite":
         raise RuntimeError("Numbered schema migrations currently support SQLite only")
 
