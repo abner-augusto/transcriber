@@ -1,4 +1,4 @@
-"""Unit tests for services: AudioService and SpeakerIdService."""
+"""SpeakerIdService: sample selection for voice profiles, and Participant naming."""
 
 from engines import Turn
 from services.speaker_id_service import SpeakerIdService
@@ -35,8 +35,16 @@ def test_speaker_id_best_turns_fallback_to_short_turns():
     assert best[0].start == 2.0
 
 
-def test_speaker_id_participant_names():
-    service = SpeakerIdService()
-    names = service._participant_names(["SPEAKER_01", "SPEAKER_00"])
-    assert names["SPEAKER_00"]["name"] == "Participant 1"
-    assert names["SPEAKER_01"]["name"] == "Participant 2"
+def test_speakers_are_named_participant_n_in_label_order(monkeypatch, tmp_path):
+    from models import JobType
+    from tasks.process_meeting import process_meeting_task
+
+    from . import task_harness as h
+    from .fakes import FakeTranscriber
+
+    harness = h.install(monkeypatch, tmp_path, transcriber=FakeTranscriber(h.WORDS), diarization=h.PYANNOTE)
+    meeting_id = harness.meeting()
+    assert process_meeting_task(meeting_id, harness.job(meeting_id, JobType.PROCESS_MEETING))["status"] == "completed"
+
+    speakers = sorted((s.label, s.display_name) for s in harness.load(meeting_id).speakers)
+    assert speakers == [("SPEAKER_00", "Participant 1"), ("SPEAKER_01", "Participant 2")]

@@ -1,8 +1,12 @@
-"""Regression lock for the removed live-recording / live-session surface."""
+"""Status values are stored in the database and mirrored by the frontend types.
+
+They also lock out the removed live-recording and CANCELLED states: bringing one
+back is a deliberate change to these sets (see ticket 09).
+"""
 
 from pathlib import Path
 
-from models import Meeting, MeetingStatus
+from models import MeetingStatus
 from models.job import JobStatus
 
 
@@ -22,23 +26,6 @@ def test_job_status_enum_has_no_cancelled():
     assert not hasattr(JobStatus, "CANCELLED")
 
 
-def test_meeting_dict_omits_live_session_fields():
-    meeting = Meeting(title="No live fields", status=MeetingStatus.UPLOADED)
-    payload = meeting.to_dict()
-
-    assert payload["status"] in ALLOWED_MEETING_STATUSES
-    assert "mode" not in payload
-    assert "recording_status" not in payload
-
-
-def test_app_exposes_no_live_routes():
-    from main import app
-
-    paths = [getattr(route, "path", "") for route in app.routes]
-    live_paths = [path for path in paths if "/live" in path]
-    assert live_paths == []
-
-
 def test_frontend_meeting_type_matches_backend_statuses():
     types = (ROOT / "frontend" / "src" / "types.ts").read_text(encoding="utf-8")
     meeting_block = types.split("export interface Meeting")[1].split("export interface Speaker")[0]
@@ -46,17 +33,3 @@ def test_frontend_meeting_type_matches_backend_statuses():
     assert 'status: "uploaded" | "processing" | "completed" | "failed"' in meeting_block
     assert "recording_status" not in meeting_block
     assert "mode:" not in meeting_block
-
-
-def test_frontend_has_no_live_session_branches():
-    homepage = (ROOT / "frontend" / "src" / "pages" / "HomePage.tsx").read_text(encoding="utf-8")
-    meeting_page = (ROOT / "frontend" / "src" / "pages" / "MeetingPage.tsx").read_text(encoding="utf-8")
-    transcript = (ROOT / "frontend" / "src" / "components" / "TranscriptView.tsx").read_text(
-        encoding="utf-8"
-    )
-
-    assert "recording:" not in homepage
-    assert "finalizing:" not in homepage
-    assert 'mode === "live"' not in homepage
-    assert "finalizing" not in meeting_page
-    assert "isLive" not in transcript

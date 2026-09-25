@@ -171,7 +171,10 @@ def test_extract_dual_audio_never_overwrites_source_artifacts(tmp_path):
     assert calls[1][-1] == str(meeting_dir / "system_processed.wav")
 
 
-def test_ffmpeg_failure_preserves_stderr():
+def test_ffmpeg_failure_preserves_stderr(monkeypatch, tmp_path):
+    import config
+
+    monkeypatch.setattr(config.settings, "storage_path", str(tmp_path))
     expected_stderr = "Output same as Input - exiting"
     failure = subprocess.CalledProcessError(
         returncode=4294967274,
@@ -181,4 +184,4 @@ def test_ffmpeg_failure_preserves_stderr():
 
     with patch("subprocess.run", side_effect=failure):
         with pytest.raises(RuntimeError, match=expected_stderr):
-            AudioService()._extract_mono("input.wav", "output.wav")
+            AudioService().extract_audio("input.wav", "meeting-1")

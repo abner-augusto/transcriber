@@ -5,24 +5,15 @@ from fastapi.testclient import TestClient
 
 from main import app
 import preferences
-from preferences import Preferences
 
 
 @pytest.fixture
-def client(monkeypatch):
-    """Isolated client with preferences backed by an in-memory dict."""
-    prefs = {"vocabulary_profiles": []}
+def client(monkeypatch, tmp_path):
+    """A client whose Preferences file lives in a temporary storage directory."""
+    import config
 
-    def load():
-        return Preferences.model_validate(prefs)
-
-    def update(patch):
-        prefs.update(patch)
-        return Preferences.model_validate(prefs)
-
-    monkeypatch.setattr(preferences, "load", load)
-    monkeypatch.setattr(preferences, "update", update)
-
+    monkeypatch.setattr(config.settings, "storage_path", str(tmp_path / "storage"))
+    monkeypatch.setattr(preferences, "LEGACY_PREFERENCES_PATH", tmp_path / "no-legacy-file")
     yield TestClient(app)
 
 

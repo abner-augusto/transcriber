@@ -93,7 +93,9 @@ def test_reapply_vocabulary_updates_segments_and_keeps_existing_speakers(
     assert meeting.segments[0].corrections[0]["rule"] == "misheard"
 
 
-def _processed_segment(monkeypatch, tmp_path, words: list[Word], vocabulary: str):
+def _processed_segment(
+    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = ()
+):
     harness = h.install(
         monkeypatch, tmp_path,
         transcriber=FakeTranscriber(words),
@@ -102,6 +104,10 @@ def _processed_segment(monkeypatch, tmp_path, words: list[Word], vocabulary: str
     monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
         update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
     ))
+    with harness.session_factory() as db:
+        for term, form, count in misheard:
+            db.add(VocabularyEntry(term=term, misheard_as=[{"form": form, "count": count}]))
+        db.commit()
     meeting_id = harness.meeting(vocabulary=vocabulary)
     job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
     assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
@@ -109,40 +115,102 @@ def _processed_segment(monkeypatch, tmp_path, words: list[Word], vocabulary: str
     return segment
 
 
+def _spoken(*texts: str) -> list[Word]:
+    """Words 0.3 s apart: close enough to merge into one heard phrase."""
+    return [Word(0.1 + i * 0.3, 0.35 + i * 0.3, text) for i, text in enumerate(texts)]
+
+
 @pytest.mark.parametrize(
-    ("heard", "vocabulary", "expected_text", "expected_terms"),
+    ("words", "vocabulary", "misheard", "expected_text", "expected_terms"),
     [
         pytest.param(
-            [" Garrah,", " confirmou."], "Vocabulary: Garrah",
-            "Garrah, confirmou.", [],
+            _spoken(" Garra", " e", " Doker"), "Speakers: Ana, Bob\nVocabulary: Garrah, Docker; GARrah",
+            (), "Garrah e Docker", ["Garrah", "Docker"],
+            id="labelled-vocabulary-lines-are-parsed",
+        ),
+        pytest.param(
+            _spoken(" Sao", " Paulo"), "São Paulo, C++; são paulo",
+            (), "São Paulo", ["São Paulo"],
+            id="free-form-vocabulary-is-parsed",
+        ),
+        pytest.param(
+            _spoken(" Galo"), "Vocabulary: Garrah",
+            (("Garrah", "Galo", 1),), "Garrah", ["Garrah"],
+            id="misheard-form-heard-once-applies-when-the-term-is-in-the-meeting",
+        ),
+        pytest.param(
+            _spoken(" Galo"), "",
+            (("Garrah", "Galo", 1),), "Galo", [],
+            id="misheard-form-heard-once-is-ignored-elsewhere",
+        ),
+        pytest.param(
+            _spoken(" Galo"), "",
+            (("Garrah", "Galo", 2),), "Garrah", ["Garrah"],
+            id="misheard-form-heard-twice-applies-everywhere",
+        ),
+        pytest.param(
+            [Word(0.1, 0.5, " Gar", 0.9), Word(0.31, 0.4, " rah,", 0.7)], "Vocabulary: Garrah",
+            (), "Garrah,", ["Garrah"],
+            id="adjacent-words-merge-and-keep-trailing-punctuation",
+        ),
+        pytest.param(
+            [Word(0.1, 0.3, " Gar"), Word(0.81, 1.0, " rah")], "Vocabulary: Garrah",
+            (), "Gar rah", [],
+            id="a-pause-between-words-blocks-the-merge",
+        ),
+        pytest.param(
+            _spoken(" Asafrao"), "Açafrão",
+            (), "Açafrão", ["Açafrão"],
+            id="cedilla-sounds-like-s",
+        ),
+        pytest.param(
+            _spoken(" Joao", " e", " ana"), "João, Ana",
+            (), "João e ana", ["João"],
+            id="accents-are-restored-but-three-letter-terms-are-left-alone",
+        ),
+        pytest.param(
+            _spoken(" para", "quedas"), "Parakeet",
+            (), "paraquedas", [],
+            id="an-unrelated-common-word-is-unchanged",
+        ),
+        pytest.param(
+            _spoken(" Garrah,", " confirmou."), "Vocabulary: Garrah",
+            (), "Garrah, confirmou.", [],
             id="term-already-spelled-right-before-punctuation",
         ),
         pytest.param(
-            [" (Garra)", " confirmou."], "Vocabulary: Garrah",
-            "(Garrah) confirmou.", ["Garrah"],
+            _spoken(" (Garra)", " confirmou."), "Vocabulary: Garrah",
+            (), "(Garrah) confirmou.", ["Garrah"],
             id="punctuation-around-a-corrected-word-survives",
         ),
         pytest.param(
-            [" Stefanopoulos", " chegou."], "Vocabulary: Stephanopoulos",
-            "Stephanopoulos chegou.", ["Stephanopoulos"],
+            _spoken(" Stefanopoulos", " chegou."), "Vocabulary: Stephanopoulos",
+            (), "Stephanopoulos chegou.", ["Stephanopoulos"],
             id="ph-sounds-like-f",
         ),
         pytest.param(
-            [" Ga", " rr", " ah"], "Vocabulary: Garrah, Banco Central do Brasil",
-            "Ga rr ah", [],
+            _spoken(" Ga", " rr", " ah"), "Vocabulary: Garrah, Banco Central do Brasil",
+            (), "Ga rr ah", [],
             id="one-word-term-matches-at-most-two-words",
         ),
     ],
 )
 def test_vocabulary_correction_rules_seen_in_processed_segments(
-    monkeypatch, tmp_path, heard, vocabulary, expected_text, expected_terms
+    monkeypatch, tmp_path, words, vocabulary, misheard, expected_text, expected_terms
 ):
-    words = [Word(0.1 + i * 0.3, 0.35 + i * 0.3, text) for i, text in enumerate(heard)]
-
-    segment = _processed_segment(monkeypatch, tmp_path, words, vocabulary)
+    segment = _processed_segment(monkeypatch, tmp_path, words, vocabulary, misheard)
 
     assert segment.text == expected_text
     assert [correction["term"] for correction in segment.corrections] == expected_terms
+
+
+def test_a_merged_word_keeps_the_lowest_confidence_of_its_parts(monkeypatch, tmp_path):
+    words = [Word(0.1, 0.5, " Gar", 0.9), Word(0.31, 0.4, " rah,", 0.7)]
+
+    segment = _processed_segment(monkeypatch, tmp_path, words, "Vocabulary: Garrah")
+
+    assert segment.confidence == 0.7
+    assert segment.corrections[0]["heard"] == "Gar rah,"
 
 
 @pytest.mark.parametrize("job_type", [JobType.REAPPLY_VOCABULARY, JobType.REIDENTIFY])
