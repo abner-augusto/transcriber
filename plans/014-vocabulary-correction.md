@@ -267,6 +267,9 @@ Outcome section.
 - Frontend verification: 36 tests passed; `npm run build` passed.
 - The bench script and run instructions are implemented; no user database was
   opened during this work.
+- Review fix (2026-09-25): the bench now scores each Meeting with Misheard
+  Forms learned from the other Meetings' edits (leave-one-out). The stored
+  forms came from the same edits and would have counted in-sample hits.
 - **Local bench gate still required:** run
   `.\venv\Scripts\python.exe bench/vocabulary_correction.py` on the user's edited Meetings;
   record its per-Meeting and total hits, false changes, and misses here. Do not

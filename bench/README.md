@@ -10,7 +10,10 @@ venv\Scripts\python.exe bench\vocabulary_correction.py
 
 The script compares each edited Segment with Segments re-derived from the
 Meeting's stored Words, once without Vocabulary Correction and once with the
-Meeting's current Vocabulary and learned Misheard Forms. It aligns Segments by
+Meeting's current Vocabulary and Misheard Forms. The Misheard Forms stored in
+the database are not used: they were learned from these same edits. Instead the
+script learns them again from the edits of the *other* Meetings
+(leave-one-out), so no Meeting is credited for a form it taught. It aligns Segments by
 their start and end times (within 1.5 seconds), then reports corrected user
 changes (**hits**), corrections the user did not make (**false changes**), and
 user changes still left wrong (**misses**). Counts are tokens, totaled per

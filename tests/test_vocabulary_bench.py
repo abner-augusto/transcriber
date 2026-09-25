@@ -61,3 +61,30 @@ def test_bench_counts_accent_only_manual_edit_as_a_hit():
     count = score_meeting(meeting, [edited], [])
 
     assert (count.hits, count.false_changes, count.misses) == (1, 0, 0)
+
+
+def test_bench_scores_each_meeting_only_with_forms_learned_elsewhere(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    import bench.vocabulary_correction as bench
+    from database import Base
+    from models import VocabularyEntry
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'bench.db'}")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine)
+    with sessions() as db:
+        for meeting_id in ("meeting-a", "meeting-b"):
+            db.add_all(_meeting(meeting_id, ""))
+        # What the app learned from those two edits: the form was heard twice,
+        # so it is eligible everywhere, including in the Meetings it came from.
+        db.add(VocabularyEntry(term="Garrah", misheard_as=[{"form": "Galo", "count": 2}]))
+        db.commit()
+    monkeypatch.setattr(bench, "SessionLocal", sessions)
+
+    report = bench.run(tmp_path / "report.json")
+
+    # Each Meeting sees the form once, from the other Meeting: not enough to use it.
+    assert report["totals"] == {"hits": 0, "false_changes": 0, "misses": 2}
+    engine.dispose()

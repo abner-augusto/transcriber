@@ -13,6 +13,10 @@ from engines import Word
 SIMILAR_PHONETIC_RATIO = 0.85
 SIMILAR_RATIO = 0.92
 MAX_MERGE_GAP_SECONDS = 0.5
+# A learned phrase this long is a rewrite, not a correction.
+MAX_LEARNED_PHRASE_LENGTH = 100
+# Shorter lowercase words are common words, not names or technical terms.
+MIN_LOWERCASE_TERM_LENGTH = 5
 
 
 @dataclass(frozen=True)
@@ -129,6 +133,47 @@ class VocabularyCorrection:
         # breaks ties between equally eligible Vocabulary terms.
         end, _, term, rule = max(matches, key=lambda item: (item[1], item[0]))
         return end, term, rule
+
+
+def learned_from_edit(
+    before: str, after: str, *, undone: set[tuple[str, str]] = frozenset()
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """Return the terms and (heard, term) Misheard Forms a manual edit teaches.
+
+    A replaced or inserted phrase becomes a term; a replaced phrase is also a
+    Misheard Form of it. ``undone`` holds (term, heard) pairs of Corrections the
+    edit may reverse: putting back what the Engine heard teaches nothing.
+    """
+    if not before or not after or before.strip() == after.strip():
+        return [], []
+    reversed_pairs = {
+        (normalize_vocabulary_text(term), normalize_vocabulary_text(heard))
+        for term, heard in undone
+    }
+    old_words, new_words = before.split(), after.split()
+    terms: list[str] = []
+    forms: list[tuple[str, str]] = []
+    for op, i1, i2, j1, j2 in SequenceMatcher(None, old_words, new_words).get_opcodes():
+        new_phrase = " ".join(new_words[j1:j2]).strip()
+        if not _worth_learning(new_phrase):
+            continue
+        if op == "insert":
+            terms.append(new_phrase)
+        elif op == "replace":
+            old_phrase = " ".join(old_words[i1:i2])
+            pair = (normalize_vocabulary_text(old_phrase), normalize_vocabulary_text(new_phrase))
+            if pair in reversed_pairs:
+                continue
+            if abs(len(new_phrase) - len(old_phrase)) < len(old_phrase):
+                terms.append(new_phrase)
+                forms.append((old_phrase, new_phrase))
+    return terms, forms
+
+
+def _worth_learning(phrase: str) -> bool:
+    if not 2 <= len(phrase) < MAX_LEARNED_PHRASE_LENGTH:
+        return False
+    return not (phrase.islower() and len(phrase) < MIN_LOWERCASE_TERM_LENGTH)
 
 
 def parse_vocabulary(text: str | None) -> list[str]:

@@ -1,5 +1,9 @@
 """Compare Vocabulary Correction with the user's edits in the local database.
 
+Misheard Forms are learned again from the edits themselves, and each Meeting is
+scored only with the forms learned from the other Meetings (leave-one-out), so a
+Meeting never gets credit for a form it taught.
+
 The report is deliberately metadata-only: Meeting IDs, Engine names, and token counts.
 No transcript text, titles, Vocabulary, or correction forms are serialized or printed.
 """
@@ -7,6 +11,7 @@ No transcript text, titles, Vocabulary, or correction forms are serialized or pr
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 import json
@@ -15,10 +20,9 @@ import re
 
 from database import SessionLocal
 from models import Meeting, Segment
-from tasks.vocabulary import load_misheard_forms
 from transcript.diarization import MeetingDiarization
 from transcript.segments import derive_segments
-from transcript.vocabulary_correction import VocabularyCorrection
+from transcript.vocabulary_correction import MisheardForm, VocabularyCorrection, learned_from_edit
 from transcript.words import words_from_stored
 
 
@@ -103,12 +107,35 @@ def _score_segment(edited: Segment, baseline: dict | None, corrected: dict | Non
     return hits, false_changes, misses
 
 
-def score_meeting(meeting: Meeting, edited_segments: list[Segment], misheard_forms):
+def _stored_words_and_diarization(meeting: Meeting):
     words = words_from_stored(meeting.raw_transcription)
     diarization = MeetingDiarization.from_stored(meeting.raw_diarization)
     if not words or diarization is None:
         raise ValueError(f"Meeting {meeting.id} is missing stored Words or diarization")
+    return words, diarization
 
+
+def learned_forms(meeting: Meeting, edited_segments: list[Segment]) -> Counter:
+    """Count the (heard, term) Misheard Forms this Meeting's edits teach."""
+    baseline = derive_segments(*_stored_words_and_diarization(meeting))
+    forms: Counter = Counter()
+    for edited in edited_segments:
+        original = _align_by_time(edited, baseline)
+        if original is not None:
+            forms.update(learned_from_edit(original["text"], edited.text)[1])
+    return forms
+
+
+def held_out_forms(learned: dict[str, Counter], meeting_id: str) -> list[MisheardForm]:
+    total: Counter = Counter()
+    for other_id, forms in learned.items():
+        if other_id != meeting_id:
+            total.update(forms)
+    return [MisheardForm(heard, term, count) for (heard, term), count in total.items()]
+
+
+def score_meeting(meeting: Meeting, edited_segments: list[Segment], misheard_forms):
+    words, diarization = _stored_words_and_diarization(meeting)
     baseline = derive_segments(words, diarization)
     correction = VocabularyCorrection.for_meeting(meeting.vocabulary, misheard_forms)
     corrected = derive_segments(words, diarization, correction=correction)
@@ -153,16 +180,20 @@ def run(output: Path = DEFAULT_OUTPUT) -> dict:
             .order_by(Meeting.id)
             .all()
         )
-        misheard_forms = load_misheard_forms(db)
-        counts = []
-        for meeting in edited_meetings:
-            edited_segments = (
+        edits = {
+            meeting.id: (
                 db.query(Segment)
                 .filter(Segment.meeting_id == meeting.id, Segment.is_edited.is_(True))
                 .order_by(Segment.order)
                 .all()
             )
-            counts.append(score_meeting(meeting, edited_segments, misheard_forms))
+            for meeting in edited_meetings
+        }
+        learned = {meeting.id: learned_forms(meeting, edits[meeting.id]) for meeting in edited_meetings}
+        counts = [
+            score_meeting(meeting, edits[meeting.id], held_out_forms(learned, meeting.id))
+            for meeting in edited_meetings
+        ]
 
     report = write_report(counts, output)
     _print_report(counts, report["totals"])
