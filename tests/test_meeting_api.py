@@ -170,7 +170,7 @@ def test_enqueue_routes_claim_once_and_submit_one_job(db_session, monkeypatch, p
     assert db_session.query(Job).count() == 1
 
     duplicate = client.post(f"/api/meetings/{meeting.id}/{path}")
-    assert duplicate.status_code == 400
+    assert duplicate.status_code == 409
     assert runner.submitted == [(meeting.id, job_id, kind)]
     assert db_session.query(Job).count() == 1
 
@@ -188,8 +188,8 @@ def test_processing_meeting_is_rejected_before_preset_health(db_session, monkeyp
 
     response = TestClient(app).post(f"/api/meetings/{meeting.id}/process")
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Already processing"
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Meeting is already being processed"
     assert db_session.query(Job).count() == 0
 
 

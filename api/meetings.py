@@ -221,19 +221,23 @@ def delete_meeting(meeting_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+ALREADY_PROCESSING = "Meeting is already being processed"
+
+
 def _enqueue(db: Session, meeting_id: str, kind: JobType) -> Job:
     try:
         return jobs.enqueue(db, meeting_id, kind)
     except MeetingNotFoundError:
         raise HTTPException(404, "Meeting not found")
     except JobAlreadyRunning:
-        raise HTTPException(409, "Meeting is already being processed")
+        raise HTTPException(409, ALREADY_PROCESSING)
 
 
 def _reject_processing(meeting: Meeting) -> None:
-    """Preserve the immediate 400 for a Meeting already processing on entry."""
+    """Refuse early, before the Preset health check, what the atomic claim in
+    jobs.enqueue would refuse anyway, with the same answer."""
     if meeting.status == MeetingStatus.PROCESSING:
-        raise HTTPException(400, "Already processing")
+        raise HTTPException(409, ALREADY_PROCESSING)
 
 
 @router.post("/{meeting_id}/process")
