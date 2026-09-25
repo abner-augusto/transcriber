@@ -458,8 +458,8 @@ def test_qwen3_asr_and_vibevoice_satisfy_transcriber_protocol():
 
     assert isinstance(qwen, Transcriber)
     assert isinstance(vibe, Transcriber)
-    assert callable(qwen.load) and callable(qwen.unload)
-    assert callable(vibe.load) and callable(vibe.unload)
+    assert callable(qwen.load) and callable(qwen.transcribe)
+    assert callable(vibe.load) and callable(vibe.transcribe)
 
 
 def test_make_transcriber_supports_qwen3_and_vibevoice():
@@ -517,8 +517,9 @@ def test_vibevoice_cuda_loader_uses_nf4_quantization(monkeypatch):
         types.SimpleNamespace(VibeVoiceASRForConditionalGeneration=ModelLoader))
     monkeypatch.setitem(sys.modules, "vibevoice.processor.vibevoice_asr_processor",
         types.SimpleNamespace(VibeVoiceASRProcessor=ProcessorLoader))
+    monkeypatch.setitem(sys.modules, "transformers",
+        types.SimpleNamespace(BitsAndBytesConfig=QuantizationConfig))
     monkeypatch.setattr(module, "BitsAndBytesConfig", QuantizationConfig, raising=False)
-    monkeypatch.setattr(sys.modules["transformers"], "BitsAndBytesConfig", QuantizationConfig, raising=False)
 
     transcriber = module.VibeVoiceTranscriber(model_path="primary", device="cuda", quantization="nf4")
     transcriber._ensure_model_loaded()

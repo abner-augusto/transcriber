@@ -41,10 +41,6 @@ def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarizatio
         meeting.raw_diarization = diarization.to_stored()
         db.commit()
         progress(db, job, meeting, 50, "Diarization complete")
-        if hasattr(diarizer, "unload"):
-            diarizer.unload()
-        from engines.gpu_memory import release_gpu_memory
-        release_gpu_memory()
     else:
         diarization = MeetingDiarization.from_stored(meeting.raw_diarization)
         if diarization is None or not diarization.turns:
@@ -76,11 +72,6 @@ def _reprocess_meeting(db, meeting, job, run_config: RunConfig, rerun_diarizatio
         host_label=diarization.host_label,
         speaker_profiles_enabled=run_config.speaker_profiles_enabled,
     )
-    if hasattr(speaker_id_service, "unload"):
-        speaker_id_service.unload()
-    from engines.gpu_memory import release_gpu_memory
-    release_gpu_memory()
-
     # Rebuild speakers and segments (preserving edits)
     progress(
         db, job, meeting,

@@ -8,7 +8,7 @@ There are three ways, and every Job that needs Turns comes through here:
 - otherwise the Diarizer runs over the Meeting's audio.
 
 Single-track Turns are then bounded to the speech VAD finds. The stage neither
-persists its result nor unloads models; the Job does both.
+persists its result; the child process releases model memory when the Job exits.
 """
 
 import logging

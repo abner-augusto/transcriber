@@ -13,8 +13,8 @@
 
 ## Status
 
-- **Execution**: BLOCKED pending the user's Plan 018 migration confirmation
-  and Step 1 model-load measurements. See [local verification checklist](LOCAL-VERIFICATION.md).
+- **Execution**: DONE — measurements, LocalRunner, automated lifecycle checks,
+  and local end-to-end Jobs passed. See [verification plan](TEST-PLAN.md).
 
 - **Priority**: P2
 - **Effort**: L
@@ -73,10 +73,39 @@ in the tree until plan 020 deletes them.
 
 ## Done criteria
 
-- [ ] App runs with no Redis and no Celery process
-- [ ] Child crash / timeout / restart behave as decided, with tests
-- [ ] No `unload`/`release_gpu_memory` calls remain in the pipeline
-- [ ] Measurements and the end-to-end check recorded in this plan
+- [x] App runs with no Redis and no Celery process
+- [x] Child crash / timeout / restart behave as decided, with tests
+- [x] No `unload`/`release_gpu_memory` calls remain in the pipeline
+- [x] Measurements and the end-to-end check recorded in this plan
+
+## Step 1 measurements (2026-09-25)
+
+Measured each model in a fresh Python process on the user's Windows machine
+with an NVIDIA GeForce RTX 5070 Ti (16 GB). Times cover the model load call,
+not Python process startup; process exit releases model memory.
+
+| Component | Load time | Notes |
+|-----------|-----------|-------|
+| parakeet.cpp | 0.00 s adapter check | The adapter starts the existing `parakeet-cli` subprocess for each transcription; the local runner adds no separate resident model load. |
+| faster-whisper large-v3 | 9.16 s | Weights were already cached locally. |
+| pyannote | 9.38 s | Pipeline loaded successfully. TorchCodec printed a Windows DLL warning; this load-only measurement did not decode audio. |
+| ECAPA | 1.43 s | Loaded on CUDA. |
+
+The measured Python model loads total 19.97 seconds, below the plan's
+approximately 60-second stop threshold. This is sufficient to continue with
+the child-process runner. Real Job/VRAM/restart verification remains in Step 6.
+
+## Step 6 verification (2026-09-25)
+
+The production `LocalJobRunner` completed real Jobs for both primary
+Transcribers using a temporary SQLite database and temporary storage. The
+selected local audio was 59.99 seconds; its path and content were not recorded.
+Parakeet completed in 15.83 seconds (5 Segments, 1 Speaker) and faster-whisper
+large-v3 completed in 21.86 seconds (7 Segments, 1 Speaker). GPU memory was
+1,855 MiB before and 1,854 MiB after the two Jobs. The latest backend suite
+passed 340 tests, including child crash, timeout, shutdown, restart recovery,
+and PENDING ordering. The combined machine evidence is in
+`LOCAL-VERIFICATION.md`.
 
 ## STOP conditions
 

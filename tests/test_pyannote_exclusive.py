@@ -268,9 +268,9 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
     Base.metadata.create_all(bind=test_engine)
     TestingSessionLocal = sessionmaker(bind=test_engine)
 
-    from jobs.runners import InMemoryProgressBus
+    from jobs.runners import InProcessBus
     import jobs
-    jobs.configure(session_factory=TestingSessionLocal, progress_bus=InMemoryProgressBus())
+    jobs.configure(session_factory=TestingSessionLocal, progress_bus=InProcessBus())
     monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: TEST_RUN_CONFIG)
     monkeypatch.setattr("preferences.hf_token", lambda: "")
     monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")

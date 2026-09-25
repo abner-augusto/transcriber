@@ -158,10 +158,6 @@ class Qwen3AsrTranscriber:
         self._ensure_asr_loaded()
         self._ensure_aligner_loaded()
 
-    def unload(self) -> None:
-        """The isolated runner process exits after each request and releases its models."""
-        pass
-
     def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         """Transcribe audio into Words in ascending time order."""
         total_duration = get_audio_duration_seconds(audio_path)

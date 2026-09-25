@@ -150,10 +150,6 @@ class WhisperCppTranscriber:
             if not path or not Path(path).is_file():
                 raise RuntimeError(f"{label} file not found: {path}")
 
-    def unload(self) -> None:
-        """No resources remain resident between whisper-cli subprocess calls."""
-        pass
-
     def resolve_dtw_preset(self) -> Optional[str]:
         """Resolve active DTW preset if enabled, matching either user config or model inference."""
         if not self.dtw_enabled:
@@ -283,10 +279,6 @@ class WhisperCppTranscriber:
             data = json.load(f)
 
         return parse_words(data)
-
-    def unload(self) -> None:
-        """No-op: whisper-cli runs in external process and exits on completion."""
-        pass
 
 
 def parse_words(data: dict) -> list[Word]:

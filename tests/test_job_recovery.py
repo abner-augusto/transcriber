@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base
 import jobs
-from jobs.runners import InMemoryProgressBus
+from jobs.runners import InProcessBus
 from models import Job, Meeting, MeetingStatus
 from models.job import JobStatus, JobType
 
@@ -22,7 +22,7 @@ def _database(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'recovery.db'}")
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine)
-    jobs.configure(session_factory=session_factory, progress_bus=InMemoryProgressBus())
+    jobs.configure(session_factory=session_factory, progress_bus=InProcessBus())
     return session_factory
 
 
@@ -95,22 +95,39 @@ def test_each_running_job_is_recovered_independently(monkeypatch, tmp_path):
         assert (meeting_status, job_status) == (MeetingStatus.FAILED, JobStatus.FAILED)
 
 
-def test_fastapi_startup_does_not_recover_jobs():
-    text = (Path(__file__).resolve().parent.parent / "main.py").read_text(encoding="utf-8")
-    assert "jobs.recover" not in text
+def test_fastapi_startup_recovers_then_starts_local_runner(monkeypatch):
+    import main
+    import jobs
+    import jobs.runners
+
+    events = []
+
+    class FakeRunner:
+        def __init__(self, *, progress_bus):
+            events.append(("runner-created", progress_bus))
+
+        def start(self):
+            events.append(("runner-started", None))
+
+    monkeypatch.setattr(main, "init_db", lambda: events.append(("init-db", None)))
+    monkeypatch.setattr(main, "cleanup_orphaned_storage", lambda: events.append(("cleanup", None)))
+    monkeypatch.setattr(jobs, "recover", lambda: events.append(("recover", None)))
+    monkeypatch.setattr(jobs, "configure", lambda **_kwargs: None)
+    monkeypatch.setattr(jobs.runners, "LocalJobRunner", FakeRunner)
+
+    main.startup()
+
+    assert [name for name, _ in events] == [
+        "init-db", "runner-created", "recover", "cleanup", "runner-started"
+    ]
 
 
-def test_worker_ready_signal_runs_recovery(monkeypatch):
-    from celery.signals import worker_ready
-
-    from tasks.celery_app import celery_app  # noqa: F401 (registers bodies and connects handler)
-    from jobs.runners import TASK_NAMES
-
-    assert set(TASK_NAMES.values()).issubset(celery_app.tasks)
-
-    calls = []
-    monkeypatch.setattr("jobs.recover", lambda: calls.append(True))
-
-    worker_ready.send(sender=None)
-
-    assert calls == [True]
+def test_startup_recovery_leaves_pending_jobs_for_local_runner(monkeypatch, tmp_path):
+    session_factory = _database(tmp_path, monkeypatch)
+    meeting_id, job_id = _meeting_with_job(
+        session_factory, MeetingStatus.PROCESSING, JobStatus.PENDING
+    )
+    jobs.recover()
+    assert _state(session_factory, meeting_id, job_id)[:2] == (
+        MeetingStatus.PROCESSING, JobStatus.PENDING,
+    )

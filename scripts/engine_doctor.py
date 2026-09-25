@@ -58,14 +58,12 @@ def build_report(selected=(), tier="metadata", audio=None, opted_in=False):
         health = probe_engine(preset).to_dict()
         entry = {"id": preset["id"], "name": preset.get("name", preset["id"]), "engine": preset["engine"], "health": health}
         if preset["id"] in selected and tier != "metadata":
-            from scripts.engine_smoke import infer_preset, load_preset, release_engine_memory
+            from scripts.engine_smoke import infer_preset, load_preset
 
             try:
                 entry["smoke"] = load_preset(preset) if tier == "load" else infer_preset(preset, Path(audio))
             except Exception as exc:
                 entry["smoke"] = {"status": "failed", "code": "engine.smoke.failed", "message": f"{type(exc).__name__}: {exc}"}
-            finally:
-                release_engine_memory()
         entries.append(entry)
     report = {"schema_version": 1, "packages": {name: _version(name) for name in PACKAGES}, "presets": entries, "blocked": any(item["health"]["state"] == "blocked" or item.get("smoke", {}).get("status") == "failed" for item in entries)}
     validate_report(report)

@@ -88,20 +88,6 @@ class PyannoteDiarizer:
         return cls._pipeline
 
     @classmethod
-    def unload(cls):
-        """Unload PyAnnote pipeline from GPU memory and reset state."""
-        if cls._pipeline is not None:
-            try:
-                cls._pipeline.to(torch.device("cpu"))
-            except Exception:
-                pass
-            cls._pipeline = None
-        cls._default_params = None
-        cls._applied_overrides = _UNSET
-        cls._ignored_overrides = _UNSET
-        log.info("[pyannote] Unloaded diarization pipeline")
-
-    @classmethod
     def _sync_clustering_overrides(cls, cfg: dict):
         """Re-instantiate if the current Job's clustering knobs changed.
 

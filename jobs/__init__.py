@@ -137,11 +137,6 @@ def running(meeting_id: str, job_id: str):
         raise
     finally:
         db.close()
-        try:
-            from engines.gpu_memory import unload_all_engines
-            unload_all_engines()
-        except Exception as exc:
-            log.warning("[jobs.running] GPU cleanup failed: %s", exc)
 
 
 def _fail_job(db, meeting_id: str, job_id: str, error_msg: str) -> None:
@@ -161,15 +156,38 @@ def _fail_job(db, meeting_id: str, job_id: str, error_msg: str) -> None:
 
 
 def progress(db, job: Job, meeting: Meeting, percent: float, step: str) -> None:
-    job.progress = percent
-    job.current_step = step
-    db.commit()
-    _progress_adapter().publish(meeting.id, {
+    adapter = _progress_adapter()
+    if not getattr(adapter, "persists_progress_in_parent", False):
+        job.progress = percent
+        job.current_step = step
+        db.commit()
+    adapter.publish(meeting.id, {
         "type": "progress",
         "progress": percent,
         "step": step,
         "status": meeting.status.value,
     })
+
+
+def relay_event(meeting_id: str, event: dict, *, session_factory=None, progress_bus=None) -> None:
+    """Persist child progress in the parent, then fan it out to subscribers."""
+    factory = session_factory or _sessions()
+    db = factory()
+    try:
+        if event.get("type") == "progress":
+            job = (
+                db.query(Job)
+                .filter(Job.meeting_id == meeting_id)
+                .order_by(Job.created_at.desc())
+                .first()
+            )
+            if job is not None:
+                job.progress = event.get("progress", job.progress)
+                job.current_step = event.get("step", job.current_step)
+                db.commit()
+    finally:
+        db.close()
+    (progress_bus or _progress_adapter()).publish(meeting_id, event)
 
 
 def check_progress_bus() -> None:
@@ -185,7 +203,7 @@ async def subscribe(meeting_id: str):
 
 
 def recover() -> None:
-    """Fail RUNNING Jobs left behind when the sole worker restarts."""
+    """Fail RUNNING Jobs left behind when the application restarts."""
     db = _sessions()()
     try:
         stale_jobs = db.query(Job).filter(Job.status == JobStatus.RUNNING).all()

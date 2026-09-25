@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base
 import jobs
-from jobs.runners import InMemoryProgressBus
+from jobs.runners import InProcessBus
 from engines import DiarizationResult, Transcription, Turn, Word
 from models import Job, Meeting, MeetingStatus
 from models.job import JobStatus, JobType
@@ -136,7 +136,7 @@ def install(monkeypatch, tmp_path, *, transcriber, diarization: DiarizationResul
                 return list(regions)
         return list(DEFAULT_VAD)
 
-    jobs.configure(session_factory=session_factory, progress_bus=InMemoryProgressBus())
+    jobs.configure(session_factory=session_factory, progress_bus=InProcessBus())
     monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: run_config)
     monkeypatch.setattr("tasks.process_meeting.make_transcriber", lambda run_config: transcriber)
     monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda run_config, **kwargs: diarizer)

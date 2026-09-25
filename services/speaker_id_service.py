@@ -64,12 +64,6 @@ class SpeakerIdService:
 
         return speaker_info
 
-    def unload(self):
-        """Unload underlying voice embedding model from memory."""
-        from services.embedding_service import EmbeddingService
-
-        EmbeddingService.unload()
-
     def _participant_names(self, speaker_labels: list[str]) -> dict[str, dict]:
         return {
             label: {"name": f"Participant {i + 1}", "confidence": None, "identified_by": None}

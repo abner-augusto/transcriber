@@ -77,13 +77,13 @@ def test_run_config_uses_preference_dtw_when_preset_does_not_override(monkeypatc
 @pytest.mark.parametrize("job_type", list(JobType))
 def test_every_job_persists_its_run_config_when_it_starts(monkeypatch, tmp_path, job_type):
     from jobs import running
-    from jobs.runners import InMemoryProgressBus
+    from jobs.runners import InProcessBus
     import jobs
 
     engine = create_engine(f"sqlite:///{tmp_path / 'jobs.db'}")
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine)
-    jobs.configure(session_factory=session_factory, progress_bus=InMemoryProgressBus())
+    jobs.configure(session_factory=session_factory, progress_bus=InProcessBus())
 
     config = RunConfig(
         preset={"id": "p", "engine": "test", "model_path": "model.bin"},

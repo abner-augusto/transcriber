@@ -151,7 +151,8 @@ returns nothing.
 
 - [ ] Stored `raw_transcription` snapshots unchanged
 - [ ] No probing of a Transcriber anywhere outside tests
-- [ ] Every adapter and fake implements `load`, `transcribe → Transcription`, `unload`
+- [x] Every adapter and fake implements `load` and `transcribe → Transcription`;
+      Plan 019 supersedes and removes the `unload` port method
 - [ ] Protocol v1 serialization/validation assertions in
   `tests/test_engine_runtime_protocol.py` remain unchanged and pass; isolated-adapter
   behavior tests live separately in `tests/test_isolated_transcriber.py`

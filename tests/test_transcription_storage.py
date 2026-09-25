@@ -54,7 +54,7 @@ def test_process_task_keeps_the_existing_raw_transcription_shape(
     job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
 
     assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
-    assert transcriber.lifecycle == ["load", "transcribe", "unload"]
+    assert transcriber.lifecycle == ["load", "transcribe"]
 
     meeting = harness.load(meeting_id)
     assert meeting.raw_transcription == {

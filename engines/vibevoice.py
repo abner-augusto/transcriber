@@ -398,10 +398,6 @@ class VibeVoiceTranscriber:
         self._ensure_model_loaded()
         self._ensure_aligner_loaded()
 
-    def unload(self) -> None:
-        """The isolated runner process exits after each request and releases its models."""
-        pass
-
     def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         """Transcribe audio into Words and compute native Turns."""
         total_duration = get_audio_duration(audio_path)

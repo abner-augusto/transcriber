@@ -15,10 +15,6 @@ class FailingTranscriber:
     def transcribe(self, audio_path, vocabulary=None):
         raise RuntimeError("engine failed")
 
-    def unload(self):
-        pass
-
-
 def _database(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'tasks.db'}")
     Base.metadata.create_all(bind=engine)

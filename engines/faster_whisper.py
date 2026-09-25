@@ -26,16 +26,6 @@ STYLE_PROMPTS = {
 class FasterWhisperTranscriber:
     _models: dict = {}
 
-    class _Unload:
-        """Keep the class-wide cleanup API while instances evict only their model."""
-
-        def __get__(self, instance, owner):
-            def unload(model_path: str | None = None):
-                target = instance.model_path if instance is not None else model_path
-                owner._unload_models(target)
-
-            return unload
-
     def __init__(
         self,
         model_path: str,
@@ -83,20 +73,6 @@ class FasterWhisperTranscriber:
 
     def load(self) -> None:
         self.get_model(self.model_path, self.device, self.compute_type)
-
-    @classmethod
-    def _unload_models(cls, model_path: str | None = None):
-        """Unload cached WhisperModel instance(s) and free CTranslate2 GPU memory."""
-        if model_path is None:
-            cls._models.clear()
-            log.info("[faster-whisper] Unloaded all models")
-        else:
-            to_remove = [k for k in cls._models if k[0] == model_path]
-            for k in to_remove:
-                cls._models.pop(k, None)
-            log.info(f"[faster-whisper] Unloaded model '{model_path}'")
-
-    unload = _Unload()
 
     def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         model = self.get_model(self.model_path, self.device, self.compute_type)

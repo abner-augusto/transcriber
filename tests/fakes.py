@@ -24,10 +24,6 @@ class FakeTranscriber:
         self.lifecycle.append("transcribe")
         return Transcription(words=list(self.words))
 
-    def unload(self) -> None:
-        self.lifecycle.append("unload")
-
-
 class FakeDiarizer:
     """Returns the Turns or DiarizationResult it was constructed with, and remembers how it was called."""
 

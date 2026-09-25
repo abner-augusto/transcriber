@@ -46,7 +46,3 @@ class IsolatedPythonTranscriber:
                 }
             },
         )
-
-    def unload(self) -> None:
-        """No-op: Isolated subprocess exits and frees its memory on completion."""
-        pass

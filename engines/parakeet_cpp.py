@@ -64,10 +64,6 @@ class ParakeetCppTranscriber:
             if not path or not Path(path).is_file():
                 raise RuntimeError(f"{label} file not found: {path}")
 
-    def unload(self) -> None:
-        """No resources remain resident between parakeet-cli subprocess calls."""
-        pass
-
     def transcribe(self, audio_path: str, vocabulary: str | None = None) -> Transcription:
         """Transcribe. `vocabulary` is ignored — Parakeet takes no prompt."""
         audio, sample_rate = sf.read(audio_path, dtype="float32", always_2d=True)

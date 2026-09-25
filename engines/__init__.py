@@ -26,7 +26,6 @@ __all__ = [
     "Transcriber", "Diarizer", "Aligner",
     "make_transcriber", "make_diarizer", "make_aligner", "align_words",
     "TRANSCRIBER_ENGINES", "ALIGNMENT_ENGINES", "compute_overlaps", "probe_engine", "engine_status", "alignment_engine_status",
-    "release_gpu_memory", "unload_all_engines",
 ]
 
 TRANSCRIBER_ENGINES = ["faster-whisper", "whisper.cpp", "parakeet.cpp", "qwen3-asr", "vibevoice"]
@@ -171,17 +170,3 @@ def alignment_engine_status(config: dict | None = None) -> dict:
     from .alignment import alignment_engine_status as _status
 
     return _status(config)
-
-
-def release_gpu_memory() -> None:
-    """Run garbage collection and flush CUDA / MPS caching allocators."""
-    from .gpu_memory import release_gpu_memory as _release
-
-    return _release()
-
-
-def unload_all_engines() -> None:
-    """Unload all resident models (Faster-Whisper, Pyannote, MMS-FA, ECAPA-TDNN) and flush GPU memory."""
-    from .gpu_memory import unload_all_engines as _unload
-
-    return _unload()

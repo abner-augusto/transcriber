@@ -10,10 +10,7 @@ from presets import list_presets
     indirect=True,
 )
 def test_selected_preset_loads_from_local_artifacts_only(selected_engine_smoke_preset):
-    from scripts.engine_smoke import load_preset, release_engine_memory
+    from scripts.engine_smoke import load_preset
 
-    try:
-        result = load_preset(selected_engine_smoke_preset)
-        assert result["status"] == "passed"
-    finally:
-        release_engine_memory()
+    result = load_preset(selected_engine_smoke_preset)
+    assert result["status"] == "passed"

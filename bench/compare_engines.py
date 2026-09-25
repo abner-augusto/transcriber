@@ -92,7 +92,6 @@ def main() -> int:
             transcription = transcriber.transcribe(str(wav), vocabulary=args.vocabulary)
             elapsed = time.perf_counter() - started
         finally:
-            transcriber.unload()
         words = transcription.words
 
         text = "".join(w.text for w in words).strip()

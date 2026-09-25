@@ -48,10 +48,12 @@ def pytest_configure(config):
 
 @pytest.fixture(autouse=True)
 def _startup_leaves_storage_alone(monkeypatch):
-    """FastAPI startup deletes storage directories with no Meeting row; never in tests."""
+    """Keep test clients off the real DB and the production runner lifecycle."""
     import main
 
     monkeypatch.setattr(main, "cleanup_orphaned_storage", lambda: None)
+    monkeypatch.setattr(main.app.router, "on_startup", [])
+    monkeypatch.setattr(main.app.router, "on_shutdown", [])
 
 
 @pytest.fixture

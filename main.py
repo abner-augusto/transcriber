@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -37,16 +38,29 @@ app.include_router(vocabulary.router)
 app.include_router(analytics.router)
 app.include_router(preferences.router)
 
+_frontend_dist = Path(__file__).parent / "frontend" / "dist"
+app.mount(
+    "/assets",
+    StaticFiles(directory=_frontend_dist / "assets", check_dir=False),
+    name="frontend-assets",
+)
+
 
 @app.on_event("startup")
 def startup():
     init_db()
-    from jobs import configure
-    from jobs.runners import CeleryJobRunner, RedisProgressBus
-    configure(runner=CeleryJobRunner(), progress_bus=RedisProgressBus(_settings.redis_url))
-    # Interrupted Jobs are recovered by the Celery worker when it starts, not here:
-    # restarting the API must not fail Jobs a live worker is still running.
+    from jobs import configure, recover
+    from jobs.runners import InProcessBus, LocalJobRunner
+
+    progress_bus = InProcessBus()
+    runner = LocalJobRunner(progress_bus=progress_bus)
+    configure(runner=runner, progress_bus=progress_bus)
+    # RUNNING work is interrupted by an app restart; PENDING work is resumed
+    # by the local runner in creation order.
+    recover()
     cleanup_orphaned_storage()
+    runner.start()
+    app.state.local_job_runner = runner
     import logging
     _log = logging.getLogger(__name__)
     from preferences import hf_token
@@ -85,13 +99,13 @@ def health():
     except Exception as e:
         checks["database"] = f"error: {e}"
 
-    # Redis
+    # Job progress transport
     try:
         from jobs import check_progress_bus
         check_progress_bus()
-        checks["redis"] = "ok"
+        checks["progress_bus"] = "ok"
     except Exception as e:
-        checks["redis"] = f"error: {e}"
+        checks["progress_bus"] = f"error: {e}"
 
     # Whisper CLI
     whisper_path = Path(_settings.whisper_cli_path)
@@ -112,6 +126,15 @@ def health():
     )
     return {"status": "ok" if all_ok else "degraded", **checks}
 
+
+@app.on_event("shutdown")
+def shutdown():
+    runner = getattr(app.state, "local_job_runner", None)
+    if runner is not None:
+        runner.stop()
+        del app.state.local_job_runner
+
+
 @app.get("/api/settings")
 def get_settings():
     from preferences import public
@@ -126,4 +149,19 @@ def update_preferences(body: dict):
     from preferences import public, update_from_settings_api
     update_from_settings_api(body)
     return public()
+
+
+@app.get("/{path:path}", include_in_schema=False)
+def frontend(path: str):
+    """Serve the built frontend and route client-side URLs to its entrypoint."""
+    if not _frontend_dist.is_dir():
+        raise HTTPException(404, "Frontend build not found; run npm run build in frontend/")
+    requested = (_frontend_dist / path).resolve()
+    try:
+        requested.relative_to(_frontend_dist.resolve())
+    except ValueError:
+        raise HTTPException(404, "Not found")
+    if requested.is_file():
+        return FileResponse(requested)
+    return FileResponse(_frontend_dist / "index.html")
 

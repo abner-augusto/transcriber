@@ -56,31 +56,21 @@ def process_meeting_task(meeting_id: str, job_id: str):
             # Step 2: Transcription
             progress(db, job, meeting, 10, f"Transcribing with {preset['name']}...")
             transcriber.load()
-            try:
-                transcription = transcriber.transcribe(audio_path, vocabulary=meeting.vocabulary)
-                words = transcription.words
+            transcription = transcriber.transcribe(audio_path, vocabulary=meeting.vocabulary)
+            words = transcription.words
 
-                # Optional Step 2.5: Higher-precision CTC Forced Alignment
-                if fa_enabled:
-                    progress(db, job, meeting, 46, "Refining word timestamps (CTC alignment)...")
-                    from engines import align_words
-                    words = align_words(audio_path, words, run_config=run_config)
-                    transcription = replace(transcription, words=words)
-
-                meeting.raw_transcription = raw_transcription(
-                    preset["engine"], preset["id"], transcription
-                )
-                db.commit()
-                progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
-            finally:
-                # Release Transcriber resources before loading the Diarizer.
-                transcriber.unload()
-
+            # Optional Step 2.5: Higher-precision CTC Forced Alignment
             if fa_enabled:
-                from engines.alignment import MMSCTCAligner
-                MMSCTCAligner.unload()
-            from engines.gpu_memory import release_gpu_memory
-            release_gpu_memory()
+                progress(db, job, meeting, 46, "Refining word timestamps (CTC alignment)...")
+                from engines import align_words
+                words = align_words(audio_path, words, run_config=run_config)
+                transcription = replace(transcription, words=words)
+
+            meeting.raw_transcription = raw_transcription(
+                preset["engine"], preset["id"], transcription
+            )
+            db.commit()
+            progress(db, job, meeting, 48 if fa_enabled else 45, "Transcription complete")
 
             # Step 3: Diarization & VAD bounding
             def report_diarization_path(path: str) -> None:
@@ -104,12 +94,6 @@ def process_meeting_task(meeting_id: str, job_id: str):
             db.commit()
             progress(db, job, meeting, 70, "Diarization complete")
 
-            # Free diarizer VRAM immediately after turns are extracted and saved
-            if hasattr(diarizer, "unload"):
-                diarizer.unload()
-            from engines.gpu_memory import release_gpu_memory
-            release_gpu_memory()
-
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
             progress(db, job, meeting, 75, "Synchronizing speakers with text...")
             correction = vocabulary_correction_for_meeting(
@@ -130,11 +114,6 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 host_label=diarization.host_label,
                 speaker_profiles_enabled=run_config.speaker_profiles_enabled,
             )
-            if hasattr(speaker_id_service, "unload"):
-                speaker_id_service.unload()
-            from engines.gpu_memory import release_gpu_memory
-            release_gpu_memory()
-
             # Step 6: Save results (preserving edits)
             progress(db, job, meeting, 90, "Saving results...")
             rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service)

@@ -66,19 +66,6 @@ class EmbeddingService:
             print("[Embedding] ECAPA-TDNN CPU model loaded")
         return cls._cpu_model
 
-    @classmethod
-    def unload(cls):
-        """Unload ECAPA-TDNN embedding models from GPU/CPU memory."""
-        if cls._model is not None:
-            try:
-                if hasattr(cls._model, "mods"):
-                    cls._model.mods.to("cpu")
-            except Exception:
-                pass
-            cls._model = None
-        cls._cpu_model = None
-        print("[Embedding] Unloaded ECAPA-TDNN models")
-
     def extract_embedding(self, audio_path: str, force_cpu: bool = False) -> np.ndarray:
         """Extract speaker embedding from audio file.
 

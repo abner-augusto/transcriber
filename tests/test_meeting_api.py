@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
 import jobs
-from jobs.runners import InMemoryProgressBus, InlineJobRunner
+from jobs.runners import InProcessBus, InlineJobRunner
 from main import app
 from models import Meeting, MeetingStatus, Segment, VocabularyEntry
 from models.job import Job, JobType
@@ -30,7 +30,7 @@ def db_session(monkeypatch):
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     runner = InlineJobRunner(handlers={})
-    bus = InMemoryProgressBus()
+    bus = InProcessBus()
     previous = jobs.configure(
         runner=runner, progress_bus=bus, session_factory=TestingSessionLocal
     )
@@ -243,7 +243,7 @@ def test_websocket_forwards_progress_event_in_existing_shape(db_session):
         assert websocket.receive_json() == event
 
 
-def test_health_checks_progress_adapter_and_keeps_redis_key(monkeypatch, tmp_path):
+def test_health_checks_progress_adapter(monkeypatch, tmp_path):
     import main
 
     monkeypatch.setattr(main._settings, "storage_path", str(tmp_path))
@@ -252,7 +252,7 @@ def test_health_checks_progress_adapter_and_keeps_redis_key(monkeypatch, tmp_pat
 
     response = main.health()
 
-    assert response["redis"] == "ok"
+    assert response["progress_bus"] == "ok"
     assert calls == [True]
 
 def test_segment_edits_learn_and_increment_misheard_form(db_session):

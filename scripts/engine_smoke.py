@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gc
 import math
 import os
 import subprocess
@@ -33,11 +32,8 @@ def load_preset(preset: dict) -> dict:
     from run_config import run_config_for_preset
 
     transcriber = make_transcriber(run_config_for_preset(preset))
-    try:
-        transcriber.load()
-        return {"status": "passed", "engine": preset["engine"], "preset_id": preset["id"]}
-    finally:
-        transcriber.unload()
+    transcriber.load()
+    return {"status": "passed", "engine": preset["engine"], "preset_id": preset["id"]}
 
 
 def validate_words(words, duration: float) -> None:
@@ -80,41 +76,26 @@ def infer_preset(preset: dict, audio_path: Path) -> dict:
     from run_config import run_config_for_preset
 
     transcriber = make_transcriber(run_config_for_preset(preset))
-    try:
-        transcriber.load()
-        transcription = transcriber.transcribe(str(audio_path), vocabulary=None)
-        duration_result = subprocess.run(
-            [
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                "-of", "csv=p=0", str(audio_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        duration = float(duration_result.stdout.strip())
-        validate_words(transcription.words, duration)
-        turns = list(transcription.native.turns) if transcription.native is not None else []
-        if turns:
-            validate_turns(turns, duration)
-        return {
-            "status": "passed",
-            "engine": preset["engine"],
-            "preset_id": preset["id"],
-            "word_count": len(transcription.words),
-            "turn_count": len(turns),
-        }
-    finally:
-        transcriber.unload()
-
-
-def release_engine_memory() -> None:
-    """Best-effort cleanup, imported only inside an opted-in smoke process."""
-    gc.collect()
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-    except ImportError:
-        pass
+    transcriber.load()
+    transcription = transcriber.transcribe(str(audio_path), vocabulary=None)
+    duration_result = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "csv=p=0", str(audio_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    duration = float(duration_result.stdout.strip())
+    validate_words(transcription.words, duration)
+    turns = list(transcription.native.turns) if transcription.native is not None else []
+    if turns:
+        validate_turns(turns, duration)
+    return {
+        "status": "passed",
+        "engine": preset["engine"],
+        "preset_id": preset["id"],
+        "word_count": len(transcription.words),
+        "turn_count": len(turns),
+    }

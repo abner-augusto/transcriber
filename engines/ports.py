@@ -140,11 +140,6 @@ class Transcriber(Protocol):
         """
         ...
 
-    def unload(self) -> None:
-        """Release resident Engine resources, or do nothing for subprocess Engines."""
-        ...
-
-
 @runtime_checkable
 class Diarizer(Protocol):
     """Turns audio into Turns. Implemented by pyannote."""
