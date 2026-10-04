@@ -27,7 +27,7 @@ Segment derivation, Misheard Forms learned from edits, Re-apply Vocabulary Repro
 - **Decoder-level biasing** in parakeet.cpp (word boosting / context
   biasing for TDT/CTC), if upstream supports it or a patch is feasible.
 - **Learned corrections**: reuse the user's past Segment edits as the source
-  of replacements (CONTEXT.md: Vocabulary is "supplied by the user or learned
+  of replacements (GLOSSARY.md: Vocabulary is "supplied by the user or learned
   from their corrections").
 
 **Acceptance criteria (draft):**

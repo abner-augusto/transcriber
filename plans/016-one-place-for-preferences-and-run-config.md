@@ -170,7 +170,7 @@ is located next to `preferences.py` instead of in the working directory, and
 
 ## Carried over from the PR #1 review
 
-- [x] Add **Preferences** and **RunConfig** to `CONTEXT.md` when this plan lands.
+- [x] Add **Preferences** and **RunConfig** to `GLOSSARY.md` when this plan lands.
 
 ## STOP conditions
 

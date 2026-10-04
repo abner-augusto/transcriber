@@ -12,4 +12,4 @@ Executable, step-by-step plans live in `plans/`; `plans/README.md` is the ordere
 
 ## Domain Context
 
-Read `CONTEXT.md` before changing domain behavior. Consult relevant decisions under `docs/adr/` before changing architecture or engine boundaries.
+Read `GLOSSARY.md` before changing domain behavior. Consult relevant decisions under `docs/adr/` before changing architecture or engine boundaries.

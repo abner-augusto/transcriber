@@ -69,7 +69,7 @@ pytest can fail live Jobs and walk `./storage` via the real `SessionLocal`.
   `tasks.shared.SessionLocal`; pattern for isolated Job tests.
 - `tests/test_meeting_api.py:48` and `tests/test_model_settings_api.py:9` —
   `TestClient(app)` runs startup against settings.`database_url`.
-- Domain terms from `CONTEXT.md`: **Job** is one unit of background
+- Domain terms from `GLOSSARY.md`: **Job** is one unit of background
   processing over a Meeting (avoid "task" except for the Celery mechanism).
   **Meeting** status `PROCESSING` means a Job is in flight.
 
@@ -118,7 +118,7 @@ Match that sqlite-sessionmaker pattern. Commit style from history:
 ## Suggested executor toolkit
 
 - If the `tdd` skill is available, use it for steps 1–3 (red, then green).
-- Read `CONTEXT.md` Job / Meeting terms before naming anything.
+- Read `GLOSSARY.md` Job / Meeting terms before naming anything.
 
 ## Scope
 

@@ -31,7 +31,7 @@ attributes through `hasattr`/`getattr`: `runtime_fingerprint`,
 diarization is state that only exists after `transcribe()` returns.
 `engine_runners/_main.py` and `scripts/engine_smoke.py` repeat the probing, and
 the smoke test calls each Engine's private loaders. The pipeline knows which
-Engine ran, which `CONTEXT.md` says it must not.
+Engine ran, which `GLOSSARY.md` says it must not.
 
 ## Decisions (from the design session — do not re-litigate)
 
@@ -177,7 +177,7 @@ recording was run by the agent.
   `tasks/diarization.py` disappears.
   Done 2026-09-25: `diarize_meeting` reports its path through `on_path`, and
   `DiarizationResult.engine` carries the Engine name with the native Turns.
-- Add **Transcription** to `CONTEXT.md` when this plan lands. Done.
+- Add **Transcription** to `GLOSSARY.md` when this plan lands. Done.
 
 ## STOP conditions
 

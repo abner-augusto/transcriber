@@ -21,7 +21,7 @@ AI-powered local meeting transcription with automatic speaker identification. Up
 
 Everything runs on this machine. No audio, transcript or voice embedding is ever sent anywhere —
 see [ADR-0001](docs/adr/0001-no-data-leaves-the-machine.md). Terms in bold are defined in
-[CONTEXT.md](CONTEXT.md).
+[GLOSSARY.md](GLOSSARY.md).
 
 ## Swapping the transcription engine
 
@@ -126,7 +126,7 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 
 ```
 transcriber/
-├── CONTEXT.md                 # Domain glossary — read this first
+├── GLOSSARY.md                 # Domain glossary — read this first
 ├── docs/adr/                  # Why things are the way they are
 ├── main.py                    # FastAPI app entry point
 ├── config.py                  # Pydantic settings (engine binaries, paths)

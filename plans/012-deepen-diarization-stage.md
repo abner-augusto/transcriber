@@ -93,7 +93,7 @@ Reprocessing bug is fixed because there is no second copy to drift.
   harness with `FakeTranscriber` / `FakeDiarizer` from `tests/fakes.py`.
   Copy this style.
 
-Domain vocabulary (`CONTEXT.md`): a **Diarizer** produces **Turns**; the
+Domain vocabulary (`GLOSSARY.md`): a **Diarizer** produces **Turns**; the
 **Speaker Namer** names Speakers; **Reprocessing** re-runs diarization or
 naming without transcribing again.
 

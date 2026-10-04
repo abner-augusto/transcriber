@@ -36,7 +36,7 @@ report degraded timestamp quality when only this optional capability fails.
 - `engines/qwen3_asr.py:232-240` already defines proportional fallback.
 - `tests/test_engines.py:386-480` tests protocol conformance, parsing, stitching,
   and shallow availability; it does not test aligner initialization failure.
-- Domain constraint from `CONTEXT.md`: a Transcriber produces `Word` values and
+- Domain constraint from `GLOSSARY.md`: a Transcriber produces `Word` values and
   knows nothing about Speakers. Preserve leading-space `Word.text` semantics from
   `engines/ports.py:15-51`.
 - ADR constraint from `docs/adr/0005-qwen3-asr-and-vibevoice-engines.md`: both

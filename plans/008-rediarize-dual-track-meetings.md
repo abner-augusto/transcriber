@@ -54,7 +54,7 @@ Meeting therefore throws away the host/remote split the first run produced.
 - `tests/test_pyannote_exclusive.py:268+` — process + rediarize with fakes
   for **single-track**. Copy this task-harness style.
 
-Domain vocabulary from `CONTEXT.md`: **Turn** is what a Diarizer produces;
+Domain vocabulary from `GLOSSARY.md`: **Turn** is what a Diarizer produces;
 **Speaker Namer** assigns names; dual-track host is still a Speaker inside
 the Meeting, labeled `HOST` then named `"You"`. **Reprocessing** re-runs
 diarization without transcribing again.

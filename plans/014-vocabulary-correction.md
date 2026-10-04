@@ -67,7 +67,7 @@ a pure step of Segment derivation.
 9. **Learning**: `_learn_from_correction` also records the replaced phrase as
    a Misheard Form of the new term.
 
-Terms (`CONTEXT.md`): **Vocabulary Correction**, **Misheard Form**.
+Terms (`GLOSSARY.md`): **Vocabulary Correction**, **Misheard Form**.
 
 ## Current state
 
@@ -240,7 +240,7 @@ Outcome section.
 - [x] Re-apply Vocabulary keeps Speaker names
 - [ ] Bench numbers from the user's Meetings recorded in this plan
 - [x] `plans/README.md` row and ticket 06 status updated
-- [x] `CONTEXT.md`: drop the "(planned, plan 014)" markers and the "once plan 014 lands" wording
+- [x] `GLOSSARY.md`: drop the "(planned, plan 014)" markers and the "once plan 014 lands" wording
 
 ## STOP conditions
 

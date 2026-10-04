@@ -13,7 +13,7 @@ through `hasattr`/`getattr` (`runtime_fingerprint`, `runtime_diagnostics`,
 `get_native_diarization`, `unload`). Native diarization is state that exists
 only after `transcribe()` runs. `engine_runners/_main.py` and
 `scripts/engine_smoke.py` repeat the same probing. The pipeline therefore
-knows which Engine ran, which `CONTEXT.md` says it must not.
+knows which Engine ran, which `GLOSSARY.md` says it must not.
 
 **Blocked by:** None. Plan 012 is done: `tasks.diarization.diarize_meeting` takes
 `native` / `native_engine`, which collapse into the `Transcription` value.

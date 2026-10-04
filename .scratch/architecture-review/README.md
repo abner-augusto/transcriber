@@ -5,7 +5,7 @@ Review run with the `improve-codebase-architecture` skill
 artifact, owner access): https://claude.ai/artifact/J7mR7gu5Ft3sJGF3zSebLZ
 
 Vocabulary: **module, interface, depth, seam, adapter, leverage, locality**
-as defined by the `codebase-design` skill; domain terms from `CONTEXT.md`.
+as defined by the `codebase-design` skill; domain terms from `GLOSSARY.md`.
 
 ## Decided
 
