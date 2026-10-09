@@ -60,6 +60,26 @@ Diarization beat pyannote on WDER in two of the user's Meetings
 | 022 | Nemotron 3 Diarization as a second Diarizer Engine | P2 | M | — | DONE (executor Codex gpt-6-luna, reviewed 2026-09-25) |
 | 023 | A Diarization tab in Settings | P2 | S | 022 | DONE (executor Codex gpt-6-luna, reviewed 2026-09-25) |
 
+### Agent operation (2026-10-09)
+
+Source: the agent-friendliness audit at `c5cc40a`. Goal: a coding agent runs
+the transcription from its session, names the Speakers no Voice Profile
+matched, reviews transcription errors, and corrects Segments while the Meeting
+page updates live. User decisions taken the same day: a new ADR-0010 instead
+of an ADR-0001 exception; manual names carry over by label (Re-identify) or by
+Turn overlap (Re-diarize), which settles issue 12; renaming creates a Voice
+Profile only when asked; agent edits teach Vocabulary only with `--learn`.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 024 | Root gate passes, README current, ADR-0010 | P1 | S | — | TODO |
+| 025 | Validated, reversible Segment and Speaker edits | P1 | M | — | TODO |
+| 026 | A Meeting's Words with their confidence | P2 | S | — | TODO |
+| 027 | Live Meeting page updates on API edits | P1 | S | 025 | TODO |
+| 028 | Names and reassignments survive Reprocessing (issue 12) | P1 | M | 025 | TODO |
+| 029 | Stdlib CLI: run and read Meetings | P1 | M | 024, 026 | TODO |
+| 030 | CLI edits, `suspects`, operator skill | P1 | M | 025–029 | TODO |
+
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
@@ -86,6 +106,12 @@ summarized in [`LOCAL-VERIFICATION.md`](LOCAL-VERIFICATION.md).
   and never write placeholder or estimated numbers. Plan 021 stays `TODO`
   until the user reports results.
 
+- 024–030: **024**, **025** and **026** are independent and can run in
+  parallel. **027** and **028** both need 025, and both edit
+  `api/segments.py`/`api/speakers.py`, so run them one after the other.
+  **029** needs 024 (ADR-0010) and 026 (`/words`). **030** comes last. 029
+  moves the `db_session` fixture to `tests/conftest.py`; plans written after
+  it should use it from there.
 - 022 → 023 in order. 023 is frontend only and stops if 022's
   `diarizers` payload is missing. 022's Step 8 and 023's Step 5 are
   local-only gates (GPU and the user's Meetings).
@@ -123,3 +149,13 @@ summarized in [`LOCAL-VERIFICATION.md`](LOCAL-VERIFICATION.md).
 - **Dead live/recording/finalizing UI and unused `UPLOADING` /
   `CANCELLED` enums (YAGNI):** executed directly (not a numbered plan).
   Locked by `tests/test_dead_live_surface.py`. Plan 011 must not restore them.
+- MCP server as the agent interface (2026-10-09): deferred. A stdlib CLI
+  (029/030) works with every agent, including a local one, and adds no
+  long-running process. Revisit only if the CLI's text output proves too
+  lossy.
+- Retranscribing a time range with another Preset as a "second opinion"
+  (2026-10-09): deferred. It is the only check an agent could run on audio
+  it cannot hear, but it needs a new Job kind. Revisit after 030 is in use.
+- Exposing `raw_transcription` inside `GET /meetings/{id}` (2026-10-09):
+  rejected. A 2-hour Meeting's Words would bloat every page load; plan 026
+  adds a ranged `/words` route instead.
