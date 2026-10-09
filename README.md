@@ -134,12 +134,16 @@ uv run python -m transcriber_cli show <id> --grep "Lourdes"
 uv run python -m transcriber_cli speakers <id> --unnamed
 uv run python -m transcriber_cli rename <id> SPEAKER_01 "Maria"
 uv run python -m transcriber_cli edit <id> '#142' "Garrah confirmou"
+uv run python -m transcriber_cli split <id> '#142' --before "Quem manda" --speaker "Maria"
+uv run python -m transcriber_cli unsplit <id> '#142'
 uv run python -m transcriber_cli suspects <id>
 uv run python -m transcriber_cli notes <id> --status open
 uv run python -m transcriber_cli suggest <id> '#142' "Garrah confirmou" --why "o nome da obra"
 ```
 
 An edit from the command line teaches Vocabulary only with `--learn`; an agent cannot hear the audio, so its corrections are guesses until you confirm them.
+
+`split` cuts a Segment the Diarizer joined (two people on one line) at a Word, by time (`--at`) or by the first Word(s) of the second half (`--before`). The Meeting keeps the cut, so it survives every Reprocessing, Re-diarize included; `unsplit` takes it back. Later Segment handles (`#N`) shift by one.
 
 ## Project structure
 
@@ -230,6 +234,8 @@ transcriber/
 | `PUT` | `/api/segments/{id}` | Edit segment text; `learn: false` does not teach Vocabulary from the edit |
 | `POST` | `/api/segments/{id}/revert` | Undo a manual edit, restoring the derived text (teaches nothing) |
 | `PUT` | `/api/segments/{id}/speaker` | Move a Segment to another Speaker of the same Meeting |
+| `POST` | `/api/segments/{id}/split` | Cut a Segment in two at the Word start nearest `at`; optional `speaker_id` for the second half. The cut is stored on the Meeting as a Split and survives every Reprocessing. Refused for an edited Segment |
+| `POST` | `/api/segments/{id}/unsplit` | Join a Segment with the next one when a Split lies between them, and drop the Split |
 | `PUT` | `/api/speakers/{id}` | Rename/recolor speaker |
 | `POST` | `/api/meetings/{id}/speakers` | Add a Speaker the Diarizer missed (`display_name`; label `MANUAL_<n>`) |
 | `POST` | `/api/speakers/merge` | Merge two speakers |
