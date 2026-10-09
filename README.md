@@ -129,7 +129,13 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 uv run python -m transcriber_cli list
 uv run python -m transcriber_cli upload reuniao.m4a --title "Obra 12/10" --participants "Ana, Bruno" --process --wait
 uv run python -m transcriber_cli show <id> --from 10:00 --to 15:00
+uv run python -m transcriber_cli speakers <id> --unnamed
+uv run python -m transcriber_cli rename <id> SPEAKER_01 "Maria"
+uv run python -m transcriber_cli edit <id> '#142' "Garrah confirmou"
+uv run python -m transcriber_cli suspects <id>
 ```
+
+An edit from the command line teaches Vocabulary only with `--learn`; an agent cannot hear the audio, so its corrections are guesses until you confirm them.
 
 ## Project structure
 
@@ -219,6 +225,7 @@ transcriber/
 | `GET` | `/api/meetings/{id}/words?start=&end=` | Words as the Transcriber heard them, before Vocabulary Correction; `start`/`end` (seconds) keep the Words overlapping that range |
 | `PUT` | `/api/segments/{id}` | Edit segment text; `learn: false` does not teach Vocabulary from the edit |
 | `POST` | `/api/segments/{id}/revert` | Undo a manual edit, restoring the derived text (teaches nothing) |
+| `PUT` | `/api/segments/{id}/speaker` | Move a Segment to another Speaker of the same Meeting |
 | `PUT` | `/api/speakers/{id}` | Rename/recolor speaker |
 | `POST` | `/api/meetings/{id}/speakers` | Add a Speaker the Diarizer missed (`display_name`; label `MANUAL_<n>`) |
 | `POST` | `/api/speakers/merge` | Merge two speakers |

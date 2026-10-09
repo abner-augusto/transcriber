@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from models import Meeting, MeetingStatus, Segment, Speaker
+from models import Meeting, MeetingStatus, Segment, Speaker, VocabularyEntry
 from models.job import Job, JobStatus, JobType
 from transcriber_cli.client import Api, ApiError, connection_failure
 from transcriber_cli.main import main
@@ -415,3 +415,191 @@ def test_clock_and_parse_clock_round_trip():
     assert parse_clock("90") == 90.0
     assert parse_clock("12.5") == 12.5
     assert parse_clock(clock(parse_clock("1:02:03"))) == 3723.0
+
+
+def test_rename_sets_the_name_as_a_manual_identification(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    anon = add_speaker(db_session, meeting, "SPEAKER_00")
+    db_session.commit()
+
+    code, out, _ = run(["rename", meeting.id, "SPEAKER_00", "Maria"], api, capsys)
+
+    assert code == 0
+    db_session.refresh(anon)
+    assert (anon.display_name, anon.identified_by) == ("Maria", "manual")
+    assert 'SPEAKER_00 "Maria" by=manual' in out
+
+
+def test_rename_save_profile_asks_the_app_to_save_a_voice_profile(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    anon = add_speaker(db_session, meeting, "SPEAKER_00")
+    db_session.commit()
+    sent = []
+
+    def recording(method, url, headers, body):
+        if method == "POST" and url.endswith("/api/speaker-profiles/save-from-speaker"):
+            sent.append(json.loads(body))  # canned: the real route needs audio and ffmpeg
+            return 200, json.dumps({"id": "p1", "name": "Maria"}).encode()
+        return api.transport(method, url, headers, body)
+
+    recorder = Api(base_url="http://test", transport=recording)
+
+    code, out, _ = run(["rename", meeting.id, "SPEAKER_00", "Maria", "--save-profile"], recorder, capsys)
+
+    assert code == 0
+    assert sent == [{"speaker_id": anon.id, "meeting_id": meeting.id, "name": "Maria"}]
+    assert "voice profile saved: Maria" in out
+
+    sent.clear()
+    run(["rename", meeting.id, "SPEAKER_00", "Maria"], recorder, capsys)
+    assert sent == []
+
+
+def test_edit_does_not_teach_vocabulary_unless_asked_to_learn(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    entry = VocabularyEntry(term="Garrah")
+    db_session.add(entry)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    add_segment(db_session, meeting, ana, 0, 0.0, 1.0, "Galo", original_text="Galo")
+    db_session.commit()
+
+    code, out, _ = run(["edit", meeting.id, "#0", "Garrah"], api, capsys)
+
+    assert code == 0
+    assert "#0 00:00 Ana: Garrah [edited]" in out
+    db_session.refresh(entry)
+    assert not entry.misheard_as
+
+    code, _, _ = run(["edit", meeting.id, "#0", "Galo"], api, capsys)
+    assert code == 0
+    code, _, _ = run(["edit", meeting.id, "#0", "Garrah", "--learn"], api, capsys)
+    assert code == 0
+    db_session.refresh(entry)
+    assert entry.misheard_as == [{"form": "Galo", "count": 1}]
+
+
+def test_revert_restores_the_text_and_refuses_an_unedited_segment(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    add_segment(db_session, meeting, ana, 0, 0.0, 1.0, "original", original_text="original")
+    db_session.commit()
+    run(["edit", meeting.id, "#0", "mudado"], api, capsys)
+
+    code, out, _ = run(["revert", meeting.id, "#0"], api, capsys)
+
+    assert code == 0
+    assert "#0 00:00 Ana: original" in out
+    assert "[edited]" not in out
+
+    code, out, err = run(["revert", meeting.id, "#0"], api, capsys)
+    assert code == 1
+    assert "Segment has no edit to revert" in err
+    assert out == ""
+
+
+def test_assign_moves_a_segment_to_a_new_or_existing_speaker(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    segment = add_segment(db_session, meeting, ana, 0, 0.0, 1.0, "oi")
+    db_session.commit()
+
+    code, out, _ = run(["assign", meeting.id, "#0", "new:Carla"], api, capsys)
+
+    assert code == 0
+    carla = db_session.query(Speaker).filter_by(label="MANUAL_1").one()
+    assert carla.display_name == "Carla"
+    db_session.refresh(segment)
+    assert segment.speaker_id == carla.id
+    assert "#0 00:00 Carla: oi [moved]" in out
+
+    code, _, _ = run(["assign", meeting.id, "#0", "SPEAKER_00"], api, capsys)
+    assert code == 0
+    db_session.refresh(segment)
+    assert segment.speaker_id == ana.id
+
+
+def test_add_speaker_and_merge(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    add_segment(db_session, meeting, ana, 0, 0.0, 1.0, "oi")
+    db_session.commit()
+
+    code, out, _ = run(["add-speaker", meeting.id, "Carla"], api, capsys)
+    assert code == 0
+    assert 'MANUAL_1 "Carla" by=manual' in out
+
+    code, out, _ = run(["merge", meeting.id, "SPEAKER_00", "MANUAL_1"], api, capsys)
+    assert code == 0
+    assert 'MANUAL_1 "Carla"' in out
+    assert db_session.query(Speaker).filter_by(label="SPEAKER_00").count() == 0
+
+
+def test_set_updates_only_the_given_fields(db_session, api, capsys):
+    meeting = seed_meeting(db_session, title="Obra 12")
+    meeting.vocabulary = "Garrah"
+    db_session.commit()
+
+    code, _, _ = run(["set", meeting.id, "--participants", "Ana, Bruno"], api, capsys)
+
+    assert code == 0
+    db_session.refresh(meeting)
+    assert (meeting.title, meeting.vocabulary, meeting.participants) == ("Obra 12", "Garrah", "Ana, Bruno")
+
+    code, _, err = run(["set", meeting.id], api, capsys)
+    assert code == 1
+    assert "nothing to set" in err
+
+
+def test_suspects_prints_repeated_and_low_confidence_sections(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
+    for order in range(3):
+        add_segment(db_session, meeting, maria, order, 100.0 + order * 5, 104.0 + order * 5, "Obrigado.")
+    add_segment(db_session, meeting, maria, 3, 221.0, 225.0, "Galo confirmou", confidence=0.9)
+    meeting.raw_transcription = {"words": [
+        {"start": 221.0, "end": 221.4, "text": " Galo", "confidence": 0.3},
+        {"start": 221.5, "end": 222.0, "text": " confirmou", "confidence": 0.95},
+    ]}
+    db_session.commit()
+
+    code, out, _ = run(["suspects", meeting.id], api, capsys)
+
+    assert code == 0
+    assert "REPEATED (possible hallucination over silence)" in out
+    assert '  01:40-01:54 #0-#2 x3 "obrigado"' in out
+    assert "LOW-CONFIDENCE WORDS" in out
+    assert "  #3 03:41 Galo (0.30) | #3 03:41 Maria: Galo confirmou" in out
+    assert "CORRECTED BY VOCABULARY" not in out
+    assert "LOW-CONFIDENCE SEGMENTS" not in out
+
+
+def test_suspects_limit_caps_each_section_and_says_so(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
+    for order in range(3):
+        add_segment(db_session, meeting, maria, order, order * 10.0, order * 10.0 + 5, f"fala {order}", confidence=0.2)
+    db_session.commit()
+
+    code, out, _ = run(["suspects", meeting.id, "--limit", "2"], api, capsys)
+
+    assert code == 0
+    assert "LOW-CONFIDENCE SEGMENTS (showing 2 of 3)" in out
+    assert "fala 0" in out and "fala 1" in out
+    assert "fala 2" not in out
+
+
+def test_suspects_lists_vocabulary_corrections(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
+    add_segment(
+        db_session, meeting, maria, 77, 72.0, 75.0, "Garrah chegou", confidence=0.9,
+        corrections=[{"start": 72.0, "end": 72.4, "heard": " Galo", "term": "Garrah", "rule": "similar"}],
+    )
+    db_session.commit()
+
+    code, out, _ = run(["suspects", meeting.id], api, capsys)
+
+    assert code == 0
+    assert "CORRECTED BY VOCABULARY" in out
+    assert "  #77 01:12 Galo->Garrah (rule similar)" in out
+
