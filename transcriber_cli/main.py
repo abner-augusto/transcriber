@@ -7,7 +7,7 @@ import sys
 import time
 
 from .client import Api, ApiError
-from .handles import resolve_meeting, resolve_speaker
+from .handles import resolve_meeting, resolve_segment, resolve_speaker
 from .render import (
     clock, meeting_header, parse_clock, segment_line, speaker_line, word_line,
 )
@@ -190,6 +190,88 @@ def cmd_words(api, args):
     return 0
 
 
+def cmd_rename(api, args):
+    meeting = load_meeting(api, args.meeting)
+    speaker = resolve_speaker(meeting, args.speaker)
+    updated = api.put(f"/api/speakers/{speaker['id']}", json={"display_name": args.name})
+    lines = [speaker_line(updated)]
+    data = updated
+    if args.save_profile:
+        profile = api.post(
+            "/api/speaker-profiles/save-from-speaker",
+            json={"speaker_id": speaker["id"], "meeting_id": meeting["id"], "name": args.name},
+        )
+        lines.append(f"voice profile saved: {args.name}")
+        data = {"speaker": updated, "voice_profile": profile}
+    emit(args, data, lines)
+    return 0
+
+
+def _add_speaker(api, meeting_id, name) -> dict:
+    return api.post(f"/api/meetings/{meeting_id}/speakers", json={"display_name": name})
+
+
+def cmd_add_speaker(api, args):
+    meeting = resolve_meeting(api, args.meeting)
+    speaker = _add_speaker(api, meeting["id"], args.name)
+    emit(args, speaker, [speaker_line(speaker)])
+    return 0
+
+
+def cmd_merge(api, args):
+    meeting = load_meeting(api, args.meeting)
+    source = resolve_speaker(meeting, args.source)
+    target = resolve_speaker(meeting, args.target)
+    merged = api.post("/api/speakers/merge", json={"source_id": source["id"], "target_id": target["id"]})
+    emit(args, merged, [speaker_line(merged)])
+    return 0
+
+
+def cmd_edit(api, args):
+    meeting = load_meeting(api, args.meeting)
+    segment = resolve_segment(meeting, args.segment)
+    updated = api.put(f"/api/segments/{segment['id']}", json={"text": args.text, "learn": args.learn})
+    emit(args, updated, [segment_line(updated)])
+    return 0
+
+
+def cmd_revert(api, args):
+    meeting = load_meeting(api, args.meeting)
+    segment = resolve_segment(meeting, args.segment)
+    updated = api.post(f"/api/segments/{segment['id']}/revert")
+    emit(args, updated, [segment_line(updated)])
+    return 0
+
+
+NEW_SPEAKER_PREFIX = "new:"
+
+
+def cmd_assign(api, args):
+    meeting = load_meeting(api, args.meeting)
+    segment = resolve_segment(meeting, args.segment)
+    if args.speaker.startswith(NEW_SPEAKER_PREFIX):
+        name = args.speaker[len(NEW_SPEAKER_PREFIX):].strip()
+        if not name:
+            raise ApiError(400, "new: needs a name, e.g. new:Carla")
+        speaker_id = _add_speaker(api, meeting["id"], name)["id"]
+    else:
+        speaker_id = resolve_speaker(meeting, args.speaker)["id"]
+    updated = api.put(f"/api/segments/{segment['id']}/speaker", json={"speaker_id": speaker_id})
+    emit(args, updated, [segment_line(updated)])
+    return 0
+
+
+def cmd_set(api, args):
+    fields = {"title": args.title, "participants": args.participants, "vocabulary": args.vocabulary}
+    fields = {name: value for name, value in fields.items() if value is not None}
+    if not fields:
+        raise ApiError(400, "nothing to set; pass --title, --participants or --vocabulary")
+    meeting = resolve_meeting(api, args.meeting)
+    updated = api.put(f"/api/meetings/{meeting['id']}", json=fields)
+    emit(args, updated, meeting_header(updated))
+    return 0
+
+
 def cmd_export(api, args):
     if args.format in BINARY_FORMATS and not args.out:
         raise ApiError(400, f"{args.format} is a binary format; pass --out PATH")
@@ -270,6 +352,37 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--from", dest="start", type=parse_clock, required=True, metavar="T")
     p.add_argument("--to", dest="end", type=parse_clock, required=True, metavar="T")
     p.add_argument("--below", type=float, metavar="C", help="only Words with confidence under C")
+
+    p = command("rename", cmd_rename, "name a Speaker (the name sticks across Re-identify)")
+    p.add_argument("speaker", metavar="SPEAKER")
+    p.add_argument("name", metavar="NAME")
+    p.add_argument("--save-profile", action="store_true",
+                   help="also save the voice as a Voice Profile, so future Meetings name it")
+
+    p = command("add-speaker", cmd_add_speaker, "add a Speaker the Diarizer missed (label MANUAL_n)")
+    p.add_argument("name", metavar="NAME")
+
+    p = command("merge", cmd_merge, "move all of SOURCE's Segments to TARGET and delete SOURCE")
+    p.add_argument("source", metavar="SOURCE")
+    p.add_argument("target", metavar="TARGET")
+
+    p = command("edit", cmd_edit, "replace a Segment's text")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+    p.add_argument("text", metavar="TEXT")
+    p.add_argument("--learn", action="store_true",
+                   help="teach Vocabulary the correction (only for fixes the user confirmed)")
+
+    p = command("revert", cmd_revert, "undo a Segment's text edit")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+
+    p = command("assign", cmd_assign, "move a Segment to another Speaker (new:NAME adds one first)")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+    p.add_argument("speaker", metavar="SPEAKER")
+
+    p = command("set", cmd_set, "change the Meeting's title, participants, or vocabulary")
+    p.add_argument("--title")
+    p.add_argument("--participants", help="attendee names, comma-separated")
+    p.add_argument("--vocabulary", help="domain terms the Transcriber should spell correctly")
 
     p = command("export", cmd_export, "download the transcript (docx and pdf need --out)")
     p.add_argument("--format", required=True, choices=("srt", "vtt", "txt", "json", "md", "docx", "pdf"))
