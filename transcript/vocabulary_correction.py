@@ -17,6 +17,8 @@ MAX_MERGE_GAP_SECONDS = 0.5
 MAX_LEARNED_PHRASE_LENGTH = 100
 # Shorter lowercase words are common words, not names or technical terms.
 MIN_LOWERCASE_TERM_LENGTH = 5
+# Punctuation the transcript attaches to a word's edges; never part of a learned term or form.
+EDGE_PUNCTUATION = ".,;:!?…\"'()[]"
 
 
 @dataclass(frozen=True)
@@ -154,13 +156,13 @@ def learned_from_edit(
     terms: list[str] = []
     forms: list[tuple[str, str]] = []
     for op, i1, i2, j1, j2 in SequenceMatcher(None, old_words, new_words).get_opcodes():
-        new_phrase = " ".join(new_words[j1:j2]).strip()
+        new_phrase = " ".join(new_words[j1:j2]).strip(EDGE_PUNCTUATION)
         if not _worth_learning(new_phrase):
             continue
         if op == "insert":
             terms.append(new_phrase)
         elif op == "replace":
-            old_phrase = " ".join(old_words[i1:i2])
+            old_phrase = " ".join(old_words[i1:i2]).strip(EDGE_PUNCTUATION)
             pair = (normalize_vocabulary_text(old_phrase), normalize_vocabulary_text(new_phrase))
             if pair in reversed_pairs:
                 continue
