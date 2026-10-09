@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+import jobs
 from api.segments import require_editable
 from database import get_db
 from meeting_store import refresh_speaker_stats
@@ -58,6 +59,7 @@ def add_speaker(meeting_id: str, req: AddSpeakerRequest, db: Session = Depends(g
     db.add(speaker)
     db.commit()
     db.refresh(speaker)
+    jobs.notify_meeting_changed(meeting_id)
     return speaker.to_dict()
 
 
@@ -75,6 +77,7 @@ def update_speaker(speaker_id: str, req: UpdateSpeakerRequest, db: Session = Dep
         speaker.color = req.color
 
     db.commit()
+    jobs.notify_meeting_changed(speaker.meeting_id)
     return speaker.to_dict()
 
 
@@ -101,4 +104,5 @@ def merge_speakers(req: MergeSpeakersRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(target)
 
+    jobs.notify_meeting_changed(target.meeting_id)
     return target.to_dict()

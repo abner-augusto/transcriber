@@ -591,3 +591,115 @@ def test_add_speaker_requires_a_name(db_session):
     )
 
     assert response.status_code == 400
+
+
+def _edit_targets(db_session):
+    """A completed Meeting with two Speakers and one edited Segment, for the edit routes."""
+    meeting, first, second = _meeting_with_speakers(db_session)
+    segment = Segment(
+        meeting_id=meeting.id, speaker_id=first.id, start_time=0, end_time=1.0,
+        text="Garrah", original_text="Galo", is_edited=True, order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+    return meeting, first, second, segment
+
+
+def _events_caused_by(meeting_id, act):
+    """Open the Meeting's socket, run `act`, then a sentinel; return what arrived before the sentinel."""
+    import time
+
+    bus = app.state.test_progress_bus
+    sentinel = {"type": "ping"}
+    with TestClient(app).websocket_connect(f"/ws/meetings/{meeting_id}") as websocket:
+        deadline = time.monotonic() + 2
+        while bus.subscriber_count(meeting_id) == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert bus.subscriber_count(meeting_id) == 1
+        act()
+        bus.publish(meeting_id, sentinel)
+        events = [websocket.receive_json()]
+        while events[-1] != sentinel:
+            events.append(websocket.receive_json())
+    return events[:-1]
+
+
+def test_segment_edit_publishes_meeting_changed(db_session):
+    meeting, _, _, segment = _edit_targets(db_session)
+    client = TestClient(app)
+
+    events = _events_caused_by(
+        meeting.id,
+        lambda: client.put(f"/api/segments/{segment.id}", json={"text": "novo"}),
+    )
+
+    assert events == [{"type": "meeting_changed"}]
+
+
+def test_speaker_rename_publishes_meeting_changed(db_session):
+    meeting, first, _, _ = _edit_targets(db_session)
+    client = TestClient(app)
+
+    events = _events_caused_by(
+        meeting.id,
+        lambda: client.put(f"/api/speakers/{first.id}", json={"display_name": "Ana"}),
+    )
+
+    assert events == [{"type": "meeting_changed"}]
+
+
+@pytest.mark.parametrize("route", [
+    "revert", "segment_speaker", "merge", "add_speaker", "meeting_details",
+])
+def test_every_other_edit_route_publishes_meeting_changed(db_session, route):
+    meeting, first, second, segment = _edit_targets(db_session)
+    client = TestClient(app)
+    requests = {
+        "revert": lambda: client.post(f"/api/segments/{segment.id}/revert"),
+        "segment_speaker": lambda: client.put(
+            f"/api/segments/{segment.id}/speaker", json={"speaker_id": second.id}),
+        "merge": lambda: client.post(
+            "/api/speakers/merge", json={"source_id": first.id, "target_id": second.id}),
+        "add_speaker": lambda: client.post(
+            f"/api/meetings/{meeting.id}/speakers", json={"display_name": "Carol"}),
+        "meeting_details": lambda: client.put(
+            f"/api/meetings/{meeting.id}", json={"title": "Renamed"}),
+    }
+
+    events = _events_caused_by(meeting.id, requests[route])
+
+    assert events == [{"type": "meeting_changed"}]
+
+
+def test_failed_edit_publishes_nothing(db_session):
+    meeting = Meeting(title="Busy", status=MeetingStatus.PROCESSING)
+    db_session.add(meeting)
+    db_session.flush()
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0, end_time=1.0,
+        text="Galo", original_text="Galo", order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+    client = TestClient(app)
+    statuses = []
+
+    events = _events_caused_by(
+        meeting.id,
+        lambda: statuses.append(client.put(f"/api/segments/{segment.id}", json={"text": "novo"}).status_code),
+    )
+
+    assert statuses == [409]
+    assert events == []
+
+
+def test_read_routes_publish_nothing(db_session):
+    meeting, _, _, _ = _edit_targets(db_session)
+    client = TestClient(app)
+
+    events = _events_caused_by(
+        meeting.id,
+        lambda: [client.get(f"/api/meetings/{meeting.id}/segments"), client.get(f"/api/meetings/{meeting.id}/words")],
+    )
+
+    assert events == []

@@ -203,6 +203,7 @@ def update_meeting(meeting_id: str, req: UpdateMeetingRequest, db: Session = Dep
         meeting.participants = trimmed_participants if trimmed_participants else None
 
     db.commit()
+    jobs.notify_meeting_changed(meeting.id)
     return meeting.to_dict()
 
 
