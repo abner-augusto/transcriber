@@ -37,6 +37,7 @@ Ask for the participants and the domain terms first; they are the best evidence 
 
 - A small Speaker (a handful of Segments, seconds of speech) is usually one person split in two. If it alternates with another Speaker within seconds, or its lines continue that Speaker's sentence, `merge M SOURCE TARGET` it and say so.
 - One Speaker holding two people shows as lines that answer each other. Move their Segments with `add-speaker M NAME` (or `assign M #N new:NAME`) and `assign M #N SPEAKER`, and tell the user which Segments moved.
+- One Segment holding two people (a question and its answer on one line): `split M #N --before "first words of the second half" --speaker SPEAKER`. Split only when the text shows the change of speaker: a question then its answer, a name addressed then answering. `show` again afterwards, because later handles shift; `unsplit M #N` takes a Split back.
 - A loudspeaker, TV or other room the mic picked up gets its own Speaker: `assign M #N new:"Alto-falante"`. Its text stays as heard, and no participant gets it.
 
 **Then name**, on evidence, strongest first:
@@ -85,7 +86,7 @@ Report what you named and what you edited (Segment handles) in a short summary. 
 - `edit` teaches Vocabulary only with `--learn`, and a learned Misheard Form applies to every future Meeting. Pass `--learn` only for corrections the user confirmed.
 - To teach a new term, first `edit --learn` changing only the misheard words, then fix the rest of the sentence in a second `edit` without `--learn`. Only short replaced phrases are learned, so a whole-sentence rewrite teaches nothing.
 - `revert M #N` undoes a text edit.
-- Names and reassignments survive `reprocess reidentify` and `reprocess reapply-vocabulary`. `reprocess rediarize` carries names by Turn overlap and drops reassignments, so warn the user before suggesting it.
+- Names and reassignments survive `reprocess reidentify` and `reprocess reapply-vocabulary`. `reprocess rediarize` carries names by Turn overlap and drops reassignments, so warn the user before suggesting it. A Split survives all three, but `split --speaker` is a reassignment, so `rediarize` drops that Speaker choice and keeps the cut.
 
 ## Line markers
 
@@ -93,4 +94,4 @@ Report what you named and what you edited (Segment handles) in a short summary. 
 
 ## Commands
 
-`health` · `list` · `upload` · `process` · `reprocess KIND` · `wait` · `show` · `speakers` · `words` · `suspects` · `rename` · `add-speaker` · `merge` · `edit` · `revert` · `assign` · `notes` · `ask` · `note` · `suggest` · `suggest-name` · `suggest-move` · `suggest-merge` · `close` · `set` · `export`. Add `--json` before the command for the API's raw JSON.
+`health` · `list` · `upload` · `process` · `reprocess KIND` · `wait` · `show` · `speakers` · `words` · `suspects` · `rename` · `add-speaker` · `merge` · `edit` · `revert` · `assign` · `split` · `unsplit` · `notes` · `ask` · `note` · `suggest` · `suggest-name` · `suggest-move` · `suggest-merge` · `close` · `set` · `export`. Add `--json` before the command for the API's raw JSON.

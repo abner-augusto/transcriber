@@ -243,6 +243,79 @@ def test_a_reassignment_made_through_the_route_survives_reidentify(monkeypatch, 
     assert _owner_labels(harness, meeting_id) == ["SPEAKER_00", "SPEAKER_01", "SPEAKER_01"]
 
 
+def _split_first_segment(harness, monkeypatch, tmp_path, meeting_id, *, to=None):
+    """Split "um dois tres" before "dois" through the route, optionally handing "dois tres" to `to`."""
+    import preferences
+
+    monkeypatch.setattr(preferences, "LEGACY_PREFERENCES_PATH", tmp_path / "no-legacy-file")
+    try:
+        client = _client(harness)
+        meeting = harness.load(meeting_id)
+        first = next(s for s in meeting.segments if s.order == 0)
+        body = {"at": 0.35}
+        if to is not None:
+            body["speaker_id"] = next(s.id for s in meeting.speakers if s.label == to)
+        response = client.post(f"/api/segments/{first.id}/split", json=body)
+        assert response.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+
+def _spans(harness, meeting_id) -> list[tuple[float, float, str]]:
+    segments = sorted(harness.load(meeting_id).segments, key=lambda s: s.order)
+    return [(s.start_time, s.end_time, s.text.strip()) for s in segments]
+
+
+SPLIT_SPANS = [
+    (0.1, 0.3, "um"),
+    (0.35, 0.8, "dois tres"),
+    (0.95, 1.2, "quatro"),
+    (2.6, 3.2, "cinco"),
+]
+
+
+def test_a_split_survives_reidentify(monkeypatch, tmp_path):
+    harness, meeting_id = _processed(monkeypatch, tmp_path)
+    _split_first_segment(harness, monkeypatch, tmp_path, meeting_id)
+    assert _spans(harness, meeting_id) == SPLIT_SPANS
+
+    _run(harness, meeting_id, reidentify_task, JobType.REIDENTIFY)
+
+    assert _spans(harness, meeting_id) == SPLIT_SPANS
+
+
+def test_a_split_survives_reapply_vocabulary(monkeypatch, tmp_path):
+    harness, meeting_id = _processed(monkeypatch, tmp_path)
+    _split_first_segment(harness, monkeypatch, tmp_path, meeting_id)
+
+    _run(harness, meeting_id, reapply_vocabulary_task, JobType.REAPPLY_VOCABULARY)
+
+    assert _spans(harness, meeting_id) == SPLIT_SPANS
+
+
+def test_a_split_survives_rediarize_but_its_reassignment_does_not(monkeypatch, tmp_path):
+    harness, meeting_id = _processed(monkeypatch, tmp_path)
+    _split_first_segment(harness, monkeypatch, tmp_path, meeting_id, to="SPEAKER_01")
+    assert _owner_labels(harness, meeting_id) == ["SPEAKER_00", "SPEAKER_01", "SPEAKER_01", "SPEAKER_00"]
+
+    _run(harness, meeting_id, rediarize_task, JobType.REDIARIZE)
+
+    assert _spans(harness, meeting_id) == SPLIT_SPANS
+    assert _owner_labels(harness, meeting_id) == ["SPEAKER_00", "SPEAKER_00", "SPEAKER_01", "SPEAKER_00"]
+    assert not any(s.speaker_edited for s in harness.load(meeting_id).segments)
+
+
+def test_a_split_second_half_reassignment_survives_reidentify(monkeypatch, tmp_path):
+    harness, meeting_id = _processed(monkeypatch, tmp_path)
+    _split_first_segment(harness, monkeypatch, tmp_path, meeting_id, to="SPEAKER_01")
+
+    _run(harness, meeting_id, reidentify_task, JobType.REIDENTIFY)
+
+    assert _spans(harness, meeting_id) == SPLIT_SPANS
+    assert _owner_labels(harness, meeting_id) == ["SPEAKER_00", "SPEAKER_01", "SPEAKER_01", "SPEAKER_00"]
+    assert [s.order for s in harness.load(meeting_id).segments if s.speaker_edited] == [1]
+
+
 def test_a_merge_survives_reidentify(monkeypatch, tmp_path):
     harness, meeting_id = _processed(monkeypatch, tmp_path)
     try:

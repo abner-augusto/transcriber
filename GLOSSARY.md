@@ -121,3 +121,8 @@ A question, comment or suggestion anchored at a time range of a Meeting, left by
 user for the other to settle. Accepting a suggestion is the user's confirmation. It keeps its time
 range through Reprocessing and is applied to the Segment at that range when it is accepted.
 _Avoid_: comment (bare), annotation, flag
+
+**Split**:
+A boundary the user forces inside a Segment, at the start of a Word. The Meeting keeps it, so
+every Reprocessing derives the Segments with that boundary; a Split survives even Re-diarize.
+_Avoid_: cut, break

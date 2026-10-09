@@ -51,6 +51,11 @@ _MIGRATIONS = (
         "segment speaker_edited",
         (_add_column("segments", "speaker_edited", "BOOLEAN NOT NULL DEFAULT 0"),),
     ),
+    (
+        3,
+        "meeting split_times",
+        (_add_column("meetings", "split_times", "JSON"),),
+    ),
 )
 
 

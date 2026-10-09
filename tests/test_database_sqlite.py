@@ -22,7 +22,7 @@ def test_fresh_sqlite_database_initializes_without_legacy_database(tmp_path, mon
         assert connection.execute(text("PRAGMA journal_mode")).scalar_one() == "wal"
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
         assert connection.execute(text("PRAGMA busy_timeout")).scalar_one() == 5000
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 2
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 3
     reflected = set(inspect(engine).get_table_names())
     assert set(Base.metadata.tables).issubset(reflected)
     assert {"segments_fts", "segments_fts_data", "segments_fts_idx"}.issubset(reflected)
@@ -59,6 +59,7 @@ def test_migration_2_adds_speaker_edited_to_an_existing_segments_table(tmp_path)
         connection.exec_driver_sql(
             "CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL)"
         )
+        connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
 
     upgrade(engine)
     upgrade(engine)
@@ -66,5 +67,23 @@ def test_migration_2_adds_speaker_edited_to_an_existing_segments_table(tmp_path)
     with engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(segments)")}
         assert "speaker_edited" in columns
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 2
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 3
+    engine.dispose()
+
+
+def test_migration_3_adds_split_times_to_an_existing_meetings_table(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL)"
+        )
+        connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
+
+    upgrade(engine)
+    upgrade(engine)
+
+    with engine.connect() as connection:
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(meetings)")}
+        assert "split_times" in columns
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 3
     engine.dispose()

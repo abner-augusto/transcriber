@@ -106,6 +106,34 @@ def test_segment_confidence_is_the_mean_of_its_words():
     assert build_segments(words, turns)[0]["confidence"] == 0.7
 
 
+def test_a_split_breaks_a_segment_at_a_word_start():
+    words = [spoken(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(5)]
+    turns = [Turn(start=0.0, end=3.0, speaker="SPEAKER_00")]
+
+    assert [s["text"] for s in build_segments(words, turns)] == ["w0 w1 w2 w3 w4"]
+    assert [s["text"] for s in build_segments(words, turns, splits=[1.0])] == [
+        "w0 w1",
+        "w2 w3 w4",
+    ]
+
+
+def test_a_split_between_words_breaks_before_the_next_word():
+    words = [spoken(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(5)]
+    turns = [Turn(start=0.0, end=3.0, speaker="SPEAKER_00")]
+
+    segments = build_segments(words, turns, splits=[1.2])
+
+    assert [s["text"] for s in segments] == ["w0 w1 w2", "w3 w4"]
+
+
+def test_splits_reach_derive_segments_unsorted():
+    words = [spoken(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(5)]
+
+    segments = derive_segments(words, None, splits=[2.0, 1.0])
+
+    assert [s["text"] for s in segments] == ["w0 w1", "w2 w3", "w4"]
+
+
 def test_no_words_no_segments():
     assert build_segments([], [Turn(start=0.0, end=1.0, speaker="SPEAKER_00")]) == []
 

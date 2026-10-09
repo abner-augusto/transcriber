@@ -103,6 +103,16 @@ def db_session(monkeypatch):
 
 
 @pytest.fixture
+def isolated_preferences(monkeypatch, tmp_path):
+    """Keep a route that reads Preferences (split, unsplit) off the real preferences file."""
+    import config
+    import preferences
+
+    monkeypatch.setattr(config.settings, "storage_path", str(tmp_path / "storage"))
+    monkeypatch.setattr(preferences, "LEGACY_PREFERENCES_PATH", tmp_path / "no-legacy-file")
+
+
+@pytest.fixture
 def selected_engine_smoke_preset(request):
     if not request.config.getoption("--run-engine-smoke"):
         pytest.skip("Engine smoke tests require explicit --run-engine-smoke opt-in")

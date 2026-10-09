@@ -37,6 +37,8 @@ class Meeting(Base):
     max_speakers: Mapped[int] = mapped_column(Integer, nullable=True)
     raw_diarization: Mapped[dict] = mapped_column(JSON, nullable=True)
     raw_transcription: Mapped[dict] = mapped_column(JSON, nullable=True)
+    # Times (seconds) the user forced a Segment break at; derivation always breaks there.
+    split_times: Mapped[list] = mapped_column(JSON, nullable=True)
     vocabulary: Mapped[str] = mapped_column(Text, nullable=True)  # Domain terms for Whisper prompt
     participants: Mapped[str] = mapped_column(Text, nullable=True)  # Meeting attendee names (cleaned)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

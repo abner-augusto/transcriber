@@ -95,7 +95,8 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 db, meeting, enabled=run_config.vocabulary_correction.enabled
             )
             aligned = derive_segments(
-                words, diarization, switch_penalty=switch_penalty, correction=correction
+                words, diarization, switch_penalty=switch_penalty, correction=correction,
+                splits=meeting.split_times or [],
             )
             current.progress(80, "Synchronization complete")
 

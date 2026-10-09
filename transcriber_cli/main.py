@@ -325,6 +325,75 @@ def cmd_assign(api, args):
     return 0
 
 
+PUNCTUATION = ".,;:!?…\"'()[]"
+
+
+def _heard(text: str) -> str:
+    return text.strip().strip(PUNCTUATION + " ").casefold()
+
+
+def _cut_before(api, meeting, segment, phrase) -> float:
+    """The start of the Word where `phrase` begins inside the Segment, as the Transcriber heard it."""
+    words = api.get(
+        f"/api/meetings/{meeting['id']}/words",
+        start=segment["start_time"], end=segment["end_time"],
+    )
+    inside = [
+        word for word in words
+        if word["start"] >= segment["start_time"] - 1e-6 and word["end"] <= segment["end_time"] + 1e-6
+    ]
+    heard = [(index, _heard(word["text"]), word) for index, word in enumerate(inside)]
+    heard = [entry for entry in heard if entry[1]]
+    wanted = [token for token in map(_heard, phrase.split()) if token]
+    handle = f"#{segment['order']}"
+    matches = [
+        heard[position][2] for position in range(len(heard) - len(wanted) + 1)
+        if wanted and heard[position][0] >= 1
+        and [entry[1] for entry in heard[position:position + len(wanted)]] == wanted
+    ]
+    if not matches:
+        raise ApiError(400, (
+            f"'{phrase}' is not among {handle}'s Words as heard; "
+            f"see `words M --from .. --to ..` or use --at"
+        ))
+    if len(matches) > 1:
+        where = ", ".join(f"{clock(word['start'])} (--at {word['start']:g})" for word in matches)
+        raise ApiError(400, f"'{phrase}' occurs {len(matches)} times in {handle}: {where}; choose one with --at")
+    return matches[0]["start"]
+
+
+def cmd_split(api, args):
+    meeting = load_meeting(api, args.meeting)
+    segment = resolve_segment(meeting, args.segment)
+    at = args.at if args.at is not None else _cut_before(api, meeting, segment, args.before)
+    body = {"at": at}
+    if args.speaker is not None:
+        if args.speaker.startswith(NEW_SPEAKER_PREFIX):
+            name = args.speaker[len(NEW_SPEAKER_PREFIX):].strip()
+            if not name:
+                raise ApiError(400, "new: needs a name, e.g. new:Carla")
+            body["speaker_id"] = _add_speaker(api, meeting["id"], name)["id"]
+        else:
+            body["speaker_id"] = resolve_speaker(meeting, args.speaker)["id"]
+    result = api.post(f"/api/segments/{segment['id']}/split", json=body)
+    emit(args, result, [
+        *(segment_line(half) for half in result["segments"]),
+        f"Segments after #{segment['order']} are renumbered (+1).",
+    ])
+    return 0
+
+
+def cmd_unsplit(api, args):
+    meeting = load_meeting(api, args.meeting)
+    segment = resolve_segment(meeting, args.segment)
+    joined = api.post(f"/api/segments/{segment['id']}/unsplit")
+    emit(args, joined, [
+        segment_line(joined),
+        f"Segments after #{segment['order']} are renumbered (-1).",
+    ])
+    return 0
+
+
 def cmd_notes(api, args):
     meeting = load_meeting(api, args.meeting)
     notes = api.get(f"/api/meetings/{meeting['id']}/notes", status=args.status)
@@ -523,6 +592,24 @@ def build_parser() -> argparse.ArgumentParser:
     p = command("assign", cmd_assign, "move a Segment to another Speaker (new:NAME adds one first)")
     p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
     p.add_argument("speaker", metavar="SPEAKER")
+
+    p = command("split", cmd_split,
+                "cut a Segment in two where the Diarizer joined two people; "
+                "the cut survives every Reprocessing, and later Segment handles shift by one")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+    where = p.add_mutually_exclusive_group(required=True)
+    where.add_argument("--at", type=parse_clock, metavar="T",
+                       help="cut at the Word starting nearest this time (seconds or mm:ss)")
+    where.add_argument("--before", metavar="WORDS",
+                       help="cut before these first Word(s) of the second half, as the Transcriber heard them")
+    p.add_argument("--speaker", metavar="SPEAKER",
+                   help="give the second half to this Speaker (new:NAME adds one); "
+                        "a reassignment like assign: re-applied on Re-identify and Reapply Vocabulary, "
+                        "dropped on Re-diarize")
+
+    p = command("unsplit", cmd_unsplit,
+                "join a Segment with the next one when a Split lies between them; later handles shift by one")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
 
     p = command("notes", cmd_notes, "the Meeting's Review Notes, one line each (answered ones are the user's replies)")
     p.add_argument("--status", choices=("open", "answered", "resolved", "all"), default="all")
