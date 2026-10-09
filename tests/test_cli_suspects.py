@@ -74,6 +74,16 @@ def test_a_word_at_the_threshold_is_not_weak():
     assert len(low_confidence_passages([word(1.0, " x", WEAK_WORD)], segments, below=0.5)) == 1
 
 
+def test_an_edited_segment_is_not_a_low_confidence_passage():
+    # Word confidence describes what the Transcriber heard; an edit already replaced that text.
+    segments = [seg(0, 0, 10, "Informakon", is_edited=True), seg(1, 10, 20, "Galo")]
+    words = [word(1.0, " Infarmacom", 0.26), word(12.0, " Galo", 0.31)]
+
+    assert low_confidence_passages(words, segments) == [
+        {"order": 1, "worst": 0.31, "words": [(" Galo", 0.31)]},
+    ]
+
+
 def test_corrected_segments_are_those_with_corrections():
     fixed = seg(1, 0, 1, "Garrah", corrections=[{"heard": "Galo", "term": "Garrah", "rule": "similar"}])
     segments = [seg(0, 0, 1, "x", corrections=[]), fixed, seg(2, 1, 2, "y")]

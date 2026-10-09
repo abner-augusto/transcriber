@@ -48,7 +48,8 @@ def low_confidence_passages(
 ) -> list[dict]:
     """Segments holding at least one Word under ``below``, worst Word first.
     Returns {order, worst, words: [(text, confidence), ...]} sorted by worst ascending;
-    the weak Words of a Segment stay in time order."""
+    the weak Words of a Segment stay in time order. An edited Segment is skipped: its
+    Words describe the text the edit replaced."""
     weak: dict[int, list[tuple[str, float]]] = {}
     for word in sorted(words, key=lambda w: w["start"]):
         confidence = word.get("confidence")
@@ -57,7 +58,7 @@ def low_confidence_passages(
         owner = next(
             (s for s in segments if s["start_time"] <= word["start"] < s["end_time"]), None
         )
-        if owner is not None:
+        if owner is not None and not owner.get("is_edited"):
             weak.setdefault(owner["order"], []).append((word["text"], confidence))
     passages = [
         {"order": order, "worst": min(c for _, c in found), "words": found}
