@@ -166,6 +166,20 @@ def test_speakers_unnamed_lists_unidentified_with_longest_samples(db_session, ap
     assert "fala 3" in samples[0] and "fala 1" in samples[1] and "fala 4" in samples[2]
 
 
+def test_speakers_unnamed_lists_a_default_host(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    add_speaker(db_session, meeting, "HOST", "You", "host_track")
+    add_speaker(db_session, meeting, "SPEAKER_00", "Carla", "voice_profile")
+    add_speaker(db_session, meeting, "SPEAKER_01", "Ana", "manual")
+    db_session.commit()
+
+    code, out, _ = run(["speakers", meeting.id, "--unnamed"], api, capsys)
+
+    assert code == 0
+    assert "HOST" in out
+    assert "SPEAKER_00" not in out and "SPEAKER_01" not in out
+
+
 def test_speakers_without_filter_lists_everyone(db_session, api, capsys):
     meeting = seed_meeting(db_session)
     add_speaker(db_session, meeting, "SPEAKER_00", "Ana", "manual")

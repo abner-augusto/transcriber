@@ -161,7 +161,8 @@ def cmd_show(api, args):
 
 
 def _is_unnamed(speaker):
-    return speaker.get("identified_by") is None and speaker["label"] != "UNKNOWN"
+    """No Voice Profile matched it and no person named it; the dual-track HOST starts as 'You'."""
+    return speaker.get("identified_by") in (None, "host_track") and speaker["label"] != "UNKNOWN"
 
 
 def cmd_speakers(api, args):
@@ -401,7 +402,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = command("speakers", cmd_speakers, "one line per Speaker")
     p.add_argument("--unnamed", action="store_true",
-                   help="only Speakers nobody has identified (not UNKNOWN)")
+                   help="only Speakers nobody has named (not UNKNOWN); includes the dual-track HOST, "
+                   "which starts as 'You'")
     p.add_argument("--samples", type=int, metavar="N",
                    help="also print each Speaker's N longest Segments (default 0; 3 with --unnamed)")
 
