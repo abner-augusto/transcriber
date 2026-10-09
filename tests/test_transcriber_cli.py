@@ -586,6 +586,132 @@ def test_assign_moves_a_segment_to_a_new_or_existing_speaker(db_session, api, ca
     assert segment.speaker_id == ana.id
 
 
+def seed_spoken_segments(db, meeting, speaker, heard):
+    """One Segment holding the Words `heard` (a Word every 0.5 s), then one more after it."""
+    meeting.raw_transcription = {"words": [
+        {"start": i * 0.5, "end": i * 0.5 + 0.4, "text": f" {text}", "confidence": 0.9}
+        for i, text in enumerate([*heard, "fim"])
+    ]}
+    last = (len(heard) - 1) * 0.5 + 0.4
+    segment = add_segment(db, meeting, speaker, 0, 0.0, last, " ".join(heard))
+    after = add_segment(db, meeting, speaker, 1, len(heard) * 0.5, len(heard) * 0.5 + 0.4, "fim")
+    db.commit()
+    return segment, after
+
+
+def test_split_before_words_cuts_where_the_second_half_starts(
+    db_session, api, capsys, isolated_preferences,
+):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    segment, after = seed_spoken_segments(
+        db_session, meeting, ana, ["tudo", "bem?", "Quem", "manda", "aqui"],
+    )
+
+    code, out, _ = run(["split", meeting.id, "#0", "--before", "quem, MANDA"], api, capsys)
+
+    assert code == 0
+    assert out.splitlines() == [
+        "#0 00:00 Ana: tudo bem?",
+        "#1 00:01 Ana: Quem manda aqui",
+        "Segments after #0 are renumbered (+1).",
+    ]
+    db_session.refresh(after)
+    assert after.order == 2
+
+
+def test_split_before_words_not_among_the_segments_words_exits_1(
+    db_session, api, capsys, isolated_preferences,
+):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    seed_spoken_segments(db_session, meeting, ana, ["tudo", "bem", "quem", "manda"])
+
+    code, out, err = run(["split", meeting.id, "#0", "--before", "quem sabe"], api, capsys)
+
+    assert code == 1
+    assert "'quem sabe' is not among #0's Words as heard" in err
+    assert out == ""
+    db_session.refresh(meeting)
+    assert meeting.split_times is None
+
+
+def test_split_before_the_first_word_is_no_cut(db_session, api, capsys, isolated_preferences):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    seed_spoken_segments(db_session, meeting, ana, ["tudo", "bem", "quem"])
+
+    code, _, err = run(["split", meeting.id, "#0", "--before", "tudo"], api, capsys)
+
+    assert code == 1
+    assert "is not among #0's Words as heard" in err
+
+
+def test_split_before_words_that_occur_twice_asks_for_at(
+    db_session, api, capsys, isolated_preferences,
+):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    seed_spoken_segments(db_session, meeting, ana, ["sim", "ok", "sim", "ok"])
+
+    code, out, err = run(["split", meeting.id, "#0", "--before", "ok"], api, capsys)
+
+    assert code == 1
+    assert "'ok' occurs 2 times in #0" in err
+    assert "00:00 (--at 0.5)" in err and "00:01 (--at 1.5)" in err
+    assert "--at" in err
+    assert out == ""
+    db_session.refresh(meeting)
+    assert meeting.split_times is None
+
+
+def test_split_at_a_time_and_to_a_new_speaker(db_session, api, capsys, isolated_preferences):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    segment, _ = seed_spoken_segments(db_session, meeting, ana, ["tudo", "bem", "quem", "manda"])
+
+    code, out, _ = run(
+        ["split", meeting.id, "#0", "--at", "1.0", "--speaker", "new:Carla"], api, capsys,
+    )
+
+    assert code == 0
+    assert out.splitlines()[:2] == [
+        "#0 00:00 Ana: tudo bem",
+        "#1 00:01 Carla: quem manda [moved]",
+    ]
+    carla = db_session.query(Speaker).filter_by(label="MANUAL_1").one()
+    assert carla.segment_count == 1
+    db_session.refresh(meeting)
+    assert meeting.split_times == [1.0]
+
+
+def test_split_needs_exactly_one_of_at_and_before(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    db_session.commit()
+
+    for argv in (["split", meeting.id, "#0"], ["split", meeting.id, "#0", "--at", "1", "--before", "x"]):
+        with pytest.raises(SystemExit):
+            main(argv, api=api)
+        assert "--at" in capsys.readouterr().err
+
+
+def test_unsplit_joins_the_segment_with_the_next(db_session, api, capsys, isolated_preferences):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    seed_spoken_segments(db_session, meeting, ana, ["tudo", "bem", "quem", "manda"])
+    assert run(["split", meeting.id, "#0", "--at", "1.0"], api, capsys)[0] == 0
+
+    code, out, _ = run(["unsplit", meeting.id, "#0"], api, capsys)
+
+    assert code == 0
+    assert out.splitlines() == [
+        "#0 00:00 Ana: tudo bem quem manda",
+        "Segments after #0 are renumbered (-1).",
+    ]
+    db_session.refresh(meeting)
+    assert meeting.split_times == []
+
+
 def test_add_speaker_and_merge(db_session, api, capsys):
     meeting = seed_meeting(db_session)
     ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")

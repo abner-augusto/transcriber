@@ -684,16 +684,6 @@ def test_read_routes_publish_nothing(db_session):
     assert events == []
 
 
-@pytest.fixture
-def isolated_preferences(monkeypatch, tmp_path):
-    """Keep split and unsplit off the real Preferences file."""
-    import config
-    import preferences
-
-    monkeypatch.setattr(config.settings, "storage_path", str(tmp_path / "storage"))
-    monkeypatch.setattr(preferences, "LEGACY_PREFERENCES_PATH", tmp_path / "no-legacy-file")
-
-
 def _meeting_to_split(db_session, status=MeetingStatus.COMPLETED):
     """Six Words w0..w5 (a Word every 0.5 s); Segment 0 holds w0..w3, Segment 1 holds w4 w5."""
     meeting = Meeting(
