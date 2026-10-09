@@ -70,7 +70,11 @@ def _reprocess_meeting(current: RunningJob, rerun_diarization: bool):
         85 if rerun_diarization else 80,
         "Saving results...",
     )
-    rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service)
+    # Re-diarizing makes new Turns, so labels mean new people; otherwise they are stable.
+    rebuild_speakers_and_segments(
+        db, meeting, aligned, speaker_info, speaker_id_service,
+        keep="overlap" if rerun_diarization else "labels",
+    )
 
 
 def rediarize_task(meeting_id: str, job_id: str):

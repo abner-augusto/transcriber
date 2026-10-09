@@ -111,4 +111,5 @@ _Avoid_: task (that names the code a Job runs, not the Job itself)
 Re-running diarization or speaker naming over a Meeting that has already been transcribed,
 without transcribing it again — typically after saving a new Voice Profile. Re-applying
 Vocabulary Correction is also available after changing the Meeting's Vocabulary.
+Names the user gave Speakers survive it: by label when the Turns are kept, by Turn overlap when they are new.
 _Avoid_: rerun, refresh
