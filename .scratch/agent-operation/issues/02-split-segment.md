@@ -8,8 +8,17 @@ juntadas".
 **Problem:** when one Segment holds two people, the only tools are `assign`,
 which moves the whole Segment, and editing its text. Nothing cuts a Segment.
 
-**Status:** needs-exploration. It comes after 01 (Review Notes), where a split
-becomes one more kind of suggestion.
+**Status:** ready-for-agent (plans 035, 036). The design session ran on
+2026-10-09. The user did not answer the questions, so the recommended options
+were taken:
+- shape 1, the manual split, now; shape 2 waits for a bench session;
+- cut by Word (`--before "words"`) or by time (`--at`);
+- the page gets the split only as a Review Note suggestion (036), not as
+  a free-hand control.
+
+A Split is stored as a time on the Meeting, so it survives every kind of
+Reprocessing, Re-diarize included. A reassignment of the second half follows
+plan 028's rules. Revisit the page control if the user asks for it.
 
 ## Two shapes to choose between, or do both in order
 

@@ -100,13 +100,26 @@ decided with the user on 2026-10-09; the decisions are in plan 032.
 | 033 | Review Notes on the Meeting page | P1 | M | 032 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 | 034 | Review Notes visible on the transcript and the audio bar | P2 | S | 033 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 
-Direction, not yet planned: **split a Segment the Diarizer joined**. The user
-asked for it on 2026-10-09 ("tentar quebrar mais as falas que foram
-juntadas"). There are two shapes. A manual `split` (API route plus CLI
-command, cutting a Segment at a time using its Words) can be specified now.
-Making the Diarizer itself switch more (`speaker_switch_penalty`,
-`clustering_threshold` in the RunConfig) needs a bench run on the user's
-Meetings first. Design it with the user before planning.
+### Split (2026-10-09)
+
+Source: `.scratch/agent-operation/issues/02-split-segment.md`. The user asked
+for it on 2026-10-09 ("tentar quebrar mais as falas que foram juntadas").
+
+The design questions went unanswered, so the recommended options were taken
+the same day:
+- a manual split now;
+- cut by Word or by time;
+- on the page, only as a Review Note suggestion.
+
+A Split is a time stored on the Meeting, so it survives every kind of
+Reprocessing. Making the Diarizer itself switch more (`speaker_switch_penalty`,
+`clustering_threshold`) stays a later bench session on the user's corrected
+Meetings.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 035 | Split a Segment, kept through Reprocessing (API, CLI, skill) | P1 | M | 025–031 | TODO |
+| 036 | The split as a Review Note suggestion | P2 | S | 035 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
