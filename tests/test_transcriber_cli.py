@@ -623,10 +623,15 @@ def test_suspects_prints_repeated_and_low_confidence_sections(db_session, api, c
     maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
     for order in range(3):
         add_segment(db_session, meeting, maria, order, 100.0 + order * 5, 104.0 + order * 5, "Obrigado.")
-    add_segment(db_session, meeting, maria, 3, 221.0, 225.0, "Galo confirmou", confidence=0.9)
+    add_segment(db_session, meeting, maria, 3, 221.0, 230.0, "Galo confirmou algo de Do", confidence=0.9)
+    add_segment(db_session, meeting, maria, 4, 231.0, 236.0, "Palavra duvidosa", confidence=0.9)
     meeting.raw_transcription = {"words": [
         {"start": 221.0, "end": 221.4, "text": " Galo", "confidence": 0.3},
         {"start": 221.5, "end": 222.0, "text": " confirmou", "confidence": 0.95},
+        {"start": 223.0, "end": 223.4, "text": " algo", "confidence": 0.14},
+        {"start": 224.0, "end": 224.4, "text": " de", "confidence": 0.8},
+        {"start": 225.0, "end": 225.4, "text": " Do", "confidence": 0.37},
+        {"start": 232.0, "end": 232.4, "text": " duvidosa", "confidence": 0.39},
     ]}
     db_session.commit()
 
@@ -635,23 +640,30 @@ def test_suspects_prints_repeated_and_low_confidence_sections(db_session, api, c
     assert code == 0
     assert "REPEATED (possible hallucination over silence)" in out
     assert '  01:40-01:54 #0-#2 x3 "obrigado"' in out
-    assert "LOW-CONFIDENCE WORDS" in out
-    assert "  #3 03:41 Galo (0.30) | #3 03:41 Maria: Galo confirmou" in out
+    assert "LOW-CONFIDENCE PASSAGES (worst first)" in out
+    passages = [line for line in out.splitlines() if "| weak:" in line]
+    assert len(passages) == 2
+    assert passages[0].startswith("  #3 ") and passages[0].endswith("| weak: Galo 0.30, algo 0.14, Do 0.37")
+    assert passages[1].startswith("  #4 ") and passages[1].endswith("| weak: duvidosa 0.39")
     assert "CORRECTED BY VOCABULARY" not in out
-    assert "LOW-CONFIDENCE SEGMENTS" not in out
+    assert "LOW-CONFIDENCE WORDS" not in out and "LOW-CONFIDENCE SEGMENTS" not in out
 
 
 def test_suspects_limit_caps_each_section_and_says_so(db_session, api, capsys):
     meeting = seed_meeting(db_session)
     maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
+    words = []
     for order in range(3):
-        add_segment(db_session, meeting, maria, order, order * 10.0, order * 10.0 + 5, f"fala {order}", confidence=0.2)
+        start = order * 10.0
+        add_segment(db_session, meeting, maria, order, start, start + 5, f"fala {order}", confidence=0.9)
+        words.append({"start": start + 1, "end": start + 1.4, "text": " fala", "confidence": 0.1 + order * 0.1})
+    meeting.raw_transcription = {"words": words}
     db_session.commit()
 
     code, out, _ = run(["suspects", meeting.id, "--limit", "2"], api, capsys)
 
     assert code == 0
-    assert "LOW-CONFIDENCE SEGMENTS (showing 2 of 3)" in out
+    assert "LOW-CONFIDENCE PASSAGES (worst first) (showing 2 of 3)" in out
     assert "fala 0" in out and "fala 1" in out
     assert "fala 2" not in out
 

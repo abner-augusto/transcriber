@@ -1,7 +1,7 @@
 """Heuristics that point at passages worth a second look, without the audio."""
 
 from transcriber_cli.suspects import (
-    corrected_segments, low_confidence_words, repetition_windows,
+    WEAK_WORD, corrected_segments, low_confidence_passages, repetition_windows,
 )
 
 
@@ -43,18 +43,35 @@ def test_case_and_punctuation_do_not_break_a_run():
     assert len(repetition_windows(segments)) == 1
 
 
-def test_low_confidence_words_carry_the_containing_segment_order():
-    segments = [seg(0, 0, 10, "a"), seg(1, 10, 20, "b")]
+def word(start, text, confidence):
+    return {"start": start, "end": start + 0.4, "text": text, "confidence": confidence}
+
+
+def test_low_confidence_passages_group_weak_words_by_segment_worst_first():
+    segments = [seg(0, 0, 10, "a"), seg(1, 10, 20, "b"), seg(2, 20, 30, "c")]
     words = [
-        {"start": 12.0, "end": 12.4, "text": " Galo", "confidence": 0.31},
-        {"start": 13.0, "end": 13.4, "text": " ok", "confidence": 0.95},
-        {"start": 14.0, "end": 14.4, "text": " sem", "confidence": None},
-        {"start": 30.0, "end": 30.4, "text": " fora", "confidence": 0.1},
+        word(1.0, " Do", 0.37),
+        word(2.0, " ok", 0.95),
+        word(3.0, " algo", 0.14),
+        word(12.0, " Galo", 0.31),
+        word(13.0, " sem", None),
+        word(25.0, " forte", 0.9),
+        word(40.0, " fora", 0.05),
     ]
 
-    found = low_confidence_words(words, segments)
+    found = low_confidence_passages(words, segments)
 
-    assert [(w["text"], w["segment_order"]) for w in found] == [(" Galo", 1), (" fora", None)]
+    assert found == [
+        {"order": 0, "worst": 0.14, "words": [(" Do", 0.37), (" algo", 0.14)]},
+        {"order": 1, "worst": 0.31, "words": [(" Galo", 0.31)]},
+    ]
+
+
+def test_a_word_at_the_threshold_is_not_weak():
+    segments = [seg(0, 0, 10, "a")]
+
+    assert low_confidence_passages([word(1.0, " x", WEAK_WORD)], segments) == []
+    assert len(low_confidence_passages([word(1.0, " x", WEAK_WORD)], segments, below=0.5)) == 1
 
 
 def test_corrected_segments_are_those_with_corrections():

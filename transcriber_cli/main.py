@@ -11,7 +11,7 @@ from . import suspects
 from .client import Api, ApiError
 from .handles import resolve_meeting, resolve_segment, resolve_speaker
 from .render import (
-    LOW_CONFIDENCE, clock, meeting_header, parse_clock, segment_line, speaker_line, word_line,
+    clock, meeting_header, parse_clock, segment_line, speaker_line, word_line,
 )
 
 REPROCESS_KINDS = ("rediarize", "reidentify", "reapply-vocabulary")
@@ -224,16 +224,12 @@ def cmd_suspects(api, args):
     words = api.get(f"/api/meetings/{meeting['id']}/words")
 
     windows = suspects.repetition_windows(segments)
-    low_words = suspects.low_confidence_words(words, segments, args.below)
+    passages = suspects.low_confidence_passages(words, segments, args.below)
     corrected = suspects.corrected_segments(segments)
-    low_segments = [
-        s for s in segments if s.get("confidence") is not None and s["confidence"] < args.below
-    ]
 
-    def word_entry(word):
-        text = f"{clock(word['start'])} {word['text'].strip()} ({word['confidence']:.2f})"
-        owner = by_order.get(word["segment_order"])
-        return f"#{owner['order']} {text} | {segment_line(owner)}" if owner else text
+    def passage_entry(passage):
+        weak = ", ".join(f"{text.strip()} {confidence:.2f}" for text, confidence in passage["words"])
+        return f"{segment_line(by_order[passage['order']])} | weak: {weak}"
 
     fixes = [
         f"#{s['order']} {clock(s['start_time'])} {fix['heard'].strip()}->{fix['term'].strip()} "
@@ -246,16 +242,14 @@ def cmd_suspects(api, args):
             f"{clock(w['start'])}-{clock(w['end'])} {_order_range(w['first_order'], w['last_order'])} "
             f'x{w["count"]} "{w["text"]}"' for w in windows
         ]),
-        ("LOW-CONFIDENCE WORDS", [word_entry(w) for w in low_words]),
+        ("LOW-CONFIDENCE PASSAGES (worst first)", [passage_entry(p) for p in passages]),
         ("CORRECTED BY VOCABULARY", fixes),
-        ("LOW-CONFIDENCE SEGMENTS", [segment_line(s) for s in low_segments]),
     ):
         lines += _section(title, entries, args.limit)
     emit(args, {
         "repeated": windows,
-        "low_confidence_words": low_words,
+        "low_confidence_passages": passages,
         "corrected_segments": corrected,
-        "low_confidence_segments": low_segments,
     }, lines)
     return 0
 
@@ -428,9 +422,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--below", type=float, metavar="C", help="only Words with confidence under C")
 
     p = command("suspects", cmd_suspects,
-                "passages worth a second look: repeated sentences, low-confidence Words, Vocabulary fixes")
-    p.add_argument("--below", type=float, default=LOW_CONFIDENCE, metavar="C",
-                   help=f"confidence threshold (default {LOW_CONFIDENCE})")
+                "passages worth a second look: repeated sentences, Segments holding weak Words (worst first), Vocabulary fixes")
+    p.add_argument("--below", type=float, default=suspects.WEAK_WORD, metavar="C",
+                   help=f"Word confidence threshold (default {suspects.WEAK_WORD})")
     p.add_argument("--limit", type=int, default=40, metavar="N", help="at most N entries per section (default 40)")
 
     p = command("rename", cmd_rename, "name a Speaker (the name sticks across Re-identify)")
