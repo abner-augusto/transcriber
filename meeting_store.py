@@ -1,11 +1,23 @@
 """Persistence operations for Meetings and their derived Segments."""
 
+from sqlalchemy import func
+
 from models import Speaker, Segment
 from services.speaker_id_service import SPEAKER_COLORS
 
 # An edited Segment survives a rebuild when a derived Segment starts and ends
 # within this many seconds of it.
 EDIT_TIME_TOLERANCE = 1.5
+
+
+def refresh_speaker_stats(db, speaker) -> None:
+    """Recount a Speaker's Segments and speaking time from the rows that exist now."""
+    count, speaking_time = db.query(
+        func.count(Segment.id),
+        func.coalesce(func.sum(Segment.end_time - Segment.start_time), 0),
+    ).filter(Segment.speaker_id == speaker.id).one()
+    speaker.segment_count = count
+    speaker.total_speaking_time = speaking_time
 
 
 def labels_with_segments(aligned) -> list[str]:
