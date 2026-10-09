@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from config import settings as _settings
 from database import init_db, cleanup_orphaned_storage, get_db, engine
 from models import Meeting
-from api import meetings, speakers, segments, export, websocket, model_settings, search, speaker_profiles, vocabulary, analytics, preferences
+from api import meetings, speakers, segments, export, websocket, model_settings, search, speaker_profiles, vocabulary, analytics, preferences, review_notes
 
 app = FastAPI(title="Transcriber")
 
@@ -37,6 +37,8 @@ app.include_router(speaker_profiles.router)
 app.include_router(vocabulary.router)
 app.include_router(analytics.router)
 app.include_router(preferences.router)
+app.include_router(review_notes.meeting_notes_router)
+app.include_router(review_notes.router)
 
 _frontend_dist = Path(__file__).parent / "frontend" / "dist"
 # Paths under these prefixes name a route or a file; they never fall back to the UI.
