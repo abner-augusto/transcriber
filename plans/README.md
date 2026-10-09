@@ -87,7 +87,7 @@ dual-track Meeting transcribed, one old Meeting reviewed).
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 031 | Fixes from the first real operator session (CLI output, `--unnamed`, `suspects` noise, new-term learning bug, skill rules) | P1 | M | 029, 030 | TODO |
+| 031 | Fixes from the first real operator session (CLI output, `--unnamed`, `suspects` noise, new-term learning bug, skill rules) | P1 | M | 029, 030 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 
 Direction, not yet planned: **split a Segment the Diarizer joined**. The user
 asked for it on 2026-10-09 ("tentar quebrar mais as falas que foram
