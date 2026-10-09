@@ -12,7 +12,7 @@ AI-powered local meeting transcription with automatic speaker identification. Up
 1. **Upload** a recording through the web UI, optionally pinning the Preset to transcribe it with
 2. **Audio extraction** — FFmpeg converts to 16 kHz mono WAV
 3. **Transcription** — a **Transcriber** (whisper.cpp or parakeet.cpp) turns the audio into **Words**
-4. **Diarization** — a **Diarizer** (pyannote 3.1, on the local GPU) turns the same audio into **Turns**
+4. **Diarization** — a **Diarizer** (pyannote or Nemotron 3 Diarization, chosen in Settings → Diarization, on the local GPU) turns the same audio into **Turns**
 5. **Segments** — Words and Turns are combined into the paragraphs you read. Because the currency is
    the Word, a speaker who cuts in mid-sentence lands on their own line
 6. **Speaker naming** — every Speaker starts as "Participant N"; a saved **Voice Profile** whose
@@ -119,8 +119,7 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 5. Watch real-time progress as the pipeline runs
 6. Browse the transcript with synced audio playback
 7. Click speaker names to rename, click segments to edit text
-8. Run **Actions** (summarize, action items, etc.) from the sidebar
-9. **Export** to SRT, WebVTT, TXT, Markdown, JSON, DOCX, or PDF
+8. **Export** to SRT, WebVTT, TXT, Markdown, JSON, DOCX, or PDF
 
 ## Project structure
 

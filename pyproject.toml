@@ -28,9 +28,3 @@ postgres-migration = ["psycopg2-binary==2.9.12"]
 
 [tool.uv]
 package = false
-
-[tool.pytest.ini_options]
-markers = [
-    "model_load: loads locally installed speech models",
-    "model_inference: runs local speech models against audio",
-]
