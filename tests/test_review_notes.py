@@ -382,6 +382,276 @@ def test_mutating_a_note_tells_the_meeting_page(db_session, monkeypatch):
     assert seen == [meeting.id, meeting.id]
 
 
+def text_note(db, meeting, **kw):
+    fields = dict(kind="text", body="parece Garrah", payload={
+        "expected_text": "Galo disse isso", "proposed_text": "Garrah disse isso"})
+    fields.update(kw)
+    return add_note(db, meeting, **fields)
+
+
+def accept(client, note, **body):
+    return client.post(f"/api/notes/{note.id}/accept", json=body)
+
+
+def test_accepting_a_text_note_edits_the_segment_and_teaches_vocabulary(db_session):
+    from models import VocabularyEntry
+
+    meeting, _, _, first, _ = seed(db_session)
+    entry = VocabularyEntry(term="Garrah")
+    db_session.add(entry)
+    note = text_note(db_session, meeting)
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 200
+    assert response.json()["warning"] is None
+    assert response.json()["note"]["status"] == "accepted"
+    db_session.refresh(first)
+    db_session.refresh(note)
+    db_session.refresh(entry)
+    assert first.text == "Garrah disse isso"
+    assert first.is_edited
+    assert note.status == "accepted"
+    assert note.resolved_at is not None
+    assert entry.misheard_as == [{"form": "Galo", "count": 1}]
+
+
+def test_accepting_a_text_note_without_teaching_leaves_vocabulary_alone(db_session):
+    from models import VocabularyEntry
+
+    meeting, _, _, first, _ = seed(db_session)
+    entry = VocabularyEntry(term="Garrah")
+    db_session.add(entry)
+    note = text_note(db_session, meeting)
+
+    response = accept(TestClient(app), note, learn=False)
+
+    assert response.status_code == 200
+    db_session.refresh(first)
+    db_session.refresh(entry)
+    assert first.text == "Garrah disse isso"
+    assert not entry.misheard_as
+
+
+def test_accepting_a_text_note_uses_the_segment_at_the_range_now(db_session):
+    meeting, _, _, first, _ = seed(db_session)
+    first.start_time, first.end_time = 0.8, 5.6
+    db_session.commit()
+    note = text_note(db_session, meeting)
+
+    assert accept(TestClient(app), note).status_code == 200
+
+    db_session.refresh(first)
+    assert first.text == "Garrah disse isso"
+
+
+def test_accepting_a_text_note_refuses_a_segment_that_changed_since(db_session):
+    meeting, _, _, first, _ = seed(db_session)
+    note = text_note(db_session, meeting)
+    first.text = "editado por outra pessoa"
+    db_session.commit()
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "the Segment changed since the suggestion"
+    db_session.refresh(note)
+    db_session.refresh(first)
+    assert note.status == "open"
+    assert first.text == "editado por outra pessoa"
+
+
+def test_accepting_a_text_note_refuses_a_passage_with_no_segment(db_session):
+    meeting, _, _, first, _ = seed(db_session)
+    note = text_note(db_session, meeting)
+    first.start_time, first.end_time = 30.0, 35.0
+    db_session.commit()
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "the passage no longer matches a Segment"
+
+
+def test_a_resolved_note_cannot_be_accepted_again(db_session):
+    meeting, *_ = seed(db_session)
+    note = text_note(db_session, meeting)
+    client = TestClient(app)
+
+    assert accept(client, note).status_code == 200
+    assert accept(client, note).status_code == 409
+
+
+def test_only_a_suggestion_can_be_accepted(db_session):
+    meeting, *_ = seed(db_session)
+    comment = add_note(db_session, meeting, kind="comment")
+    question = add_note(db_session, meeting, kind="question")
+    client = TestClient(app)
+
+    assert accept(client, comment).status_code == 409
+    assert accept(client, question).status_code == 409
+    assert accept(client, type("N", (), {"id": "nope"})()).status_code == 404
+
+
+def test_accepting_during_processing_is_a_conflict(db_session):
+    meeting, _, _, first, _ = seed(db_session, status=MeetingStatus.PROCESSING)
+    note = text_note(db_session, meeting)
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 409
+    db_session.refresh(note)
+    db_session.refresh(first)
+    assert note.status == "open"
+    assert first.text == "Galo disse isso"
+
+
+def name_note(db, meeting, **kw):
+    fields = dict(kind="speaker_name", body="a voz abre a reunião",
+                  payload={"label": "SPEAKER_00", "name": "Ana"})
+    fields.update(kw)
+    return add_note(db, meeting, **fields)
+
+
+def record_profile_saves(monkeypatch, raises=None):
+    calls = []
+
+    def fake(req, db):
+        calls.append((req.speaker_id, req.meeting_id, req.name))
+        if raises is not None:
+            raise raises
+        return {}
+
+    monkeypatch.setattr("api.review_notes.save_profile_from_speaker", fake)
+    return calls
+
+
+def test_accepting_a_speaker_name_renames_and_saves_the_voice_profile(db_session, monkeypatch):
+    meeting, ana, *_ = seed(db_session)
+    calls = record_profile_saves(monkeypatch)
+    note = name_note(db_session, meeting)
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 200
+    assert response.json()["warning"] is None
+    db_session.refresh(ana)
+    db_session.refresh(note)
+    assert ana.display_name == "Ana"
+    assert ana.identified_by == "manual"
+    assert note.status == "accepted"
+    assert calls == [(ana.id, meeting.id, "Ana")]
+
+
+def test_accepting_a_speaker_name_without_saving_the_profile_only_renames(db_session, monkeypatch):
+    meeting, ana, *_ = seed(db_session)
+    calls = record_profile_saves(monkeypatch)
+    note = name_note(db_session, meeting)
+
+    response = accept(TestClient(app), note, save_profile=False)
+
+    assert response.status_code == 200
+    db_session.refresh(ana)
+    assert ana.display_name == "Ana"
+    assert calls == []
+
+
+def test_a_voice_profile_failure_keeps_the_rename_and_warns(db_session, monkeypatch):
+    from fastapi import HTTPException
+
+    meeting, ana, *_ = seed(db_session)
+    record_profile_saves(monkeypatch, raises=HTTPException(404, "Meeting or audio not found"))
+    note = name_note(db_session, meeting)
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 200
+    assert response.json()["warning"] == "Voice Profile not saved: Meeting or audio not found"
+    db_session.refresh(ana)
+    db_session.refresh(note)
+    assert ana.display_name == "Ana"
+    assert note.status == "accepted"
+
+
+def test_an_ffmpeg_failure_also_keeps_the_rename_and_warns(db_session, monkeypatch):
+    meeting, ana, *_ = seed(db_session)
+    record_profile_saves(monkeypatch, raises=RuntimeError("FFmpeg failed: boom"))
+    note = name_note(db_session, meeting)
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 200
+    assert "FFmpeg failed: boom" in response.json()["warning"]
+    db_session.refresh(ana)
+    assert ana.display_name == "Ana"
+
+
+def test_accepting_a_speaker_name_for_a_vanished_speaker_is_a_conflict(db_session):
+    meeting, *_ = seed(db_session)
+    note = name_note(db_session, meeting, payload={"label": "SPEAKER_07", "name": "Ana"})
+
+    assert accept(TestClient(app), note).status_code == 409
+
+
+def test_accepting_a_speaker_move_moves_the_segment_to_the_target(db_session):
+    meeting, ana, bia, first, _ = seed(db_session)
+    note = add_note(db_session, meeting, kind="speaker_move", body="e a Bia",
+                    payload={"target_label": "SPEAKER_01"})
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 200
+    db_session.refresh(first)
+    db_session.refresh(note)
+    assert first.speaker_id == bia.id
+    assert first.speaker_edited
+    assert note.status == "accepted"
+
+
+def test_accepting_a_speaker_move_to_a_new_speaker_adds_it(db_session):
+    meeting, _, _, first, _ = seed(db_session)
+    note = add_note(db_session, meeting, kind="speaker_move", body="uma terceira voz",
+                    payload={"new_name": "Carla"})
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 200
+    db_session.refresh(first)
+    carla = db_session.get(Speaker, first.speaker_id)
+    assert carla.display_name == "Carla"
+    assert carla.label == "MANUAL_1"
+
+
+def test_accepting_a_speaker_move_with_no_segment_at_the_range_is_a_conflict(db_session):
+    meeting, *_ = seed(db_session)
+    note = add_note(db_session, meeting, kind="speaker_move", body="x",
+                    start_time=30.0, end_time=35.0, payload={"target_label": "SPEAKER_01"})
+
+    assert accept(TestClient(app), note).status_code == 409
+
+
+def test_accepting_a_speaker_merge_merges_the_speakers(db_session):
+    meeting, ana, bia, first, second = seed(db_session)
+    note = add_note(db_session, meeting, kind="speaker_merge", body="mesma voz",
+                    payload={"source_label": "SPEAKER_00", "target_label": "SPEAKER_01"})
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.query(Speaker).filter(Speaker.meeting_id == meeting.id).count() == 1
+    assert db_session.get(Segment, first.id).speaker_id == bia.id
+    assert db_session.get(ReviewNote, note.id).status == "accepted"
+
+
+def test_accepting_a_speaker_merge_with_a_vanished_speaker_is_a_conflict(db_session):
+    meeting, *_ = seed(db_session)
+    note = add_note(db_session, meeting, kind="speaker_merge", body="x",
+                    payload={"source_label": "SPEAKER_00", "target_label": "SPEAKER_07"})
+
+    assert accept(TestClient(app), note).status_code == 409
+
+
 def test_duplicating_a_meeting_does_not_copy_notes(db_session, monkeypatch, tmp_path):
     audio = tmp_path / "meeting.wav"
     audio.write_bytes(b"RIFF")

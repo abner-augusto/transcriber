@@ -160,6 +160,76 @@ def _resolve(db: Session, note: ReviewNote, status: str) -> None:
     jobs.notify_meeting_changed(note.meeting_id)
 
 
+def _conflict_unless(found, message: str):
+    if found is None:
+        raise HTTPException(409, message)
+    return found
+
+
+def _apply_speaker_name(db: Session, note: ReviewNote, req: AcceptNoteRequest) -> str | None:
+    payload = note.payload
+    speaker = _conflict_unless(
+        _speaker(db, note.meeting_id, payload["label"]), "the Speaker no longer exists"
+    )
+    update_speaker(speaker.id, UpdateSpeakerRequest(display_name=payload["name"]), db)
+    if not req.save_profile:
+        return None
+    try:
+        save_profile_from_speaker(
+            SaveFromSpeakerRequest(speaker_id=speaker.id, meeting_id=note.meeting_id, name=payload["name"]),
+            db,
+        )
+    except HTTPException as error:
+        return f"Voice Profile not saved: {error.detail}"
+    except Exception as error:  # e.g. ffmpeg failed; the rename already happened
+        db.rollback()
+        return f"Voice Profile not saved: {error}"
+    return None
+
+
+def _apply(db: Session, note: ReviewNote, req: AcceptNoteRequest) -> str | None:
+    """Run the suggestion through the same routes a manual edit uses. Returns a warning, if any."""
+    payload = note.payload
+    if note.kind == "speaker_name":
+        return _apply_speaker_name(db, note, req)
+
+    if note.kind == "speaker_merge":
+        source = _conflict_unless(_speaker(db, note.meeting_id, payload["source_label"]), "the Speaker no longer exists")
+        target = _conflict_unless(_speaker(db, note.meeting_id, payload["target_label"]), "the Speaker no longer exists")
+        merge_speakers(MergeSpeakersRequest(source_id=source.id, target_id=target.id), db)
+        return None
+
+    segment = _conflict_unless(
+        segment_for_range(db, note.meeting_id, note.start_time, note.end_time),
+        "the passage no longer matches a Segment",
+    )
+    if note.kind == "text":
+        if segment.text != payload["expected_text"]:
+            raise HTTPException(409, "the Segment changed since the suggestion")
+        update_segment_text(segment.id, UpdateSegmentTextRequest(text=payload["proposed_text"], learn=req.learn), db)
+    else:  # speaker_move
+        if "target_label" in payload:
+            target_id = _conflict_unless(
+                _speaker(db, note.meeting_id, payload["target_label"]), "the Speaker no longer exists"
+            ).id
+        else:
+            target_id = add_speaker(note.meeting_id, AddSpeakerRequest(display_name=payload["new_name"]), db)["id"]
+        update_segment_speaker(segment.id, UpdateSegmentSpeakerRequest(speaker_id=target_id), db)
+    return None
+
+
+@router.post("/{note_id}/accept")
+def accept_note(note_id: str, req: AcceptNoteRequest = AcceptNoteRequest(), db: Session = Depends(get_db)):
+    """Apply a suggestion. This is the user's confirmation, so it teaches Vocabulary and Voice Profiles."""
+    note = _get_note(db, note_id)
+    if note.kind not in SUGGESTION_KINDS or note.status != "open":
+        raise HTTPException(409, "only an open suggestion can be accepted")
+    require_editable(db, note.meeting_id)
+    warning = _apply(db, note, req)
+    _resolve(db, note, "accepted")
+    return {"note": note.to_dict(), "warning": warning}
+
+
 @router.post("/{note_id}/answer")
 def answer_note(note_id: str, req: AnswerNoteRequest, db: Session = Depends(get_db)):
     note = _get_note(db, note_id)
