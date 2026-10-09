@@ -66,6 +66,35 @@ export function noteActions(note: ReviewNote): NoteAction[] {
   }
 }
 
+export type NoteTone = "user" | "agent";
+
+/** Who acts next on a note in play: the user when they have an action, else the agent. null if resolved. */
+export function noteTone(note: ReviewNote): NoteTone | null {
+  if (!IN_PLAY.includes(note.status)) return null;
+  return noteActions(note).length > 0 ? "user" : "agent";
+}
+
+/** The tone for a Segment's notes: "user" wins over "agent"; null for none. */
+export function segmentTone(notes: ReviewNote[] | undefined): NoteTone | null {
+  let tone: NoteTone | null = null;
+  for (const note of notes ?? []) {
+    const t = noteTone(note);
+    if (t === "user") return "user";
+    if (t === "agent") tone = "agent";
+  }
+  return tone;
+}
+
+/** One mark per note in play, for the audio bar. */
+export function noteMarks(notes: ReviewNote[]): { id: string; time: number; tone: NoteTone }[] {
+  const marks: { id: string; time: number; tone: NoteTone }[] = [];
+  for (const note of notes) {
+    const tone = noteTone(note);
+    if (tone) marks.push({ id: note.id, time: note.start_time, tone });
+  }
+  return marks;
+}
+
 /** One line for the list. */
 export function noteSummary(note: ReviewNote): string {
   const p = note.payload ?? {};

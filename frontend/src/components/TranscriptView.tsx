@@ -2,6 +2,7 @@ import { Fragment, useState, useRef, useEffect, useMemo } from "react";
 import type { ReviewNote, Segment, Speaker } from "../types";
 import { createUserComment, updateSegmentText } from "../api";
 import { useStore } from "../store";
+import { segmentTone } from "../utils/reviewNotes";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -138,14 +139,23 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
               {group.segments.map((seg) => {
                 const isActive = currentTime >= seg.start_time && currentTime < seg.end_time;
                 const segNotes = notesBySegment?.get(seg.id);
+                const tone = segmentTone(segNotes);
+                const toneBar =
+                  tone === "user"
+                    ? "border-l-2 border-l-amber-400/80"
+                    : tone === "agent"
+                      ? "border-l-2 border-l-sky-400/70"
+                      : "";
+                const toneTint =
+                  tone === "user" ? "bg-amber-500/5" : tone === "agent" ? "bg-sky-500/5" : "";
                 return (
                   <Fragment key={seg.id}>
                   <div
                     id={`seg-${seg.id}`}
-                    className={`group flex items-start gap-2 rounded-lg px-3 py-1.5 -mx-3 transition-all duration-200 ${
+                    className={`group flex items-start gap-2 rounded-lg px-3 py-1.5 -mx-3 transition-all duration-200 ${toneBar} ${
                       isActive
                         ? "bg-violet-500/10 border border-violet-500/20"
-                        : "border border-transparent hover:bg-slate-800/30"
+                        : `${toneTint} border border-transparent hover:bg-slate-800/30`
                     }`}
                   >
                     <button
@@ -214,7 +224,11 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
                     {segNotes && segNotes.length > 0 && (
                       <button
                         onClick={onShowNotes}
-                        className="text-[10px] mt-1 flex-shrink-0 font-mono text-amber-500/80 hover:text-amber-400 transition"
+                        className={`text-[10px] mt-1 flex-shrink-0 font-mono transition ${
+                          tone === "agent"
+                            ? "text-sky-400/80 hover:text-sky-300"
+                            : "text-amber-500/80 hover:text-amber-400"
+                        }`}
                         title="Show Review Notes"
                       >
                         {"◆"} {segNotes.length}

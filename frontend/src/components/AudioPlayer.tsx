@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAudioUrl } from "../api";
 import { useStore } from "../store";
+import type { NoteTone } from "../utils/reviewNotes";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -11,9 +12,10 @@ function formatTime(seconds: number): string {
 interface Props {
   meetingId: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  marks?: { id: string; time: number; tone: NoteTone }[];
 }
 
-export default function AudioPlayer({ meetingId, audioRef }: Props) {
+export default function AudioPlayer({ meetingId, audioRef, marks }: Props) {
   const { setCurrentTime } = useStore();
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -122,6 +124,26 @@ export default function AudioPlayer({ meetingId, audioRef }: Props) {
             step="0.1"
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
+          {duration > 0 &&
+            marks?.map((mark) => (
+              <button
+                key={mark.id}
+                type="button"
+                onClick={() => {
+                  const audio = audioRef.current;
+                  if (audio) audio.currentTime = mark.time;
+                }}
+                style={{ left: `${Math.min(100, (mark.time / duration) * 100)}%` }}
+                className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-1.5 h-3 rounded-sm ${
+                  mark.tone === "user" ? "bg-amber-400" : "bg-sky-400"
+                }`}
+                title={
+                  mark.tone === "user"
+                    ? "Review note: waiting for you"
+                    : "Review note: waiting for the agent"
+                }
+              />
+            ))}
         </div>
 
         {/* Speed */}

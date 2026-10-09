@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import type { ReviewNote, Segment } from "../types";
-import { noteActions, noteSegmentId, noteSummary, notesBySegment, splitNotes } from "./reviewNotes";
+import {
+  noteActions,
+  noteMarks,
+  noteSegmentId,
+  noteSummary,
+  noteTone,
+  notesBySegment,
+  segmentTone,
+  splitNotes,
+} from "./reviewNotes";
 
 function segment(id: string, start: number, end: number): Segment {
   return {
@@ -17,6 +26,63 @@ function note(overrides: Partial<ReviewNote>): ReviewNote {
     created_at: null, resolved_at: null, ...overrides,
   };
 }
+
+describe("noteTone", () => {
+  it("is user for an open agent question (the user must answer)", () => {
+    expect(noteTone(note({ kind: "question", author: "agent", status: "open" }))).toBe("user");
+  });
+
+  it("is agent for an answered question", () => {
+    expect(noteTone(note({ kind: "question", status: "answered" }))).toBe("agent");
+  });
+
+  it("is agent for an open comment written by the user", () => {
+    expect(noteTone(note({ kind: "comment", author: "user", status: "open" }))).toBe("agent");
+  });
+
+  it("is user for an open comment written by the agent", () => {
+    expect(noteTone(note({ kind: "comment", author: "agent", status: "open" }))).toBe("user");
+  });
+
+  it("is null for a resolved note", () => {
+    expect(noteTone(note({ status: "accepted" }))).toBeNull();
+    expect(noteTone(note({ status: "dismissed" }))).toBeNull();
+    expect(noteTone(note({ status: "done" }))).toBeNull();
+  });
+});
+
+describe("segmentTone", () => {
+  it("is null without notes", () => {
+    expect(segmentTone(undefined)).toBeNull();
+    expect(segmentTone([])).toBeNull();
+  });
+
+  it("lets user win over agent", () => {
+    const mixed = [
+      note({ id: "a", kind: "comment", author: "user" }),
+      note({ id: "b", kind: "question", author: "agent" }),
+    ];
+    expect(segmentTone(mixed)).toBe("user");
+  });
+
+  it("is agent when every note waits for the agent", () => {
+    expect(segmentTone([note({ kind: "comment", author: "user" })])).toBe("agent");
+  });
+});
+
+describe("noteMarks", () => {
+  it("makes one mark per note in play at its start_time, skipping resolved ones", () => {
+    const marks = noteMarks([
+      note({ id: "q", kind: "question", start_time: 12.5 }),
+      note({ id: "c", kind: "comment", author: "user", start_time: 3 }),
+      note({ id: "r", kind: "comment", status: "done", start_time: 99 }),
+    ]);
+    expect(marks).toEqual([
+      { id: "q", time: 12.5, tone: "user" },
+      { id: "c", time: 3, tone: "agent" },
+    ]);
+  });
+});
 
 describe("noteSegmentId", () => {
   const segments = [segment("a", 0, 5), segment("b", 5, 10), segment("c", 10.5, 15)];
