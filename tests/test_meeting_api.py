@@ -259,6 +259,26 @@ def test_segment_edits_learn_and_increment_misheard_form(db_session):
     assert entry.misheard_as == [{"form": "Galo", "count": 2}]
 
 
+def test_an_edit_teaching_a_new_term_records_its_misheard_form(db_session):
+    meeting = Meeting(title="New term", status=MeetingStatus.COMPLETED)
+    db_session.add(meeting)
+    db_session.flush()
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0, end_time=2.0, order=0,
+        text="Quem mandou o Infarmacom", original_text="Quem mandou o Infarmacom",
+    )
+    db_session.add(segment)
+    db_session.commit()
+
+    response = TestClient(app).put(
+        f"/api/segments/{segment.id}", json={"text": "Quem mandou o Informakon"}
+    )
+
+    assert response.status_code == 200
+    entry = db_session.query(VocabularyEntry).filter_by(term="Informakon").one()
+    assert entry.misheard_as == [{"form": "Infarmacom", "count": 1}]
+
+
 def test_undoing_a_correction_by_hand_teaches_nothing_and_clears_corrections(db_session):
     meeting = Meeting(title="Undo", status=MeetingStatus.COMPLETED)
     db_session.add_all([meeting, VocabularyEntry(term="Garrah")])

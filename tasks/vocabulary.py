@@ -44,6 +44,7 @@ def learn_from_edit(
             existing.frequency += 1
         else:
             db.add(VocabularyEntry(term=term, source_meeting_id=meeting_id))
+    db.flush()  # so a term added above is found when its Misheard Form is recorded
 
     for heard, term in forms:
         _record_misheard_form(db, heard=heard, term=term)
