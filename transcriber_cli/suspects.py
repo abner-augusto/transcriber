@@ -4,6 +4,8 @@ import re
 
 SENTENCE_END = re.compile(r"[.!?…]+")
 NOT_WORD = re.compile(r"[^\w\s]|_")
+# Word confidence. Segment confidence (0.6, render.LOW_CONFIDENCE) is a different scale.
+WEAK_WORD = 0.4
 
 
 def _sentences(text: str) -> list[str]:
@@ -41,18 +43,27 @@ def repetition_windows(segments: list[dict], min_run: int = 3) -> list[dict]:
     return windows
 
 
-def low_confidence_words(words: list[dict], segments: list[dict], below: float = 0.6) -> list[dict]:
-    """Words under ``below``, each tagged with the order of the Segment whose time contains it."""
-    found = []
-    for word in words:
+def low_confidence_passages(
+    words: list[dict], segments: list[dict], below: float = WEAK_WORD
+) -> list[dict]:
+    """Segments holding at least one Word under ``below``, worst Word first.
+    Returns {order, worst, words: [(text, confidence), ...]} sorted by worst ascending;
+    the weak Words of a Segment stay in time order."""
+    weak: dict[int, list[tuple[str, float]]] = {}
+    for word in sorted(words, key=lambda w: w["start"]):
         confidence = word.get("confidence")
         if confidence is None or confidence >= below:
             continue
         owner = next(
             (s for s in segments if s["start_time"] <= word["start"] < s["end_time"]), None
         )
-        found.append({**word, "segment_order": owner["order"] if owner else None})
-    return found
+        if owner is not None:
+            weak.setdefault(owner["order"], []).append((word["text"], confidence))
+    passages = [
+        {"order": order, "worst": min(c for _, c in found), "words": found}
+        for order, found in weak.items()
+    ]
+    return sorted(passages, key=lambda p: p["worst"])
 
 
 def corrected_segments(segments: list[dict]) -> list[dict]:

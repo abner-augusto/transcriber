@@ -129,6 +129,7 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 uv run python -m transcriber_cli list
 uv run python -m transcriber_cli upload reuniao.m4a --title "Obra 12/10" --participants "Ana, Bruno" --process --wait
 uv run python -m transcriber_cli show <id> --from 10:00 --to 15:00
+uv run python -m transcriber_cli show <id> --grep "Lourdes"
 uv run python -m transcriber_cli speakers <id> --unnamed
 uv run python -m transcriber_cli rename <id> SPEAKER_01 "Maria"
 uv run python -m transcriber_cli edit <id> '#142' "Garrah confirmou"
