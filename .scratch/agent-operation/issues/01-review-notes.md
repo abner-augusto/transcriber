@@ -9,8 +9,8 @@ answer, the user has to find each passage, play it, and type the answer back.
 The Meeting page already has synced audio, live updates (plan 027) and a
 sidebar with tabs (Speakers, Analytics), so the conversation fits there.
 
-**Status:** ready-for-agent: plans 032 (backend, CLI and skill) and 033
-(Meeting page). The design was decided with the user on 2026-10-09. The full
+**Status:** ready-for-agent (plans 032, 033). Plan 032 (backend, CLI and
+skill) is implemented; plan 033 (Meeting page) remains. The design was decided with the user on 2026-10-09. The full
 list is in plan 032 "Decisions". Round 1 below was confirmed, with one change
 to item 4: **the user creates descriptive comments only, never suggestions**,
 because they edit text directly. Round 2 was settled as follows:

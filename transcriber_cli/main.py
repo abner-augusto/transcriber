@@ -9,9 +9,9 @@ import time
 
 from . import suspects
 from .client import Api, ApiError
-from .handles import resolve_meeting, resolve_segment, resolve_speaker
+from .handles import resolve_meeting, resolve_note, resolve_segment, resolve_speaker
 from .render import (
-    clock, meeting_header, parse_clock, segment_line, speaker_line, word_line,
+    clock, meeting_header, note_line, parse_clock, segment_line, speaker_line, word_line,
 )
 
 REPROCESS_KINDS = ("rediarize", "reidentify", "reapply-vocabulary")
@@ -325,6 +325,77 @@ def cmd_assign(api, args):
     return 0
 
 
+def cmd_notes(api, args):
+    meeting = load_meeting(api, args.meeting)
+    notes = api.get(f"/api/meetings/{meeting['id']}/notes", status=args.status)
+    emit(args, notes, [note_line(n, meeting["segments"]) for n in notes])
+    return 0
+
+
+def _leave_note(api, args, meeting, anchor, kind, body, payload=None):
+    """Create an agent's Review Note anchored at the Segment's time range."""
+    note = api.post(f"/api/meetings/{meeting['id']}/notes", json={
+        "start_time": anchor["start_time"], "end_time": anchor["end_time"],
+        "kind": kind, "body": body, "author": "agent", "payload": payload,
+    })
+    emit(args, note, [note_line(note, meeting["segments"])])
+    return 0
+
+
+def cmd_ask(api, args):
+    meeting = load_meeting(api, args.meeting)
+    return _leave_note(api, args, meeting, resolve_segment(meeting, args.segment), "question", args.question)
+
+
+def cmd_note(api, args):
+    meeting = load_meeting(api, args.meeting)
+    return _leave_note(api, args, meeting, resolve_segment(meeting, args.segment), "comment", args.comment)
+
+
+def cmd_suggest(api, args):
+    meeting = load_meeting(api, args.meeting)
+    segment = resolve_segment(meeting, args.segment)
+    payload = {"expected_text": segment["text"], "proposed_text": args.text}
+    return _leave_note(api, args, meeting, segment, "text", args.why, payload)
+
+
+def cmd_suggest_name(api, args):
+    meeting = load_meeting(api, args.meeting)
+    speaker = resolve_speaker(meeting, args.speaker)
+    payload = {"label": speaker["label"], "name": args.name}
+    return _leave_note(api, args, meeting, resolve_segment(meeting, args.at), "speaker_name", args.why, payload)
+
+
+def cmd_suggest_move(api, args):
+    meeting = load_meeting(api, args.meeting)
+    segment = resolve_segment(meeting, args.segment)
+    if args.speaker.startswith(NEW_SPEAKER_PREFIX):
+        name = args.speaker[len(NEW_SPEAKER_PREFIX):].strip()
+        if not name:
+            raise ApiError(400, "new: needs a name, e.g. new:Carla")
+        payload = {"new_name": name}
+    else:
+        payload = {"target_label": resolve_speaker(meeting, args.speaker)["label"]}
+    return _leave_note(api, args, meeting, segment, "speaker_move", args.why, payload)
+
+
+def cmd_suggest_merge(api, args):
+    meeting = load_meeting(api, args.meeting)
+    payload = {
+        "source_label": resolve_speaker(meeting, args.source)["label"],
+        "target_label": resolve_speaker(meeting, args.target)["label"],
+    }
+    return _leave_note(api, args, meeting, resolve_segment(meeting, args.at), "speaker_merge", args.why, payload)
+
+
+def cmd_close(api, args):
+    meeting = load_meeting(api, args.meeting)
+    note = resolve_note(meeting, args.note)
+    closed = api.post(f"/api/notes/{note['id']}/done", json={"reply": args.reply})
+    emit(args, closed, [note_line(closed, meeting["segments"])])
+    return 0
+
+
 def cmd_set(api, args):
     fields = {"title": args.title, "participants": args.participants, "vocabulary": args.vocabulary}
     fields = {name: value for name, value in fields.items() if value is not None}
@@ -453,7 +524,45 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
     p.add_argument("speaker", metavar="SPEAKER")
 
-    p = command("set", cmd_set, "change the Meeting's title, participants, or vocabulary")
+    p = command("notes", cmd_notes, "the Meeting's Review Notes, one line each (answered ones are the user's replies)")
+    p.add_argument("--status", choices=("open", "answered", "resolved", "all"), default="all")
+
+    p = command("ask", cmd_ask, "leave a question for the user at a Segment")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+    p.add_argument("question", metavar="QUESTION")
+
+    p = command("note", cmd_note, "leave a comment at a Segment")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+    p.add_argument("comment", metavar="COMMENT")
+
+    p = command("suggest", cmd_suggest,
+                "propose new text for a Segment; the user accepts it on the Meeting page (which teaches Vocabulary)")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+    p.add_argument("text", metavar="TEXT")
+    p.add_argument("--why", required=True, metavar="REASON")
+
+    p = command("suggest-name", cmd_suggest_name, "propose a name for a Speaker; accepting it also saves the Voice Profile")
+    p.add_argument("speaker", metavar="SPEAKER")
+    p.add_argument("name", metavar="NAME")
+    p.add_argument("--at", required=True, metavar="SEG", help="the Segment that is the evidence, #<order>")
+    p.add_argument("--why", required=True, metavar="REASON")
+
+    p = command("suggest-move", cmd_suggest_move, "propose moving a Segment to another Speaker (new:NAME for a new one)")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+    p.add_argument("speaker", metavar="SPEAKER")
+    p.add_argument("--why", required=True, metavar="REASON")
+
+    p = command("suggest-merge", cmd_suggest_merge, "propose merging SOURCE into TARGET")
+    p.add_argument("source", metavar="SOURCE")
+    p.add_argument("target", metavar="TARGET")
+    p.add_argument("--at", required=True, metavar="SEG", help="the Segment that is the evidence, #<order>")
+    p.add_argument("--why", required=True, metavar="REASON")
+
+    p = command("close", cmd_close, "close an answered question or a comment once acted on")
+    p.add_argument("note", metavar="NOTE", help="Note handle: n:<id8>, an id prefix (4+ characters), or the id")
+    p.add_argument("--reply", metavar="TEXT", help="a short reply to the user")
+
+    p = command("set", cmd_set,"change the Meeting's title, participants, or vocabulary")
     p.add_argument("--title")
     p.add_argument("--participants", help="attendee names, comma-separated")
     p.add_argument("--vocabulary", help="domain terms the Transcriber should spell correctly")

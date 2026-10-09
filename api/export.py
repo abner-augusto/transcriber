@@ -171,6 +171,7 @@ def _export_json(meeting: Meeting, segments: list[Segment]) -> JSONResponse:
             }
             for seg in segments
         ],
+        "review_notes": [note.to_dict() for note in meeting.review_notes],
     }
     return JSONResponse(
         data,

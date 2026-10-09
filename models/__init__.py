@@ -4,8 +4,10 @@ from .segment import Segment
 from .job import Job, JobStatus, JobType
 from .speaker_profile import SpeakerProfile
 from .vocabulary_entry import VocabularyEntry
+from .review_note import ReviewNote
 
 __all__ = [
+    "ReviewNote",
     "Meeting", "MeetingStatus",
     "Speaker",
     "Segment",

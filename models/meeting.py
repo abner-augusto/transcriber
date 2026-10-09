@@ -45,6 +45,10 @@ class Meeting(Base):
     speakers = relationship("Speaker", back_populates="meeting", cascade="all, delete-orphan")
     segments = relationship("Segment", back_populates="meeting", cascade="all, delete-orphan", order_by="Segment.order")
     jobs = relationship("Job", back_populates="meeting", cascade="all, delete-orphan")
+    review_notes = relationship(
+        "ReviewNote", back_populates="meeting", cascade="all, delete-orphan",
+        order_by="ReviewNote.start_time",
+    )
 
     def to_dict(self, include_segments: bool = False, speaker_count: int | None = None, segment_count: int | None = None) -> dict:
         d = {
@@ -69,6 +73,7 @@ class Meeting(Base):
         if include_segments:
             d["speakers"] = [s.to_dict() for s in self.speakers]
             d["segments"] = [s.to_dict() for s in self.segments]
+            d["review_notes"] = [n.to_dict() for n in self.review_notes]
             from transcript.diarization import MeetingDiarization
             diarization = MeetingDiarization.from_stored(self.raw_diarization)
             d["overlaps"] = diarization.overlaps if diarization is not None else []

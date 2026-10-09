@@ -39,6 +39,50 @@ def segment_line(seg: dict) -> str:
     return line
 
 
+NOTE_TOLERANCE = 1.5  # the app's EDIT_TIME_TOLERANCE: how far a Segment may sit from a note's range
+
+
+def note_segment(note: dict, segments: list[dict]) -> dict | None:
+    """The Segment the app would pick for the note's range now, or None."""
+    near = [
+        (abs(s["start_time"] - note["start_time"]) + abs(s["end_time"] - note["end_time"]), s)
+        for s in segments
+        if abs(s["start_time"] - note["start_time"]) < NOTE_TOLERANCE
+        and abs(s["end_time"] - note["end_time"]) < NOTE_TOLERANCE
+    ]
+    return min(near, key=lambda pair: pair[0])[1] if near else None
+
+
+def _proposal(note: dict) -> str | None:
+    payload = note.get("payload") or {}
+    if note["kind"] == "text":
+        return payload.get("proposed_text")
+    if note["kind"] == "speaker_name":
+        return payload.get("name")
+    if note["kind"] == "speaker_move":
+        return payload.get("target_label") or f"new:{payload.get('new_name')}"
+    if note["kind"] == "speaker_merge":
+        return f"{payload.get('source_label')} into {payload.get('target_label')}"
+    return None
+
+
+def note_line(note: dict, segments: list[dict]) -> str:
+    segment = note_segment(note, segments)
+    anchor = f"#{segment['order']}" if segment else "#?"
+    line = (
+        f"n:{note['id'][:8]} {anchor} {clock(note['start_time'])} "
+        f"{note['kind']}/{note['status']} {note['author']}: {note['body']}"
+    )
+    proposal = _proposal(note)
+    if proposal is not None:
+        line += f" -> {proposal}"
+    if note.get("answer"):
+        line += f" answer: {note['answer']}"
+    if note.get("reply"):
+        line += f" reply: {note['reply']}"
+    return line
+
+
 def speaker_line(sp: dict) -> str:
     return (
         f'{sp["label"]} "{sp.get("display_name") or ""}" '
