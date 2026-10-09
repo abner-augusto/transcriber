@@ -27,6 +27,7 @@ app.add_middleware(
 
 app.include_router(meetings.router)
 app.include_router(speakers.router)
+app.include_router(speakers.meeting_speakers_router)
 app.include_router(segments.router)
 app.include_router(export.router)
 app.include_router(websocket.router)

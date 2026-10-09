@@ -1,12 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from api.segments import require_editable
 from database import get_db
-from models import Speaker, Segment
+from meeting_store import refresh_speaker_stats
+from models import Meeting, Speaker, Segment
+from services.speaker_id_service import SPEAKER_COLORS
 
 router = APIRouter(prefix="/api/speakers", tags=["speakers"])
+meeting_speakers_router = APIRouter(prefix="/api/meetings", tags=["speakers"])
+
+MAX_DISPLAY_NAME_LENGTH = 200
+
+
+class AddSpeakerRequest(BaseModel):
+    display_name: str
 
 
 class UpdateSpeakerRequest(BaseModel):
@@ -19,11 +28,45 @@ class MergeSpeakersRequest(BaseModel):
     target_id: str
 
 
+@meeting_speakers_router.post("/{meeting_id}/speakers")
+def add_speaker(meeting_id: str, req: AddSpeakerRequest, db: Session = Depends(get_db)):
+    """Add a Speaker the Diarizer missed, e.g. when it put two people under one label."""
+    if db.get(Meeting, meeting_id) is None:
+        raise HTTPException(404, "Meeting not found")
+    require_editable(db, meeting_id)
+    display_name = req.display_name.strip()
+    if not display_name:
+        raise HTTPException(400, "display_name is required")
+    if len(display_name) > MAX_DISPLAY_NAME_LENGTH:
+        raise HTTPException(400, f"display_name is longer than {MAX_DISPLAY_NAME_LENGTH} characters")
+
+    existing = db.query(Speaker).filter(Speaker.meeting_id == meeting_id).all()
+    used = {speaker.label for speaker in existing}
+    number = 1
+    while f"MANUAL_{number}" in used:
+        number += 1
+
+    speaker = Speaker(
+        meeting_id=meeting_id,
+        label=f"MANUAL_{number}",
+        display_name=display_name,
+        color=SPEAKER_COLORS[len(existing) % len(SPEAKER_COLORS)],
+        identified_by="manual",
+        segment_count=0,
+        total_speaking_time=0.0,
+    )
+    db.add(speaker)
+    db.commit()
+    db.refresh(speaker)
+    return speaker.to_dict()
+
+
 @router.put("/{speaker_id}")
 def update_speaker(speaker_id: str, req: UpdateSpeakerRequest, db: Session = Depends(get_db)):
     speaker = db.query(Speaker).filter(Speaker.id == speaker_id).first()
     if not speaker:
         raise HTTPException(404, "Speaker not found")
+    require_editable(db, speaker.meeting_id)
 
     if req.display_name is not None:
         speaker.display_name = req.display_name
@@ -44,19 +87,14 @@ def merge_speakers(req: MergeSpeakersRequest, db: Session = Depends(get_db)):
         raise HTTPException(404, "Speaker not found")
     if source.meeting_id != target.meeting_id:
         raise HTTPException(400, "Speakers must be from the same meeting")
+    require_editable(db, source.meeting_id)
 
     # Move all segments from source to target
     db.query(Segment).filter(Segment.speaker_id == source.id).update(
         {"speaker_id": target.id}, synchronize_session="fetch"
     )
 
-    # Update target stats with single aggregated query
-    stats = db.query(
-        func.count(Segment.id),
-        func.coalesce(func.sum(Segment.end_time - Segment.start_time), 0),
-    ).filter(Segment.speaker_id == target.id).one()
-    target.segment_count = stats[0]
-    target.total_speaking_time = stats[1]
+    refresh_speaker_stats(db, target)
 
     # Delete source
     db.delete(source)

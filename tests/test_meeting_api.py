@@ -8,7 +8,7 @@ from database import Base, get_db
 import jobs
 from jobs.runners import InProcessBus, InlineJobRunner
 from main import app
-from models import Meeting, MeetingStatus, Segment, VocabularyEntry
+from models import Meeting, MeetingStatus, Segment, Speaker, VocabularyEntry
 from models.job import Job, JobType
 
 
@@ -408,3 +408,184 @@ def test_words_of_missing_meeting_is_404(db_session):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Meeting not found"
+
+
+def _meeting_with_speakers(db_session, status=MeetingStatus.COMPLETED):
+    meeting = Meeting(title="Edits", status=status)
+    db_session.add(meeting)
+    db_session.flush()
+    first = Speaker(meeting_id=meeting.id, label="SPEAKER_00", display_name="A")
+    second = Speaker(meeting_id=meeting.id, label="SPEAKER_01", display_name="B")
+    db_session.add_all([first, second])
+    db_session.flush()
+    return meeting, first, second
+
+
+def test_segment_edit_is_refused_while_the_meeting_is_processing(db_session):
+    meeting = Meeting(title="Busy", status=MeetingStatus.PROCESSING)
+    db_session.add(meeting)
+    db_session.flush()
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0, end_time=1.0,
+        text="Galo", original_text="Galo", order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+
+    response = TestClient(app).put(f"/api/segments/{segment.id}", json={"text": "Garrah"})
+
+    assert response.status_code == 409
+    db_session.refresh(segment)
+    assert segment.text == "Galo"
+
+
+def test_reassigning_a_segment_updates_both_speakers_stats(db_session):
+    meeting, first, second = _meeting_with_speakers(db_session)
+    kept = Segment(
+        meeting_id=meeting.id, speaker_id=first.id, start_time=0, end_time=1.0,
+        text="one", original_text="one", order=0,
+    )
+    moved = Segment(
+        meeting_id=meeting.id, speaker_id=first.id, start_time=1.0, end_time=3.0,
+        text="two", original_text="two", order=1,
+    )
+    first.segment_count, first.total_speaking_time = 2, 3.0
+    db_session.add_all([kept, moved])
+    db_session.commit()
+
+    response = TestClient(app).put(
+        f"/api/segments/{moved.id}/speaker", json={"speaker_id": second.id}
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(first)
+    db_session.refresh(second)
+    assert (first.segment_count, first.total_speaking_time) == (1, 1.0)
+    assert (second.segment_count, second.total_speaking_time) == (1, 2.0)
+
+
+def test_reassigning_to_a_speaker_of_another_meeting_is_rejected(db_session):
+    meeting, first, _ = _meeting_with_speakers(db_session)
+    _, foreign, _ = _meeting_with_speakers(db_session)
+    segment = Segment(
+        meeting_id=meeting.id, speaker_id=first.id, start_time=0, end_time=1.0,
+        text="one", original_text="one", order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+
+    response = TestClient(app).put(
+        f"/api/segments/{segment.id}/speaker", json={"speaker_id": foreign.id}
+    )
+
+    assert response.status_code == 400
+    db_session.refresh(segment)
+    assert segment.speaker_id == first.id
+
+
+def test_reassigning_to_a_missing_speaker_is_404(db_session):
+    meeting, first, _ = _meeting_with_speakers(db_session)
+    segment = Segment(
+        meeting_id=meeting.id, speaker_id=first.id, start_time=0, end_time=1.0,
+        text="one", original_text="one", order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+
+    response = TestClient(app).put(
+        f"/api/segments/{segment.id}/speaker", json={"speaker_id": "no-such-speaker"}
+    )
+
+    assert response.status_code == 404
+    db_session.refresh(segment)
+    assert segment.speaker_id == first.id
+
+
+def test_segment_edit_with_learn_false_teaches_nothing(db_session):
+    meeting = Meeting(title="Quiet", status=MeetingStatus.COMPLETED)
+    entry = VocabularyEntry(term="Garrah")
+    db_session.add_all([meeting, entry])
+    db_session.flush()
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0, end_time=0.5,
+        text="Galo", original_text="Galo", order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+
+    response = TestClient(app).put(
+        f"/api/segments/{segment.id}", json={"text": "Garrah", "learn": False}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["text"] == "Garrah"
+    db_session.refresh(entry)
+    assert entry.misheard_as == []
+    assert db_session.query(VocabularyEntry).count() == 1
+
+
+def test_revert_restores_the_derived_text(db_session):
+    meeting = Meeting(title="Revert", status=MeetingStatus.COMPLETED)
+    db_session.add_all([meeting, VocabularyEntry(term="Garrah")])
+    db_session.flush()
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0, end_time=0.5,
+        text="Galo", original_text="Galo", order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+    client = TestClient(app)
+    client.put(f"/api/segments/{segment.id}", json={"text": "Garrah", "learn": False})
+    vocabulary_before = client.get("/api/vocabulary").json()
+
+    response = client.post(f"/api/segments/{segment.id}/revert")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["text"] == "Galo"
+    assert body["is_edited"] is False
+    assert client.get("/api/vocabulary").json() == vocabulary_before
+
+
+def test_revert_of_an_unedited_segment_is_409(db_session):
+    meeting = Meeting(title="Unedited", status=MeetingStatus.COMPLETED)
+    db_session.add(meeting)
+    db_session.flush()
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0, end_time=0.5,
+        text="Galo", original_text="Galo", order=0,
+    )
+    db_session.add(segment)
+    db_session.commit()
+
+    response = TestClient(app).post(f"/api/segments/{segment.id}/revert")
+
+    assert response.status_code == 409
+
+
+def test_add_speaker_gets_the_next_manual_label(db_session):
+    meeting, _, _ = _meeting_with_speakers(db_session)
+    db_session.add(Speaker(meeting_id=meeting.id, label="MANUAL_1", display_name="Eve"))
+    db_session.commit()
+
+    response = TestClient(app).post(
+        f"/api/meetings/{meeting.id}/speakers", json={"display_name": "  Carol "}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["label"] == "MANUAL_2"
+    assert body["display_name"] == "Carol"
+    assert body["identified_by"] == "manual"
+    assert (body["segment_count"], body["total_speaking_time"]) == (0, 0.0)
+
+
+def test_add_speaker_requires_a_name(db_session):
+    meeting, _, _ = _meeting_with_speakers(db_session)
+    db_session.commit()
+
+    response = TestClient(app).post(
+        f"/api/meetings/{meeting.id}/speakers", json={"display_name": "   "}
+    )
+
+    assert response.status_code == 400
