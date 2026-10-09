@@ -9,11 +9,15 @@ You drive the running app with `uv run python -m transcriber_cli COMMAND`. Terms
 
 Run each phase to its done-line, then move on. Every edit shows up on the open Meeting page without a reload, so tell the user they can watch it there.
 
+A **Review Note** is how you ask the user something about a passage: it sits at a time range of the Meeting, and the user answers or accepts it on the Meeting page. When the evidence is not enough to act, leave a note; a chat question sends the user hunting for the passage. Direct `edit`, `rename`, `merge` and `assign` stay for what the transcript proves.
+
 ## 1. Preflight
 
 Run `health`. Exit 2 means the app is down: start it in the background (`./start.ps1` on Windows, `./start.sh` elsewhere) and repeat `health` until it exits 0.
 
-**Done** when `health` exits 0.
+For an existing Meeting, the user's replies come next. `notes M --status answered` lists the answers to your questions, and `notes M --status open` lists open notes, where author `user` marks the user's own comments. Act on each reply, then `close M NOTE --reply "..."` with a short account of what you did.
+
+**Done** when `health` exits 0 and every reply is acted on and closed.
 
 Privacy: you read the transcript, and a hosted model carries that text off the machine. Say so once, unless the user already chose this. Audio paths and transcript text stay out of web tools.
 
@@ -41,15 +45,19 @@ Ask for the participants and the domain terms first; they are the best evidence 
 2. being addressed by name, then that Speaker answering;
 3. the participants list combined with role and topic.
 
-A name heard once may itself be misheard. Compare it with the regulars before applying it: Voice Profile names, the Speakers of the user's other Meetings with the same title pattern (`list`, then `speakers`), and the participants list. A regular who sounds close ("Luiz" for "Lourdes") wins over a new name. In a recurring meeting, ask the user before naming someone new.
+A name heard once may itself be misheard. Compare it with the regulars before applying it: Voice Profile names, the Speakers of the user's other Meetings with the same title pattern (`list`, then `speakers`), and the participants list. A regular who sounds close ("Luiz" for "Lourdes") wins over a new name. In a recurring meeting, propose a new name as a note instead of applying it.
 
 The dual-track HOST is the user (the mic owner): `rename` "You" to their name.
 
-Quote the evidence with its Segment handles when you propose a name. Without evidence, ask the user, showing the samples and timestamps.
+When the evidence is thin or the name is new to a recurring meeting, leave a note. Put the evidence in its `--why`, with Segment handles:
 
-`rename M SPEAKER NAME` applies a name. Add `--save-profile` after the user confirms the name: it makes future Meetings name that voice automatically.
+- `suggest-name M SPEAKER NAME --at #N --why "..."` proposes a name; `#N` is the Segment that is the evidence. Accepting it also saves the Voice Profile.
+- `suggest-merge M SOURCE TARGET --at #N --why "..."` and `suggest-move M #N SPEAKER|new:NAME --why "..."` propose a merge or a move you cannot prove.
+- `ask M #N "..."` asks when you have no proposal; the samples and timestamps are the user's clue.
 
-**Done** when `speakers M --unnamed` is empty, or each remaining Speaker has a question put to the user.
+`rename M SPEAKER NAME` applies a name the transcript proves. Add `--save-profile` only for a name the user confirmed (an accepted note already did): it makes future Meetings name that voice automatically.
+
+**Done** when `speakers M --unnamed` is empty, or each remaining Speaker has a Review Note.
 
 ## 4. Review
 
@@ -61,18 +69,19 @@ Quote the evidence with its Segment handles when you propose a name. Without evi
 | LOW-CONFIDENCE PASSAGES (worst first) | Segments holding Words under 0.4, each line ending `weak: word 0.14, ...`. Start at the top; a very low Word inside a name or term is the likeliest error. |
 | CORRECTED BY VOCABULARY | Check each `heard->term` fix against the context. |
 
-Read the transcript yourself for two failures no command finds: a side conversation an open mic captured (a long off-topic block from someone who barely speaks otherwise) and plausible-sounding numbers. Report an implausible number to the user with its handle; the number stays as transcribed.
+Read the transcript yourself for two failures no command finds: a side conversation an open mic captured (a long off-topic block from someone who barely speaks otherwise) and plausible-sounding numbers. Leave an implausible number as `note M #N "..."`; the number stays as transcribed.
 
-Fix a passage with `edit M #N "text"` only when the transcript supports the fix: a term in the vocabulary or participants, the same word spelled right elsewhere, or an obvious grammar mishearing in context. Everything else goes to the user as `#N clock "heard" -> "maybe"`, for them to re-listen.
+Fix a passage with `edit M #N "text"` only when the transcript supports the fix: a term in the vocabulary or participants, the same word spelled right elsewhere, or an obvious grammar mishearing in context. For a fix the transcript does not prove, `suggest M #N "text" --why "..."` leaves the proposed text for the user to accept. With no candidate text, `ask M #N "..."`.
 
-**Done** when every `suspects` entry is fixed, reported as a time range, or listed for the user.
+**Done** when every `suspects` entry is fixed, left as a Review Note, or (a REPEATED range) reported to the user.
 
 ## 5. Hand off
 
-Report what you named, what you edited (Segment handles), and the re-listen list. For a meeting record, `export M --format json --out FILE` feeds the user's minutes workflow, if they have one; this skill ends at a reviewed transcript.
+Report what you named and what you edited (Segment handles) in a short summary. Tell the user how many notes are open (`notes M --status open`) and that they accept or answer them on the Meeting page. For a meeting record, `export M --format json --out FILE` feeds the user's minutes workflow, if they have one; this skill ends at a reviewed transcript.
 
 ## Learning and undo
 
+- Accepting a `suggest` on the page teaches Vocabulary, because the click is the user's confirmation. Prefer `suggest` to asking for confirmation in chat.
 - `edit` teaches Vocabulary only with `--learn`, and a learned Misheard Form applies to every future Meeting. Pass `--learn` only for corrections the user confirmed.
 - To teach a new term, first `edit --learn` changing only the misheard words, then fix the rest of the sentence in a second `edit` without `--learn`. Only short replaced phrases are learned, so a whole-sentence rewrite teaches nothing.
 - `revert M #N` undoes a text edit.
@@ -84,4 +93,4 @@ Report what you named, what you edited (Segment handles), and the re-listen list
 
 ## Commands
 
-`health` · `list` · `upload` · `process` · `reprocess KIND` · `wait` · `show` · `speakers` · `words` · `suspects` · `rename` · `add-speaker` · `merge` · `edit` · `revert` · `assign` · `set` · `export`. Add `--json` before the command for the API's raw JSON.
+`health` · `list` · `upload` · `process` · `reprocess KIND` · `wait` · `show` · `speakers` · `words` · `suspects` · `rename` · `add-speaker` · `merge` · `edit` · `revert` · `assign` · `notes` · `ask` · `note` · `suggest` · `suggest-name` · `suggest-move` · `suggest-merge` · `close` · `set` · `export`. Add `--json` before the command for the API's raw JSON.

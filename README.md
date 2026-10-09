@@ -134,6 +134,8 @@ uv run python -m transcriber_cli speakers <id> --unnamed
 uv run python -m transcriber_cli rename <id> SPEAKER_01 "Maria"
 uv run python -m transcriber_cli edit <id> '#142' "Garrah confirmou"
 uv run python -m transcriber_cli suspects <id>
+uv run python -m transcriber_cli notes <id> --status open
+uv run python -m transcriber_cli suggest <id> '#142' "Garrah confirmou" --why "o nome da obra"
 ```
 
 An edit from the command line teaches Vocabulary only with `--learn`; an agent cannot hear the audio, so its corrections are guesses until you confirm them.
@@ -230,6 +232,12 @@ transcriber/
 | `PUT` | `/api/speakers/{id}` | Rename/recolor speaker |
 | `POST` | `/api/meetings/{id}/speakers` | Add a Speaker the Diarizer missed (`display_name`; label `MANUAL_<n>`) |
 | `POST` | `/api/speakers/merge` | Merge two speakers |
+| `POST` | `/api/meetings/{id}/notes` | Leave a Review Note at a time range (`kind`: `comment`, `question`, `text`, `speaker_name`, `speaker_move`, `speaker_merge`; `author`: `agent` or `user`, and a `user` note is a `comment`) |
+| `GET` | `/api/meetings/{id}/notes?status=` | List a Meeting's Review Notes (`open`, `answered`, `resolved`, `all`) |
+| `POST` | `/api/notes/{id}/answer` | Answer an open question |
+| `POST` | `/api/notes/{id}/done` | Close an answered question or an open comment (optional `reply`) |
+| `POST` | `/api/notes/{id}/dismiss` | Dismiss an open suggestion or question, or an answered question |
+| `POST` | `/api/notes/{id}/accept` | Apply an open suggestion through the existing edit routes; `learn: false` teaches no Vocabulary, `save_profile: false` skips the Voice Profile |
 | `POST` | `/api/meetings/{id}/rediarize` | Re-run speaker diarization |
 | `POST` | `/api/meetings/{id}/reidentify` | Re-identify speakers |
 | `POST` | `/api/meetings/{id}/reapply-vocabulary` | Reapply vocabulary corrections |

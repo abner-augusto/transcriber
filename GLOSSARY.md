@@ -113,3 +113,11 @@ without transcribing it again — typically after saving a new Voice Profile. Re
 Vocabulary Correction is also available after changing the Meeting's Vocabulary.
 Names the user gave Speakers survive it: by label when the Turns are kept, by Turn overlap when they are new.
 _Avoid_: rerun, refresh
+
+### Reviewing
+
+**Review Note**:
+A question, comment or suggestion anchored at a time range of a Meeting, left by the agent or the
+user for the other to settle. Accepting a suggestion is the user's confirmation. It keeps its time
+range through Reprocessing and is applied to the Segment at that range when it is accepted.
+_Avoid_: comment (bare), annotation, flag
