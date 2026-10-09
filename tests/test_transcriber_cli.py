@@ -684,6 +684,205 @@ def test_suspects_lists_vocabulary_corrections(db_session, api, capsys):
     assert "  #77 01:12 Galo->Garrah (rule similar)" in out
 
 
+def review_meeting(db):
+    meeting = seed_meeting(db)
+    ana = add_speaker(db, meeting, "SPEAKER_00", "Ana")
+    bia = add_speaker(db, meeting, "SPEAKER_01", "Participant 2")
+    add_segment(db, meeting, ana, 0, 0.0, 5.0, "Galo disse isso", original_text="Galo disse isso")
+    add_segment(db, meeting, bia, 1, 70.0, 75.0, "Concordo", original_text="Concordo")
+    db.commit()
+    return meeting, ana, bia
+
+
+def stored_notes(db):
+    from models import ReviewNote
+
+    db.expire_all()
+    return db.query(ReviewNote).order_by(ReviewNote.created_at).all()
+
+
+def test_ask_leaves_a_question_anchored_at_the_segment(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    code, out, _ = run(["ask", meeting.id, "#1", "Quem fala aqui?"], api, capsys)
+
+    assert code == 0
+    (note,) = stored_notes(db_session)
+    assert (note.kind, note.author, note.status) == ("question", "agent", "open")
+    assert (note.start_time, note.end_time) == (70.0, 75.0)
+    assert note.body == "Quem fala aqui?"
+    assert f"n:{note.id[:8]} #1 01:10 question/open agent: Quem fala aqui?" in out
+
+
+def test_note_leaves_a_comment_by_the_agent(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    code, _, _ = run(["note", meeting.id, "#0", "Ruido de fundo"], api, capsys)
+
+    assert code == 0
+    (note,) = stored_notes(db_session)
+    assert (note.kind, note.author) == ("comment", "agent")
+    assert (note.start_time, note.end_time) == (0.0, 5.0)
+
+
+def test_suggest_leaves_a_text_fix_expecting_the_current_text(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    code, out, _ = run(
+        ["suggest", meeting.id, "#0", "Garrah disse isso", "--why", "parece o nome da obra"], api, capsys)
+
+    assert code == 0
+    (note,) = stored_notes(db_session)
+    assert note.kind == "text"
+    assert note.body == "parece o nome da obra"
+    assert note.payload == {"expected_text": "Galo disse isso", "proposed_text": "Garrah disse isso"}
+    assert "-> Garrah disse isso" in out
+
+
+def test_suggest_requires_a_reason(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    with pytest.raises(SystemExit):
+        run(["suggest", meeting.id, "#0", "Garrah disse isso"], api, capsys)
+
+    assert stored_notes(db_session) == []
+
+
+def test_suggest_name_uses_the_evidence_segment_as_the_range(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    code, out, _ = run(
+        ["suggest-name", meeting.id, "SPEAKER_01", "Bia", "--at", "#1", "--why", "se apresenta"], api, capsys)
+
+    assert code == 0
+    (note,) = stored_notes(db_session)
+    assert note.kind == "speaker_name"
+    assert note.payload == {"label": "SPEAKER_01", "name": "Bia"}
+    assert (note.start_time, note.end_time) == (70.0, 75.0)
+    assert "-> Bia" in out
+
+
+def test_suggest_move_targets_an_existing_or_a_new_speaker(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    code, _, _ = run(["suggest-move", meeting.id, "#0", "SPEAKER_01", "--why", "e a Bia"], api, capsys)
+    assert code == 0
+    code, _, _ = run(["suggest-move", meeting.id, "#0", "new:Carla", "--why", "terceira voz"], api, capsys)
+    assert code == 0
+
+    first, second = stored_notes(db_session)
+    assert (first.kind, first.payload) == ("speaker_move", {"target_label": "SPEAKER_01"})
+    assert second.payload == {"new_name": "Carla"}
+    assert (first.start_time, first.end_time) == (0.0, 5.0)
+
+
+def test_suggest_move_refuses_an_empty_new_name(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    code, _, err = run(["suggest-move", meeting.id, "#0", "new:", "--why", "x"], api, capsys)
+
+    assert code == 1
+    assert "new:" in err
+    assert stored_notes(db_session) == []
+
+
+def test_suggest_merge_names_both_speakers(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    code, _, _ = run(
+        ["suggest-merge", meeting.id, "SPEAKER_00", "SPEAKER_01", "--at", "#0", "--why", "mesma voz"],
+        api, capsys)
+
+    assert code == 0
+    (note,) = stored_notes(db_session)
+    assert note.kind == "speaker_merge"
+    assert note.payload == {"source_label": "SPEAKER_00", "target_label": "SPEAKER_01"}
+    assert (note.start_time, note.end_time) == (0.0, 5.0)
+
+
+def test_notes_lists_one_line_per_note_and_filters_by_status(db_session, api, capsys):
+    from models import ReviewNote
+
+    meeting, *_ = review_meeting(db_session)
+
+    def make(**kw):
+        fields = dict(meeting_id=meeting.id, start_time=0.0, end_time=5.0, author="agent",
+                      kind="comment", body="x", status="open")
+        fields.update(kw)
+        note = ReviewNote(**fields)
+        db_session.add(note)
+        db_session.flush()
+        return note
+
+    text = make(start_time=0.0, kind="text", body="parece o nome",
+                payload={"expected_text": "Galo disse isso", "proposed_text": "Garrah disse isso"})
+    asked = make(start_time=70.0, end_time=75.0, kind="question", body="Quem?", status="answered",
+                 answer="A Bia")
+    closed = make(start_time=30.0, end_time=33.0, body="velho", status="done", reply="feito")
+    named = make(start_time=71.0, end_time=74.0, kind="speaker_name", body="se apresenta",
+                 payload={"label": "SPEAKER_01", "name": "Bia"})
+    db_session.commit()
+
+    code, out, _ = run(["notes", meeting.id], api, capsys)
+
+    lines = out.splitlines()
+    assert code == 0
+    assert lines == [
+        f"n:{text.id[:8]} #0 00:00 text/open agent: parece o nome -> Garrah disse isso",
+        f"n:{closed.id[:8]} #? 00:30 comment/done agent: velho reply: feito",
+        f"n:{asked.id[:8]} #1 01:10 question/answered agent: Quem? answer: A Bia",
+        f"n:{named.id[:8]} #1 01:11 speaker_name/open agent: se apresenta -> Bia",
+    ]
+    _, out, _ = run(["notes", meeting.id, "--status", "open"], api, capsys)
+    assert [line.split()[0] for line in out.splitlines()] == [f"n:{text.id[:8]}", f"n:{named.id[:8]}"]
+    _, out, _ = run(["notes", meeting.id, "--status", "answered"], api, capsys)
+    assert [line.split()[0] for line in out.splitlines()] == [f"n:{asked.id[:8]}"]
+    _, out, _ = run(["notes", meeting.id, "--status", "resolved"], api, capsys)
+    assert [line.split()[0] for line in out.splitlines()] == [f"n:{closed.id[:8]}"]
+
+
+def test_close_marks_a_note_done_with_a_reply(db_session, api, capsys):
+    from models import ReviewNote
+
+    meeting, *_ = review_meeting(db_session)
+    note = ReviewNote(meeting_id=meeting.id, start_time=0.0, end_time=5.0, author="user",
+                      kind="comment", body="troque o nome", status="open")
+    db_session.add(note)
+    db_session.commit()
+    note_id = note.id
+
+    code, out, _ = run(["close", meeting.id, f"n:{note_id[:8]}", "--reply", "troquei"], api, capsys)
+
+    assert code == 0
+    (stored,) = stored_notes(db_session)
+    assert (stored.status, stored.reply) == ("done", "troquei")
+    assert f"n:{note_id[:8]} #0 00:00 comment/done user: troque o nome reply: troquei" in out
+
+
+def test_close_rejects_a_short_or_unknown_note_handle(db_session, api, capsys):
+    from models import ReviewNote
+
+    meeting, *_ = review_meeting(db_session)
+    db_session.add(ReviewNote(meeting_id=meeting.id, start_time=0.0, end_time=5.0, author="agent",
+                              kind="comment", body="x", status="open"))
+    db_session.commit()
+
+    code, _, err = run(["close", meeting.id, "zzzz"], api, capsys)
+    assert code == 1
+    assert "No Note matches" in err
+    code, _, err = run(["close", meeting.id, "ab"], api, capsys)
+    assert code == 1
+
+
+def test_a_note_cannot_be_left_on_a_missing_segment(db_session, api, capsys):
+    meeting, *_ = review_meeting(db_session)
+
+    code, _, err = run(["ask", meeting.id, "#9", "Quem?"], api, capsys)
+
+    assert code == 1
+    assert "No Segment #9" in err
+    assert stored_notes(db_session) == []
+
 
 def test_piped_stdout_is_line_buffered():
     import io

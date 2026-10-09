@@ -40,6 +40,21 @@ def resolve_segment(meeting: dict, handle: str) -> dict:
     raise ApiError(404, f"No Segment #{order} in this Meeting")
 
 
+def resolve_note(meeting: dict, handle: str) -> dict:
+    """The Review Note for a full id or a unique id prefix (4+ chars); `n:` as printed is accepted."""
+    text = handle[2:] if handle.startswith("n:") else handle
+    notes = meeting["review_notes"]
+    for note in notes:
+        if note["id"] == text:
+            return note
+    matches = [n for n in notes if len(text) >= MIN_PREFIX and n["id"].startswith(text)]
+    if not matches:
+        raise ApiError(404, f"No Note matches '{handle}'")
+    if len(matches) > 1:
+        raise _ambiguous(handle, "Notes", [f"n:{n['id'][:8]}" for n in matches])
+    return matches[0]
+
+
 def resolve_speaker(meeting: dict, handle: str) -> dict:
     """The Speaker for an exact label, a display name (any case), or a unique id prefix."""
     speakers = meeting["speakers"]
