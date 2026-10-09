@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 import jobs
 from api.segments import (
-    UpdateSegmentSpeakerRequest, UpdateSegmentTextRequest, require_editable,
-    update_segment_speaker, update_segment_text,
+    SplitSegmentRequest, UpdateSegmentSpeakerRequest, UpdateSegmentTextRequest, require_editable,
+    split_segment, update_segment_speaker, update_segment_text,
 )
 from api.speaker_profiles import SaveFromSpeakerRequest, save_profile_from_speaker
 from api.speakers import (
@@ -25,8 +25,8 @@ router = APIRouter(prefix="/api/notes", tags=["review-notes"])
 
 # "system" is reserved for notes the app itself will leave (issue 08); v1 does not create it.
 AUTHORS = ("agent", "user")
-KINDS = ("comment", "question", "text", "speaker_name", "speaker_move", "speaker_merge")
-SUGGESTION_KINDS = ("text", "speaker_name", "speaker_move", "speaker_merge")
+KINDS = ("comment", "question", "text", "speaker_name", "speaker_move", "speaker_merge", "split")
+SUGGESTION_KINDS = ("text", "speaker_name", "speaker_move", "speaker_merge", "split")
 RESOLVED = ("accepted", "dismissed", "done")
 STATUS_FILTERS = ("open", "answered", "resolved", "all")
 
@@ -94,6 +94,25 @@ def _validated_payload(db: Session, meeting_id: str, req: CreateNoteRequest) -> 
             if _speaker(db, meeting_id, payload["target_label"]) is None:
                 raise HTTPException(400, "target_label is not a Speaker of this Meeting")
         else:
+            _text(payload, "new_name")
+    elif req.kind == "split":
+        segment = segment_for_range(db, meeting_id, req.start_time, req.end_time)
+        if segment is None:
+            raise HTTPException(400, "no Segment at this range")
+        if segment.is_edited:
+            raise HTTPException(400, "the Segment is edited; revert it first")
+        at = payload.get("at")
+        if isinstance(at, bool) or not isinstance(at, (int, float)):
+            raise HTTPException(400, "payload.at is required")
+        if not segment.start_time < at < segment.end_time:
+            raise HTTPException(400, "payload.at must fall inside the Segment")
+        _text(payload, "preview")
+        if "target_label" in payload and "new_name" in payload:
+            raise HTTPException(400, "give target_label or new_name, not both")
+        if "target_label" in payload:
+            if _speaker(db, meeting_id, payload["target_label"]) is None:
+                raise HTTPException(400, "target_label is not a Speaker of this Meeting")
+        elif "new_name" in payload:
             _text(payload, "new_name")
     elif req.kind == "speaker_merge":
         source, target = payload.get("source_label"), payload.get("target_label")
@@ -187,6 +206,16 @@ def _apply_speaker_name(db: Session, note: ReviewNote, req: AcceptNoteRequest) -
     return None
 
 
+def _target_speaker_id(db: Session, note: ReviewNote) -> str:
+    """The Speaker a speaker_move or split note hands a Segment to; `new_name` adds it first."""
+    payload = note.payload
+    if "target_label" in payload:
+        return _conflict_unless(
+            _speaker(db, note.meeting_id, payload["target_label"]), "the Speaker no longer exists"
+        ).id
+    return add_speaker(note.meeting_id, AddSpeakerRequest(display_name=payload["new_name"]), db)["id"]
+
+
 def _apply(db: Session, note: ReviewNote, req: AcceptNoteRequest) -> str | None:
     """Run the suggestion through the same routes a manual edit uses. Returns a warning, if any."""
     payload = note.payload
@@ -207,14 +236,13 @@ def _apply(db: Session, note: ReviewNote, req: AcceptNoteRequest) -> str | None:
         if segment.text != payload["expected_text"]:
             raise HTTPException(409, "the Segment changed since the suggestion")
         update_segment_text(segment.id, UpdateSegmentTextRequest(text=payload["proposed_text"], learn=req.learn), db)
+    elif note.kind == "split":
+        if segment.is_edited:  # before add_speaker, so a refused split leaves no new Speaker behind
+            raise HTTPException(409, "the Segment changed since the suggestion")
+        target_id = _target_speaker_id(db, note) if ("target_label" in payload or "new_name" in payload) else None
+        split_segment(segment.id, SplitSegmentRequest(at=payload["at"], speaker_id=target_id), db)
     else:  # speaker_move
-        if "target_label" in payload:
-            target_id = _conflict_unless(
-                _speaker(db, note.meeting_id, payload["target_label"]), "the Speaker no longer exists"
-            ).id
-        else:
-            target_id = add_speaker(note.meeting_id, AddSpeakerRequest(display_name=payload["new_name"]), db)["id"]
-        update_segment_speaker(segment.id, UpdateSegmentSpeakerRequest(speaker_id=target_id), db)
+        update_segment_speaker(segment.id, UpdateSegmentSpeakerRequest(speaker_id=_target_speaker_id(db, note)), db)
     return None
 
 

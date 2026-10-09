@@ -926,6 +926,84 @@ def test_suggest_merge_names_both_speakers(db_session, api, capsys):
     assert (note.start_time, note.end_time) == (0.0, 5.0)
 
 
+def test_suggest_split_before_words_leaves_a_split_note_with_a_preview(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    add_speaker(db_session, meeting, "SPEAKER_01", "Bia")
+    segment, _ = seed_spoken_segments(
+        db_session, meeting, ana, ["tudo", "bem?", "Quem", "manda", "aqui", "agora", "mesmo"],
+    )
+
+    code, out, _ = run(
+        ["suggest-split", meeting.id, "#0", "--before", "quem manda", "--speaker", "SPEAKER_01",
+         "--why", "outra voz"],
+        api, capsys)
+
+    assert code == 0
+    (note,) = stored_notes(db_session)
+    assert note.kind == "split"
+    assert note.status == "open"
+    assert note.body == "outra voz"
+    assert note.payload == {"at": 1.0, "preview": "Quem manda aqui agora mesmo", "target_label": "SPEAKER_01"}
+    assert (note.start_time, note.end_time) == (segment.start_time, segment.end_time)
+    assert out.strip().endswith('split/open agent: outra voz -> before "Quem manda aqui agora mesmo" to SPEAKER_01')
+
+
+def test_suggest_split_at_a_time_snaps_to_a_word_and_can_name_a_new_speaker(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    seed_spoken_segments(db_session, meeting, ana, ["tudo", "bem", "quem", "manda", "aqui", "ok", "fim"])
+
+    code, _, _ = run(
+        ["suggest-split", meeting.id, "#0", "--at", "1.1", "--speaker", "new:Carla", "--why", "terceira voz"],
+        api, capsys)
+
+    assert code == 0
+    (note,) = stored_notes(db_session)
+    assert note.payload == {"at": 1.0, "preview": "quem manda aqui ok fim", "new_name": "Carla"}
+
+
+def test_suggest_split_without_a_speaker_has_no_target(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    seed_spoken_segments(db_session, meeting, ana, ["tudo", "bem", "quem", "manda"])
+
+    code, _, _ = run(["suggest-split", meeting.id, "#0", "--before", "quem", "--why", "x"], api, capsys)
+
+    assert code == 0
+    (note,) = stored_notes(db_session)
+    assert note.payload == {"at": 1.0, "preview": "quem manda"}
+
+
+def test_suggest_split_with_words_not_found_or_an_empty_new_name_leaves_no_note(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
+    seed_spoken_segments(db_session, meeting, ana, ["tudo", "bem", "quem", "manda"])
+
+    missing, _, err = run(["suggest-split", meeting.id, "#0", "--before", "quem sabe", "--why", "x"], api, capsys)
+    empty, _, empty_err = run(
+        ["suggest-split", meeting.id, "#0", "--before", "quem", "--speaker", "new:", "--why", "x"], api, capsys)
+
+    assert (missing, empty) == (1, 1)
+    assert "is not among #0's Words as heard" in err
+    assert "new:" in empty_err
+    assert stored_notes(db_session) == []
+
+
+def test_suggest_split_needs_exactly_one_of_at_and_before_and_a_reason(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    db_session.commit()
+
+    for argv in (
+        ["suggest-split", meeting.id, "#0", "--why", "x"],
+        ["suggest-split", meeting.id, "#0", "--at", "1", "--before", "x", "--why", "x"],
+        ["suggest-split", meeting.id, "#0", "--at", "1"],
+    ):
+        with pytest.raises(SystemExit):
+            main(argv, api=api)
+        capsys.readouterr()
+
+
 def test_notes_lists_one_line_per_note_and_filters_by_status(db_session, api, capsys):
     from models import ReviewNote
 

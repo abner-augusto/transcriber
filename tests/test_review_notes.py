@@ -652,6 +652,122 @@ def test_accepting_a_speaker_merge_with_a_vanished_speaker_is_a_conflict(db_sess
     assert accept(TestClient(app), note).status_code == 409
 
 
+def seed_spoken(db):
+    """seed(), with the first Segment holding five Words, a Word every second."""
+    meeting, ana, bia, first, second = seed(db)
+    meeting.raw_transcription = {"words": [
+        {"start": float(i), "end": i + 0.9, "text": f" w{i}", "confidence": 0.9} for i in range(5)
+    ]}
+    first.text = first.original_text = "w0 w1 w2 w3 w4"
+    db.commit()
+    return meeting, ana, bia, first, second
+
+
+def split_payload(**kw):
+    return {"at": 2.0, "preview": "w2 w3 w4", **kw}
+
+
+def test_a_split_note_needs_a_cut_inside_an_unedited_segment_and_a_preview(db_session):
+    meeting, _, _, first, _ = seed_spoken(db_session)
+    client = TestClient(app)
+
+    assert post_note(client, meeting, kind="split", payload=split_payload()).status_code == 200
+    target = post_note(client, meeting, kind="split", payload=split_payload(target_label="SPEAKER_01"))
+    assert target.status_code == 200
+    assert target.json()["payload"] == split_payload(target_label="SPEAKER_01")
+    named = post_note(client, meeting, kind="split", payload=split_payload(new_name="Carla"))
+    assert named.status_code == 200
+
+    for bad in (
+        split_payload(at=0.0), split_payload(at=5.0), split_payload(at=9.0),
+        split_payload(at="2"), split_payload(at=True),
+        {"at": 2.0}, split_payload(preview="  "),
+        split_payload(target_label="SPEAKER_09"), split_payload(new_name=" "),
+        split_payload(target_label="SPEAKER_01", new_name="Carla"),
+    ):
+        assert post_note(client, meeting, kind="split", payload=bad).status_code == 400, bad
+    away = post_note(client, meeting, kind="split", payload=split_payload(), start_time=30.0, end_time=35.0)
+    assert away.status_code == 400
+
+    first.is_edited = True
+    db_session.commit()
+    edited = post_note(client, meeting, kind="split", payload=split_payload())
+    assert edited.status_code == 400
+    assert edited.json()["detail"] == "the Segment is edited; revert it first"
+
+
+def test_a_user_cannot_leave_a_split_note(db_session):
+    meeting, *_ = seed_spoken(db_session)
+
+    response = post_note(TestClient(app), meeting, kind="split", payload=split_payload(), author="user")
+
+    assert response.status_code == 400
+
+
+def test_accepting_a_split_note_cuts_the_segment_and_hands_the_second_half_to_the_target(
+    db_session, isolated_preferences,
+):
+    meeting, _, bia, first, second = seed_spoken(db_session)
+    note = add_note(db_session, meeting, kind="split", body="outra voz",
+                    payload=split_payload(target_label="SPEAKER_01"))
+
+    response = accept(TestClient(app), note)
+
+    assert response.status_code == 200
+    db_session.refresh(first)
+    db_session.refresh(second)
+    db_session.refresh(note)
+    db_session.refresh(meeting)
+    assert first.text == "w0 w1"
+    halves = db_session.query(Segment).filter_by(meeting_id=meeting.id, order=1).one()
+    assert (halves.text, halves.speaker_id) == ("w2 w3 w4", bia.id)
+    assert second.order == 2
+    assert meeting.split_times == [2.0]
+    assert note.status == "accepted"
+
+
+def test_accepting_a_split_note_to_a_new_speaker_adds_it_first(db_session, isolated_preferences):
+    meeting, *_ = seed_spoken(db_session)
+    note = add_note(db_session, meeting, kind="split", body="uma terceira voz",
+                    payload=split_payload(new_name="Carla"))
+
+    assert accept(TestClient(app), note).status_code == 200
+
+    carla = db_session.query(Speaker).filter_by(label="MANUAL_1").one()
+    halves = db_session.query(Segment).filter_by(meeting_id=meeting.id, order=1).one()
+    assert (carla.display_name, halves.speaker_id) == ("Carla", carla.id)
+
+
+def test_accepting_a_split_note_without_a_target_keeps_the_speaker(db_session, isolated_preferences):
+    meeting, ana, *_ = seed_spoken(db_session)
+    note = add_note(db_session, meeting, kind="split", body="x", payload=split_payload())
+
+    assert accept(TestClient(app), note).status_code == 200
+
+    halves = db_session.query(Segment).filter_by(meeting_id=meeting.id, order=1).one()
+    assert halves.speaker_id == ana.id
+
+
+def test_accepting_a_split_note_after_the_segment_was_edited_is_a_conflict(db_session, isolated_preferences):
+    meeting, _, _, first, _ = seed_spoken(db_session)
+    note = add_note(db_session, meeting, kind="split", body="x", payload=split_payload())
+    first.is_edited = True
+    db_session.commit()
+
+    assert accept(TestClient(app), note).status_code == 409
+
+    db_session.refresh(note)
+    assert note.status == "open"
+
+
+def test_accepting_a_split_note_with_no_segment_at_the_range_is_a_conflict(db_session, isolated_preferences):
+    meeting, *_ = seed_spoken(db_session)
+    note = add_note(db_session, meeting, kind="split", body="x", start_time=30.0, end_time=35.0,
+                    payload=split_payload())
+
+    assert accept(TestClient(app), note).status_code == 409
+
+
 def test_json_export_carries_every_note_with_its_status(db_session):
     meeting, *_ = seed(db_session)
     add_note(db_session, meeting, body="aberta")
