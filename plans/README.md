@@ -76,7 +76,7 @@ Profile only when asked; agent edits teach Vocabulary only with `--learn`.
 | 025 | Validated, reversible Segment and Speaker edits | P1 | M | — | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 | 026 | A Meeting's Words with their confidence | P2 | S | — | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 | 027 | Live Meeting page updates on API edits | P1 | S | 025 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09; manual curl check not run) |
-| 028 | Names and reassignments survive Reprocessing (issue 12) | P1 | M | 025 | TODO |
+| 028 | Names and reassignments survive Reprocessing (issue 12) | P1 | M | 025 | DONE (executor Claude Sonnet, one revision: one-to-one nearest matching, which also fixed edited text copied onto a neighbour; merged 2026-10-09) |
 | 029 | Stdlib CLI: run and read Meetings | P1 | M | 024, 026 | TODO |
 | 030 | CLI edits, `suspects`, operator skill | P1 | M | 025–029 | TODO |
 
