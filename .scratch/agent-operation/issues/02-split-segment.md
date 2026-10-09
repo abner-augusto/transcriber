@@ -8,7 +8,8 @@ juntadas".
 **Problem:** when one Segment holds two people, the only tools are `assign`,
 which moves the whole Segment, and editing its text. Nothing cuts a Segment.
 
-**Status:** ready-for-agent (plans 035, 036). The design session ran on
+**Status:** done for shape 1 (plans 035, 036 merged 2026-10-09). Shape 2
+(Diarizer tuning) is still open, waiting for a bench session. The design session ran on
 2026-10-09. The user did not answer the questions, so the recommended options
 were taken:
 - shape 1, the manual split, now; shape 2 waits for a bench session;
