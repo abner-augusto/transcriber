@@ -26,7 +26,9 @@ Reprocessing.
 **Blocked by:** none. Coordinate with plan 014, which touches the same rebuild
 path.
 
-**Status:** needs-exploration
+**Status:** done (plan 028)
+
+Decisions: manual names carry by label for Re-identify and Reapply Vocabulary, by Turn overlap (mutual best, at least 50% of the old speaking time) for Re-diarize and full processing, and `HOST` always by label. Segment reassignments are re-applied after Re-identify and Reapply Vocabulary and dropped after Re-diarize. Renaming saves no Voice Profile and the UI shows no warning.
 
 **Questions for the session:**
 - On Re-diarize, should manual names be matched to new Speakers by Turn overlap

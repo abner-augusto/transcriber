@@ -3,6 +3,15 @@
 from sqlalchemy import text
 
 
+def _add_column(table: str, column: str, ddl: str):
+    """An idempotent ADD COLUMN: SQLite has no IF NOT EXISTS for columns."""
+    def apply(connection):
+        existing = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    return apply
+
+
 # Segment search indexes the implicit rowid of ``segments``, whose primary key is
 # TEXT. SQLite documents that VACUUM *may* renumber such rowids; SQLite 3.50
 # preserves them (checked 2026-09-25, including VACUUM INTO). If search ever
@@ -37,6 +46,11 @@ _MIGRATIONS = (
             "INSERT INTO segments_fts(segments_fts) VALUES ('rebuild')",
         ),
     ),
+    (
+        2,
+        "segment speaker_edited",
+        (_add_column("segments", "speaker_edited", "BOOLEAN NOT NULL DEFAULT 0"),),
+    ),
 )
 
 
@@ -64,7 +78,10 @@ def upgrade(engine) -> None:
             if version in applied:
                 continue
             for statement in statements:
-                connection.exec_driver_sql(statement)
+                if callable(statement):
+                    statement(connection)
+                else:
+                    connection.exec_driver_sql(statement)
             connection.execute(
                 text("INSERT INTO schema_migrations(version, name) VALUES (:version, :name)"),
                 {"version": version, "name": name},

@@ -111,7 +111,10 @@ def process_meeting_task(meeting_id: str, job_id: str):
             )
             # Step 6: Save results (preserving edits)
             current.progress(90, "Saving results...")
-            rebuild_speakers_and_segments(db, meeting, aligned, speaker_info, speaker_id_service)
+            # A first run has no manual Speakers; a re-run of a processed Meeting has new Turns.
+            rebuild_speakers_and_segments(
+                db, meeting, aligned, speaker_info, speaker_id_service, keep="overlap"
+            )
 
         return {"status": "completed", "meeting_id": meeting_id}
 

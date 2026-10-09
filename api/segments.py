@@ -107,6 +107,7 @@ def update_segment_speaker(segment_id: str, req: UpdateSegmentSpeakerRequest, db
 
     previous = db.get(Speaker, segment.speaker_id) if segment.speaker_id else None
     segment.speaker_id = speaker.id
+    segment.speaker_edited = True
     db.flush()
     if previous is not None:
         refresh_speaker_stats(db, previous)
