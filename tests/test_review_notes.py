@@ -77,6 +77,44 @@ def test_fresh_database_has_review_notes_table(tmp_path, monkeypatch):
     engine.dispose()
 
 
+def test_segment_for_range_finds_the_segment_an_exact_range_points_at(db_session):
+    from meeting_store import segment_for_range
+
+    meeting, _, _, first, second = seed(db_session)
+
+    assert segment_for_range(db_session, meeting.id, 0.0, 5.0).id == first.id
+    assert segment_for_range(db_session, meeting.id, 10.0, 15.0).id == second.id
+
+
+def test_segment_for_range_tolerates_a_one_second_shift(db_session):
+    from meeting_store import segment_for_range
+
+    meeting, _, _, first, _ = seed(db_session)
+
+    assert segment_for_range(db_session, meeting.id, 1.0, 6.0).id == first.id
+
+
+def test_segment_for_range_is_none_five_seconds_away(db_session):
+    from meeting_store import segment_for_range
+
+    meeting, *_ = seed(db_session)
+
+    assert segment_for_range(db_session, meeting.id, 5.0, 10.0) is None
+
+
+def test_segment_for_range_prefers_the_nearer_neighbour(db_session):
+    from meeting_store import segment_for_range
+
+    meeting, ana, _, first, _ = seed(db_session)
+    close = Segment(meeting_id=meeting.id, speaker_id=ana.id, order=2, start_time=5.5,
+                    end_time=9.0, text="vizinho", original_text="vizinho")
+    db_session.add(close)
+    db_session.commit()
+
+    assert segment_for_range(db_session, meeting.id, 5.4, 8.9).id == close.id
+    assert segment_for_range(db_session, meeting.id, 0.2, 5.1).id == first.id
+
+
 def test_duplicating_a_meeting_does_not_copy_notes(db_session, monkeypatch, tmp_path):
     audio = tmp_path / "meeting.wav"
     audio.write_bytes(b"RIFF")

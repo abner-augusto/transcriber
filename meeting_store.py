@@ -214,6 +214,17 @@ def _claim_nearest(records, spans) -> dict[int, object]:
     return claimed
 
 
+def segment_for_range(db, meeting_id, start, end):
+    """The Segment a time range points at now: the nearest within EDIT_TIME_TOLERANCE, or None."""
+    segments = (
+        db.query(Segment).filter(Segment.meeting_id == meeting_id).order_by(Segment.order).all()
+    )
+    claimed = _claim_nearest(
+        [(start, end, None)], [(segment.start_time, segment.end_time) for segment in segments]
+    )
+    return segments[next(iter(claimed))] if claimed else None
+
+
 def _write_segments(db, meeting, aligned, speakers: dict[str, Speaker], edits) -> list[Segment]:
     written = []
     edited_texts = _claim_nearest(edits, [(seg["start"], seg["end"]) for seg in aligned])
