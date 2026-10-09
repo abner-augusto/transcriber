@@ -144,6 +144,60 @@ def test_show_time_range_and_speaker_filters(db_session, api, capsys):
     assert "meio" not in out
 
 
+def seed_grep_meeting(db):
+    meeting = seed_meeting(db)
+    meeting.vocabulary = "Garrah, Habite-se"
+    ana = add_speaker(db, meeting, "SPEAKER_00", "Ana")
+    bruno = add_speaker(db, meeting, "SPEAKER_01", "Bruno")
+    add_segment(db, meeting, ana, 0, 0.0, 30.0, "Falou com a LOURDES ontem")
+    add_segment(db, meeting, bruno, 1, 70.0, 90.0, "A Lourdes confirmou")
+    add_segment(db, meeting, ana, 2, 200.0, 220.0, "Nada a ver")
+    db.commit()
+    return meeting
+
+
+def test_show_range_prints_only_segments(db_session, api, capsys):
+    meeting = seed_grep_meeting(db_session)
+
+    _, out, _ = run(["show", meeting.id, "--from", "1:00", "--to", "2:00"], api, capsys)
+
+    assert "Lourdes confirmou" in out
+    assert "vocabulary:" not in out
+    assert "SPEAKER_00" not in out and meeting.id not in out
+
+
+def test_show_grep_filters_segments(db_session, api, capsys):
+    meeting = seed_grep_meeting(db_session)
+
+    _, out, _ = run(["show", meeting.id, "--grep", "lourdes"], api, capsys)
+    assert "LOURDES ontem" in out and "Lourdes confirmou" in out
+    assert "Nada a ver" not in out
+
+    _, out, _ = run(["show", meeting.id, "--grep", "lourdes", "--speaker", "Bruno"], api, capsys)
+    assert "Lourdes confirmou" in out
+    assert "LOURDES ontem" not in out
+
+
+def test_show_grep_rejects_an_invalid_pattern(db_session, api, capsys):
+    meeting = seed_grep_meeting(db_session)
+
+    code, _, err = run(["show", meeting.id, "--grep", "(unclosed"], api, capsys)
+
+    assert code == 1
+    assert "invalid --grep pattern" in err
+
+
+def test_show_without_filters_keeps_header(db_session, api, capsys):
+    meeting = seed_grep_meeting(db_session)
+
+    _, out, _ = run(["show", meeting.id], api, capsys)
+
+    assert meeting.id in out
+    assert "vocabulary:" in out
+    assert "SPEAKER_00" in out
+    assert "Nada a ver" in out
+
+
 def test_speakers_unnamed_lists_unidentified_with_longest_samples(db_session, api, capsys):
     meeting = seed_meeting(db_session)
     anon = add_speaker(db_session, meeting, "SPEAKER_00", None, None, segment_count=5, total_speaking_time=70.0)

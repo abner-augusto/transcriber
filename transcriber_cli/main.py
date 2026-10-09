@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import time
 
@@ -151,10 +152,21 @@ def cmd_show(api, args):
         speaker = resolve_speaker(meeting, args.speaker)
         segments = [s for s in segments if s["speaker_id"] == speaker["id"]]
     segments = [s for s in segments if _overlaps(s, args.start, args.end)]
+    if args.grep is not None:
+        try:
+            pattern = re.compile(args.grep, re.IGNORECASE)
+        except re.error as error:
+            raise ApiError(400, f"invalid --grep pattern: {error}")
+        segments = [s for s in segments if pattern.search(s["text"] or "")]
     if args.limit is not None:
         segments = segments[: args.limit]
-    lines = meeting_header(meeting)
-    lines += ["", *(speaker_line(s) for s in meeting["speakers"]), ""]
+    filtered = any(
+        value is not None for value in (args.speaker, args.start, args.end, args.grep, args.limit)
+    )
+    lines = []
+    if not filtered:
+        lines = meeting_header(meeting)
+        lines += ["", *(speaker_line(s) for s in meeting["speakers"]), ""]
     lines += [segment_line(s) for s in segments]
     emit(args, {**meeting, "segments": segments}, lines)
     return 0
@@ -356,7 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Times: SS, MM:SS, or H:MM:SS.",
     )
     parser.add_argument("--json", action="store_true", default=False,
-                        help="print the API's JSON instead of text (--from/--to/--speaker/--limit still filter Segments)")
+                        help="print the API's JSON instead of text (--from/--to/--speaker/--grep/--limit still filter Segments)")
     sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
     def command(name, func, help, meeting=True):
@@ -394,10 +406,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--timeout", type=float, metavar="SECONDS", help="give up after this long (default: never)")
     p.add_argument("--interval", type=float, default=2.0, metavar="SECONDS")
 
-    p = command("show", cmd_show, "the Meeting header, its Speakers, and its Segments, one line each")
+    p = command("show", cmd_show,
+                "the Segments, one line each; a whole-Meeting read (no filter) starts with the header and Speakers")
     p.add_argument("--from", dest="start", type=parse_clock, metavar="T", help="Segments ending after T")
     p.add_argument("--to", dest="end", type=parse_clock, metavar="T", help="Segments starting before T")
     p.add_argument("--speaker", metavar="S")
+    p.add_argument("--grep", metavar="PATTERN",
+                   help="only Segments whose text matches this case-insensitive regular expression")
     p.add_argument("--limit", type=int, metavar="N", help="at most N Segments")
 
     p = command("speakers", cmd_speakers, "one line per Speaker")
