@@ -603,3 +603,16 @@ def test_suspects_lists_vocabulary_corrections(db_session, api, capsys):
     assert "CORRECTED BY VOCABULARY" in out
     assert "  #77 01:12 Galo->Garrah (rule similar)" in out
 
+
+
+def test_piped_stdout_is_line_buffered():
+    import io
+
+    from transcriber_cli.__main__ import _configure_streams
+
+    pipe = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+
+    _configure_streams([pipe])
+
+    assert pipe.line_buffering is True
+    assert pipe.encoding == "utf-8"
