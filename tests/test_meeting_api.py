@@ -682,3 +682,175 @@ def test_read_routes_publish_nothing(db_session):
     )
 
     assert events == []
+
+
+@pytest.fixture
+def isolated_preferences(monkeypatch, tmp_path):
+    """Keep split and unsplit off the real Preferences file."""
+    import config
+    import preferences
+
+    monkeypatch.setattr(config.settings, "storage_path", str(tmp_path / "storage"))
+    monkeypatch.setattr(preferences, "LEGACY_PREFERENCES_PATH", tmp_path / "no-legacy-file")
+
+
+def _meeting_to_split(db_session, status=MeetingStatus.COMPLETED):
+    """Six Words w0..w5 (a Word every 0.5 s); Segment 0 holds w0..w3, Segment 1 holds w4 w5."""
+    meeting = Meeting(
+        title="Split",
+        status=status,
+        raw_transcription={
+            "words": [
+                {"start": i * 0.5, "end": i * 0.5 + 0.4, "text": f" w{i}", "confidence": 0.9}
+                for i in range(6)
+            ]
+        },
+    )
+    db_session.add(meeting)
+    db_session.flush()
+    first = Speaker(meeting_id=meeting.id, label="SPEAKER_00", display_name="A")
+    second = Speaker(meeting_id=meeting.id, label="SPEAKER_01", display_name="B")
+    db_session.add_all([first, second])
+    db_session.flush()
+    joined = Segment(
+        meeting_id=meeting.id, speaker_id=first.id, start_time=0.0, end_time=1.9,
+        text="w0 w1 w2 w3", original_text="w0 w1 w2 w3", order=0,
+    )
+    after = Segment(
+        meeting_id=meeting.id, speaker_id=first.id, start_time=2.0, end_time=2.9,
+        text="w4 w5", original_text="w4 w5", order=1,
+    )
+    first.segment_count, first.total_speaking_time = 2, 2.8
+    db_session.add_all([joined, after])
+    db_session.commit()
+    return meeting, first, second, joined, after
+
+
+def test_a_split_snaps_to_the_nearest_word_start(db_session, isolated_preferences):
+    meeting, _, _, joined, after = _meeting_to_split(db_session)
+
+    response = TestClient(app).post(f"/api/segments/{joined.id}/split", json={"at": 0.9})
+
+    assert response.status_code == 200
+    halves = response.json()["segments"]
+    assert [(h["text"], h["start_time"], h["end_time"], h["order"]) for h in halves] == [
+        ("w0 w1", 0.0, 0.9, 0),
+        ("w2 w3", 1.0, 1.9, 1),
+    ]
+    assert halves[0]["id"] == joined.id
+    db_session.refresh(after)
+    db_session.refresh(meeting)
+    assert after.order == 2
+    assert meeting.split_times == [1.0]
+
+
+def test_a_split_can_hand_the_second_half_to_another_speaker(db_session, isolated_preferences):
+    meeting, first, second, joined, _ = _meeting_to_split(db_session)
+
+    response = TestClient(app).post(
+        f"/api/segments/{joined.id}/split", json={"at": 1.0, "speaker_id": second.id},
+    )
+
+    assert response.status_code == 200
+    kept, moved = response.json()["segments"]
+    assert (kept["speaker_id"], kept["speaker_edited"]) == (first.id, False)
+    assert (moved["speaker_id"], moved["speaker_edited"]) == (second.id, True)
+    db_session.refresh(first)
+    db_session.refresh(second)
+    assert first.segment_count == 2
+    assert first.total_speaking_time == pytest.approx(0.9 + 0.9)
+    assert second.segment_count == 1
+    assert second.total_speaking_time == pytest.approx(0.9)
+
+
+def test_a_split_to_a_speaker_of_another_meeting_is_rejected(db_session, isolated_preferences):
+    _, _, _, joined, _ = _meeting_to_split(db_session)
+    _, stranger, _ = _meeting_with_speakers(db_session)
+    db_session.commit()
+    client = TestClient(app)
+
+    wrong_meeting = client.post(
+        f"/api/segments/{joined.id}/split", json={"at": 1.0, "speaker_id": stranger.id},
+    )
+    missing = client.post(
+        f"/api/segments/{joined.id}/split", json={"at": 1.0, "speaker_id": "nobody"},
+    )
+
+    assert (wrong_meeting.status_code, missing.status_code) == (400, 404)
+
+
+def test_a_split_of_an_edited_segment_is_refused(db_session, isolated_preferences):
+    meeting, _, _, joined, _ = _meeting_to_split(db_session)
+    joined.is_edited = True
+    db_session.commit()
+
+    response = TestClient(app).post(f"/api/segments/{joined.id}/split", json={"at": 1.0})
+
+    assert response.status_code == 409
+    assert "revert the edit first" in response.json()["detail"]
+
+
+def test_a_one_word_segment_has_no_boundary_to_split_at(db_session, isolated_preferences):
+    _, _, _, _, after = _meeting_to_split(db_session)
+    after.text = after.original_text = "w4"
+    after.end_time = 2.4
+    db_session.commit()
+
+    response = TestClient(app).post(f"/api/segments/{after.id}/split", json={"at": 2.2})
+
+    assert response.status_code == 409
+    assert "no Word boundary" in response.json()["detail"]
+
+
+def test_a_split_is_refused_while_the_meeting_is_processing(db_session, isolated_preferences):
+    _, _, _, joined, _ = _meeting_to_split(db_session, status=MeetingStatus.PROCESSING)
+
+    response = TestClient(app).post(f"/api/segments/{joined.id}/split", json={"at": 1.0})
+
+    assert response.status_code == 409
+
+
+def test_a_missing_segment_cannot_be_split(db_session, isolated_preferences):
+    assert TestClient(app).post("/api/segments/nope/split", json={"at": 1.0}).status_code == 404
+    assert TestClient(app).post("/api/segments/nope/unsplit").status_code == 404
+
+
+def test_unsplit_joins_the_halves_again(db_session, isolated_preferences):
+    meeting, first, _, joined, after = _meeting_to_split(db_session)
+    client = TestClient(app)
+    client.post(f"/api/segments/{joined.id}/split", json={"at": 1.0})
+
+    response = client.post(f"/api/segments/{joined.id}/unsplit")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["id"], body["text"], body["start_time"], body["end_time"], body["order"]) == (
+        joined.id, "w0 w1 w2 w3", 0.0, 1.9, 0,
+    )
+    db_session.expire_all()
+    assert [(s.text, s.order) for s in db_session.query(Segment).order_by(Segment.order)] == [
+        ("w0 w1 w2 w3", 0), ("w4 w5", 1),
+    ]
+    assert db_session.get(Meeting, meeting.id).split_times == []
+    assert db_session.get(Speaker, first.id).segment_count == 2
+
+
+def test_unsplit_without_a_split_is_409(db_session, isolated_preferences):
+    _, _, _, joined, _ = _meeting_to_split(db_session)
+
+    response = TestClient(app).post(f"/api/segments/{joined.id}/unsplit")
+
+    assert response.status_code == 409
+    assert "no Split after this Segment" in response.json()["detail"]
+
+
+def test_unsplit_refuses_an_edited_half(db_session, isolated_preferences):
+    _, _, _, joined, _ = _meeting_to_split(db_session)
+    client = TestClient(app)
+    client.post(f"/api/segments/{joined.id}/split", json={"at": 1.0})
+    client.put(f"/api/segments/{joined.id}", json={"text": "novo", "learn": False})
+
+    response = client.post(f"/api/segments/{joined.id}/unsplit")
+
+    assert response.status_code == 409
+    assert "revert the edit first" in response.json()["detail"]
