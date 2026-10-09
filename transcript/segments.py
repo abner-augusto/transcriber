@@ -6,6 +6,7 @@ Pure: no database, no Redis, no Engine.
 """
 
 from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass
 import math
 
@@ -247,6 +248,7 @@ def build_segments(
     words: list[Word],
     turns: list[Turn],
     switch_penalty: float = SPEAKER_SWITCH_PENALTY,
+    splits: Sequence[float] = (),
 ) -> list[dict]:
     """Derive the Segments a reader sees from a Transcriber's Words and a Diarizer's Turns.
 
@@ -257,11 +259,14 @@ def build_segments(
     swallowed by whichever Speaker owned most of the sentence, while isolated single-word
     flaps are smoothed away.
 
+    A Split is a time the user forced a break at: a Segment never spans one.
+
     Returns {start, end, text, speaker, confidence} dicts in time order.
     """
     if not words:
         return []
 
+    splits = sorted(splits)
     speakers = smooth_word_speakers(words, turns, switch_penalty=switch_penalty)
     attributed = list(zip(words, speakers))
 
@@ -269,7 +274,7 @@ def build_segments(
     current: list[tuple[Word, str]] = []
 
     for word, speaker in attributed:
-        if current and _breaks_before(current, word, speaker):
+        if current and _breaks_before(current, word, speaker, splits):
             segments.append(_close(current))
             current = []
         current.append((word, speaker))
@@ -285,6 +290,7 @@ def derive_segments(
     diarization: MeetingDiarization | None,
     switch_penalty: float = SPEAKER_SWITCH_PENALTY,
     correction: VocabularyCorrection | None = None,
+    splits: Sequence[float] = (),
 ) -> list[dict]:
     """The Segments a reader sees for a Meeting's Words and its diarization.
 
@@ -293,7 +299,7 @@ def derive_segments(
     """
     turns = diarization.attribution_turns if diarization is not None else []
     corrected_words, corrections = correction.apply(words) if correction else (words, [])
-    segments = build_segments(corrected_words, turns, switch_penalty=switch_penalty)
+    segments = build_segments(corrected_words, turns, switch_penalty=switch_penalty, splits=splits)
     for segment in segments:
         segment_corrections = [
             item for item in corrections
@@ -312,10 +318,15 @@ def derive_segments(
     return segments
 
 
-def _breaks_before(current: list[tuple[Word, str]], word: Word, speaker: str) -> bool:
+def _breaks_before(
+    current: list[tuple[Word, str]], word: Word, speaker: str, splits: Sequence[float],
+) -> bool:
     last_word, last_speaker = current[-1]
 
     if speaker != last_speaker:
+        return True
+    i = bisect_right(splits, last_word.start)
+    if i < len(splits) and splits[i] <= word.start:
         return True
     if last_word.text.rstrip().endswith(tuple(SENTENCE_ENDINGS)):
         return True

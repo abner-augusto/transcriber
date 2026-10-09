@@ -49,7 +49,8 @@ def _reprocess_meeting(current: RunningJob, rerun_diarization: bool):
         db, meeting, enabled=run_config.vocabulary_correction.enabled
     )
     aligned = derive_segments(
-        words, diarization, switch_penalty=run_config.speaker_switch_penalty, correction=correction
+        words, diarization, switch_penalty=run_config.speaker_switch_penalty, correction=correction,
+        splits=meeting.split_times or [],
     )
 
     # Speaker naming (Participant N, overridden by voice profile matches)
@@ -124,6 +125,7 @@ def reapply_vocabulary_task(meeting_id: str, job_id: str):
                 words, diarization,
                 switch_penalty=run_config.speaker_switch_penalty,
                 correction=correction,
+                splits=meeting.split_times or [],
             )
             current.progress(80, "Saving corrected Segments...")
             replace_segments(db, meeting, aligned)
