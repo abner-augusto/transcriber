@@ -60,6 +60,7 @@ export function noteActions(note: ReviewNote): NoteAction[] {
       return ["accept", "acceptWithoutProfile", "dismiss"];
     case "speaker_move":
     case "speaker_merge":
+    case "split":
       return ["accept", "dismiss"];
     case "comment":
       return note.author === "user" ? [] : ["done"];
@@ -107,6 +108,10 @@ export function noteSummary(note: ReviewNote): string {
       return `→ ${p.target_label ?? `new: ${p.new_name}`}`;
     case "speaker_merge":
       return `${p.source_label} → ${p.target_label}`;
+    case "split": {
+      const target = p.target_label ?? (p.new_name !== undefined ? `new: ${p.new_name}` : null);
+      return `split before "${p.preview}"${target === null ? "" : ` → ${target}`}`;
+    }
     default:
       return note.body;
   }

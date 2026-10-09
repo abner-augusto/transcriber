@@ -24,7 +24,8 @@ export type ReviewNoteKind =
   | "text"
   | "speaker_name"
   | "speaker_move"
-  | "speaker_merge";
+  | "speaker_merge"
+  | "split";
 
 export type ReviewNoteStatus = "open" | "answered" | "accepted" | "dismissed" | "done";
 
@@ -36,7 +37,7 @@ export interface ReviewNote {
   author: "agent" | "user" | "system";
   kind: ReviewNoteKind;
   body: string;
-  payload: Record<string, string> | null;
+  payload: Record<string, string | number> | null;
   status: ReviewNoteStatus;
   answer: string | null;
   reply: string | null;

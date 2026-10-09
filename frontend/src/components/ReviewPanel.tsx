@@ -26,6 +26,7 @@ const KIND_LABELS: Record<ReviewNote["kind"], string> = {
   speaker_name: "name",
   speaker_move: "move",
   speaker_merge: "merge",
+  split: "split",
 };
 
 const ACTION_LABELS: Record<Exclude<NoteAction, "answer">, string> = {
