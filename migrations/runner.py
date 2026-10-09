@@ -78,7 +78,10 @@ def upgrade(engine) -> None:
             if version in applied:
                 continue
             for statement in statements:
-                statement(connection) if callable(statement) else connection.exec_driver_sql(statement)
+                if callable(statement):
+                    statement(connection)
+                else:
+                    connection.exec_driver_sql(statement)
             connection.execute(
                 text("INSERT INTO schema_migrations(version, name) VALUES (:version, :name)"),
                 {"version": version, "name": name},

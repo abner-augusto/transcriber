@@ -261,6 +261,54 @@ def test_a_merge_survives_reidentify(monkeypatch, tmp_path):
     assert _speaker(harness, meeting_id, "SPEAKER_01") is None
 
 
+def test_claim_nearest_pairs_each_record_with_at_most_one_segment():
+    from meeting_store import _claim_nearest
+
+    spans = [(0.0, 1.0), (0.5, 1.2), (5.0, 6.0)]
+
+    assert _claim_nearest([(0.0, 1.0, "a")], spans) == {0: "a"}
+    # An exact match wins over a nearer-than-tolerance neighbour.
+    assert _claim_nearest([(0.5, 1.2, "b")], spans) == {1: "b"}
+    # Two records never share a Segment: the closer one claims it.
+    assert _claim_nearest([(0.1, 1.0, "far"), (0.0, 1.0, "exact")], [(0.0, 1.0)]) == {0: "exact"}
+    # Nothing within tolerance on both ends claims nothing.
+    assert _claim_nearest([(0.0, 3.0, "x")], [(0.0, 1.0)]) == {}
+    assert _claim_nearest([], spans) == {}
+
+
+def test_a_reassignment_moves_only_the_nearest_segment(monkeypatch, tmp_path):
+    harness, meeting_id = _processed(monkeypatch, tmp_path)
+    with harness.session_factory() as db:
+        db.add(Speaker(
+            meeting_id=meeting_id, label="MANUAL_1", display_name="Joao", color="#123456",
+            identified_by="manual", segment_count=0, total_speaking_time=0.0,
+        ))
+        db.commit()
+    # Segments 0 (0.1-0.8) and 1 (0.95-1.2) are within EDIT_TIME_TOLERANCE of each other.
+    _reassign(harness, meeting_id, 0, "MANUAL_1")
+
+    _run(harness, meeting_id, reidentify_task, JobType.REIDENTIFY)
+
+    assert _owner_labels(harness, meeting_id) == ["MANUAL_1", "SPEAKER_01", "SPEAKER_00"]
+    flagged = [s.order for s in harness.load(meeting_id).segments if s.speaker_edited]
+    assert flagged == [0]
+
+
+def test_an_edit_carries_to_one_segment_only(monkeypatch, tmp_path):
+    harness, meeting_id = _processed(monkeypatch, tmp_path)
+    with harness.session_factory() as db:
+        segment = db.query(Segment).filter_by(meeting_id=meeting_id, order=0).one()
+        segment.text = "um dois tres corrigido"
+        segment.is_edited = True
+        db.commit()
+
+    _run(harness, meeting_id, reapply_vocabulary_task, JobType.REAPPLY_VOCABULARY)
+
+    segments = sorted(harness.load(meeting_id).segments, key=lambda s: s.order)
+    assert [s.text for s in segments if s.is_edited] == ["um dois tres corrigido"]
+    assert segments[1].text.strip() == "quatro"
+
+
 def test_stats_are_recounted_after_overrides(monkeypatch, tmp_path):
     harness, meeting_id = _processed(monkeypatch, tmp_path)
     _reassign(harness, meeting_id, 2, "SPEAKER_01")

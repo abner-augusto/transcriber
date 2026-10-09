@@ -190,14 +190,35 @@ def _edited_segments(db, meeting) -> list[tuple[float, float, str]]:
     ]
 
 
+def _claim_nearest(records, spans) -> dict[int, object]:
+    """Pair each (start, end, payload) record with at most one span, and each span with at most one record.
+
+    A span is a candidate when both its start and end are within EDIT_TIME_TOLERANCE
+    of the record's. Records claim greedily, nearest first (by |Δstart| + |Δend|), so
+    an exact match always wins and a neighbour is never dragged along.
+    Returns {span index: payload}.
+    """
+    candidates = sorted(
+        (abs(span[0] - start) + abs(span[1] - end), record_index, span_index)
+        for record_index, (start, end, _) in enumerate(records)
+        for span_index, span in enumerate(spans)
+        if abs(span[0] - start) < EDIT_TIME_TOLERANCE and abs(span[1] - end) < EDIT_TIME_TOLERANCE
+    )
+    claimed: dict[int, object] = {}
+    used_records = set()
+    for _, record_index, span_index in candidates:
+        if record_index in used_records or span_index in claimed:
+            continue
+        used_records.add(record_index)
+        claimed[span_index] = records[record_index][2]
+    return claimed
+
+
 def _write_segments(db, meeting, aligned, speakers: dict[str, Speaker], edits) -> list[Segment]:
     written = []
+    edited_texts = _claim_nearest(edits, [(seg["start"], seg["end"]) for seg in aligned])
     for i, seg in enumerate(aligned):
-        edited_text = next((
-            text for start, end, text in edits
-            if abs(seg["start"] - start) < EDIT_TIME_TOLERANCE
-            and abs(seg["end"] - end) < EDIT_TIME_TOLERANCE
-        ), None)
+        edited_text = edited_texts.get(i)
         speaker = speakers.get(seg["speaker"])
         segment = Segment(
             meeting_id=meeting.id,
@@ -219,16 +240,13 @@ def _write_segments(db, meeting, aligned, speakers: dict[str, Speaker], edits) -
 
 def _finish_rebuild(db, speakers: dict[str, Speaker], written, reassigned) -> None:
     """Re-apply Segment reassignments, recount every Speaker, drop diarized ones left empty."""
-    for segment in written:
-        target = next((
-            label for start, end, label in reassigned
-            if label in speakers
-            and abs(segment.start_time - start) < EDIT_TIME_TOLERANCE
-            and abs(segment.end_time - end) < EDIT_TIME_TOLERANCE
-        ), None)
-        if target is not None:
-            segment.speaker_id = speakers[target].id
-            segment.speaker_edited = True
+    targets = _claim_nearest(
+        [record for record in reassigned if record[2] in speakers],
+        [(segment.start_time, segment.end_time) for segment in written],
+    )
+    for index, label in targets.items():
+        written[index].speaker_id = speakers[label].id
+        written[index].speaker_edited = True
     db.flush()
 
     for label, speaker in list(speakers.items()):
