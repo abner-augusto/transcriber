@@ -15,6 +15,33 @@ export interface Meeting {
   segment_count: number;
   speakers?: Speaker[];
   segments?: Segment[];
+  review_notes?: ReviewNote[];
+}
+
+export type ReviewNoteKind =
+  | "comment"
+  | "question"
+  | "text"
+  | "speaker_name"
+  | "speaker_move"
+  | "speaker_merge";
+
+export type ReviewNoteStatus = "open" | "answered" | "accepted" | "dismissed" | "done";
+
+export interface ReviewNote {
+  id: string;
+  meeting_id: string;
+  start_time: number;
+  end_time: number;
+  author: "agent" | "user" | "system";
+  kind: ReviewNoteKind;
+  body: string;
+  payload: Record<string, string> | null;
+  status: ReviewNoteStatus;
+  answer: string | null;
+  reply: string | null;
+  created_at: string | null;
+  resolved_at: string | null;
 }
 
 export interface Speaker {
