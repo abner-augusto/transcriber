@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-import type { Segment, Speaker } from "../types";
-import { updateSegmentText } from "../api";
+import { Fragment, useState, useRef, useEffect, useMemo } from "react";
+import type { ReviewNote, Segment, Speaker } from "../types";
+import { createUserComment, updateSegmentText } from "../api";
 import { useStore } from "../store";
 
 function formatTime(seconds: number): string {
@@ -14,12 +14,18 @@ interface Props {
   speakers: Speaker[];
   audioRef: React.RefObject<HTMLAudioElement | null>;
   onUpdate: () => void;
+  meetingId: string;
+  notesBySegment?: Map<string, ReviewNote[]>;
+  onShowNotes?: () => void;
 }
 
-export default function TranscriptView({ segments, speakers, audioRef, onUpdate }: Props) {
+export default function TranscriptView({ segments, speakers, audioRef, onUpdate, meetingId, notesBySegment, onShowNotes }: Props) {
   const { currentTime } = useStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  // Writing a Review Note is separate from editing text: they never share editingId.
+  const [notingId, setNotingId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +61,20 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate 
       }
     }
     setEditingId(null);
+  }
+
+  async function saveNote(seg: Segment) {
+    const body = noteText.trim();
+    if (body) {
+      try {
+        await createUserComment(meetingId, seg.start_time, seg.end_time, body);
+        onUpdate();
+      } catch (err) {
+        console.error("Failed to save note:", err);
+        return;
+      }
+    }
+    setNotingId(null);
   }
 
   function startEdit(seg: Segment) {
@@ -117,9 +137,10 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate 
             <div className="pl-5 space-y-1">
               {group.segments.map((seg) => {
                 const isActive = currentTime >= seg.start_time && currentTime < seg.end_time;
+                const segNotes = notesBySegment?.get(seg.id);
                 return (
+                  <Fragment key={seg.id}>
                   <div
-                    key={seg.id}
                     id={`seg-${seg.id}`}
                     className={`group flex items-start gap-2 rounded-lg px-3 py-1.5 -mx-3 transition-all duration-200 ${
                       isActive
@@ -189,7 +210,47 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate 
                         )}
                       </p>
                     )}
+
+                    {segNotes && segNotes.length > 0 && (
+                      <button
+                        onClick={onShowNotes}
+                        className="text-[10px] mt-1 flex-shrink-0 font-mono text-amber-500/80 hover:text-amber-400 transition"
+                        title="Show Review Notes"
+                      >
+                        {"◆"} {segNotes.length}
+                      </button>
+                    )}
+                    {editingId !== seg.id && notingId !== seg.id && (
+                      <button
+                        onClick={() => { setNotingId(seg.id); setNoteText(""); }}
+                        className="text-[10px] mt-1 flex-shrink-0 text-slate-600 hover:text-violet-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                        title="Leave a note on this passage"
+                      >
+                        Note
+                      </button>
+                    )}
                   </div>
+                  {notingId === seg.id && (
+                    <div className="ml-12 mt-1">
+                      <textarea
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveNote(seg); }
+                          if (e.key === "Escape") setNotingId(null);
+                        }}
+                        autoFocus
+                        placeholder="Leave a note for the reviewer"
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        rows={2}
+                      />
+                      <div className="flex gap-2 mt-1.5">
+                        <button onClick={() => saveNote(seg)} className="text-xs text-violet-400 hover:text-violet-300">Save</button>
+                        <button onClick={() => setNotingId(null)} className="text-xs text-slate-500 hover:text-slate-300">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                  </Fragment>
                 );
               })}
             </div>

@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { EngineCheck, Meeting, Segment, Speaker, Job, ModelSettings, Preset, VocabularyProfile } from "./types";
+import type { EngineCheck, Meeting, ReviewNote, Segment, Speaker, Job, ModelSettings, Preset, VocabularyProfile } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -319,5 +319,44 @@ export async function getSpeakerAnalytics(meetingId: string): Promise<{
   silence_percentage: number;
 }> {
   const { data } = await api.get(`/meetings/${meetingId}/analytics`);
+  return data;
+}
+
+export async function createUserComment(
+  meetingId: string,
+  start: number,
+  end: number,
+  body: string
+): Promise<ReviewNote> {
+  const { data } = await api.post(`/meetings/${meetingId}/notes`, {
+    start_time: start,
+    end_time: end,
+    kind: "comment",
+    body,
+    author: "user",
+  });
+  return data;
+}
+
+export async function answerNote(id: string, answer: string): Promise<ReviewNote> {
+  const { data } = await api.post(`/notes/${id}/answer`, { answer });
+  return data;
+}
+
+export async function acceptNote(
+  id: string,
+  opts: { learn?: boolean; save_profile?: boolean } = {}
+): Promise<{ note: ReviewNote; warning: string | null }> {
+  const { data } = await api.post(`/notes/${id}/accept`, opts);
+  return data;
+}
+
+export async function dismissNote(id: string): Promise<ReviewNote> {
+  const { data } = await api.post(`/notes/${id}/dismiss`);
+  return data;
+}
+
+export async function closeNote(id: string, reply?: string): Promise<ReviewNote> {
+  const { data } = await api.post(`/notes/${id}/done`, reply ? { reply } : {});
   return data;
 }

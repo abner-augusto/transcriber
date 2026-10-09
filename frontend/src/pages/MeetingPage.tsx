@@ -6,6 +6,7 @@ import type { ProgressUpdate } from "../types";
 import TranscriptView from "../components/TranscriptView";
 import SpeakerPanel from "../components/SpeakerPanel";
 import AnalyticsPanel from "../components/AnalyticsPanel";
+import ReviewPanel from "../components/ReviewPanel";
 import AudioPlayer from "../components/AudioPlayer";
 import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
@@ -13,6 +14,7 @@ import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
 import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
 import { RECONNECT_DELAY_MS, meetingSocketAction, shouldReconnectMeetingSocket } from "../utils/meetingSocket";
 import { ActiveView } from "../utils/activeView";
+import { notesBySegment, splitNotes } from "../utils/reviewNotes";
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,7 +30,7 @@ export default function MeetingPage() {
   const [domainVocab, setDomainVocab] = useState("");
   const [showAdvancedVocab, setShowAdvancedVocab] = useState(false);
   const [isSavingVocab, setIsSavingVocab] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<"speakers" | "analytics">("speakers");
+  const [sidebarTab, setSidebarTab] = useState<"speakers" | "analytics" | "review">("speakers");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -219,6 +221,17 @@ export default function MeetingPage() {
   const newVocabStr = (formatVocabulary(cleanParticipants(participants), domainVocab) || "").trim();
   const hasVocabChanges = newVocabStr !== currentVocabStr;
 
+  const reviewNotes = currentMeeting.review_notes || [];
+  const openNoteCount = splitNotes(reviewNotes).open.length;
+  const segmentNotes = notesBySegment(reviewNotes, currentMeeting.segments || []);
+
+  function seekTo(time: number) {
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      audioRef.current.play();
+    }
+  }
+
   return (
     <main className="max-w-7xl mx-auto px-6 py-6">
       {/* Header */}
@@ -398,12 +411,15 @@ export default function MeetingPage() {
                 speakers={currentMeeting.speakers || []}
                 audioRef={audioRef}
                 onUpdate={loadMeeting}
+                meetingId={currentMeeting.id}
+                notesBySegment={segmentNotes}
+                onShowNotes={() => setSidebarTab("review")}
               />
             </div>
             <div className="w-72 flex-shrink-0">
               {/* Sidebar tab toggle */}
               <div className="flex rounded-lg bg-slate-800/50 p-0.5 mb-3">
-                {(["speakers", "analytics"] as const).map((tab) => (
+                {(["speakers", "analytics", "review"] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setSidebarTab(tab)}
@@ -413,11 +429,19 @@ export default function MeetingPage() {
                         : "text-slate-500 hover:text-slate-300"
                     }`}
                   >
-                    {tab === "speakers" ? "Speakers" : "Stats"}
+                    {tab === "speakers" ? "Speakers" : tab === "analytics" ? "Stats" : openNoteCount > 0 ? `Review ${openNoteCount}` : "Review"}
                   </button>
                 ))}
               </div>
-              {sidebarTab === "speakers" ? (
+              {sidebarTab === "review" ? (
+                <ReviewPanel
+                  notes={reviewNotes}
+                  segments={currentMeeting.segments}
+                  onUpdate={loadMeeting}
+                  onSeek={seekTo}
+                  meetingId={currentMeeting.id}
+                />
+              ) : sidebarTab === "speakers" ? (
                 <SpeakerPanel
                   speakers={currentMeeting.speakers || []}
                   segments={currentMeeting.segments}
