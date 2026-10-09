@@ -121,6 +121,16 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 7. Click speaker names to rename, click segments to edit text
 8. **Export** to SRT, WebVTT, TXT, Markdown, JSON, DOCX, or PDF
 
+## Command line
+
+`transcriber_cli` runs and reads Meetings from a terminal, for scripting and for a coding agent that operates the app ([ADR-0010](docs/adr/0010-an-agent-may-operate-the-local-api.md)). It uses only the standard library, talks to the running app over HTTP (`http://127.0.0.1:8000`, or `$TRANSCRIBER_URL`), and prints one compact line per Segment. `--help` lists the commands.
+
+```
+uv run python -m transcriber_cli list
+uv run python -m transcriber_cli upload reuniao.m4a --title "Obra 12/10" --participants "Ana, Bruno" --process --wait
+uv run python -m transcriber_cli show <id> --from 10:00 --to 15:00
+```
+
 ## Project structure
 
 ```
@@ -159,6 +169,7 @@ transcriber/
 │   ├── speaker.py
 │   ├── segment.py
 │   └── job.py
+├── transcriber_cli/           # Stdlib command-line client of the HTTP API (ADR-0010)
 ├── tests/                     # pytest; fake Engines, no GPU needed
 ├── bench/
 │   └── compare_engines.py     # Run every Preset over the same audio
