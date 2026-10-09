@@ -68,6 +68,14 @@ def _progress_adapter():
     return _progress_bus
 
 
+def notify_meeting_changed(meeting_id: str) -> None:
+    """Tell the Meeting's open pages that its Speakers, Segments or details changed outside a Job."""
+    try:
+        _progress_adapter().publish(meeting_id, {"type": "meeting_changed"})
+    except Exception:
+        log.exception("Could not publish a change to Meeting %s", meeting_id)
+
+
 def enqueue(db, meeting_id: str, kind: JobType) -> Job:
     """Atomically claim a Meeting, insert its PENDING Job, and submit it."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()

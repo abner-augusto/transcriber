@@ -11,7 +11,7 @@ import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
 import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
 import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
-import { RECONNECT_DELAY_MS, shouldReconnectMeetingSocket } from "../utils/meetingSocket";
+import { RECONNECT_DELAY_MS, meetingSocketAction, shouldReconnectMeetingSocket } from "../utils/meetingSocket";
 import { ActiveView } from "../utils/activeView";
 
 export default function MeetingPage() {
@@ -54,13 +54,14 @@ export default function MeetingPage() {
       socket.onmessage = (event) => {
         if (!isCurrent()) return;
         const data: ProgressUpdate = JSON.parse(event.data);
-        if (data.type === "ping") return;
-        setProgress(data);
-        if ((data.type === "progress" && data.progress === 100) || data.type === "error") {
+        const action = meetingSocketAction(data);
+        if (action.showProgress) setProgress(data);
+        if (action.refetch) {
           clearTimeout(refreshTimer);
+          // The delay coalesces a burst of edits into one refetch.
           refreshTimer = setTimeout(() => {
             if (isCurrent()) fetchMeeting(meetingId, isCurrent);
-          }, 500);
+          }, data.type === "meeting_changed" ? 250 : 500);
         }
       };
       socket.onclose = (event) => {

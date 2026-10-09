@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
+import jobs
 from database import get_db
 from meeting_store import refresh_speaker_stats
 from models import Meeting, MeetingStatus, Segment, Speaker
@@ -65,6 +66,7 @@ def update_segment_text(segment_id: str, req: UpdateSegmentTextRequest, db: Sess
             meeting_id=segment.meeting_id, corrections=undone_candidates,
         )
 
+    jobs.notify_meeting_changed(segment.meeting_id)
     return segment.to_dict()
 
 
@@ -86,6 +88,7 @@ def revert_segment_text(segment_id: str, db: Session = Depends(get_db)):
     segment.is_edited = False
     segment.corrections = []
     db.commit()
+    jobs.notify_meeting_changed(segment.meeting_id)
     return segment.to_dict()
 
 
@@ -109,4 +112,5 @@ def update_segment_speaker(segment_id: str, req: UpdateSegmentSpeakerRequest, db
         refresh_speaker_stats(db, previous)
     refresh_speaker_stats(db, speaker)
     db.commit()
+    jobs.notify_meeting_changed(segment.meeting_id)
     return segment.to_dict()

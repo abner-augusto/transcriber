@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { MEETING_NOT_FOUND_CLOSE, shouldReconnectMeetingSocket } from "./meetingSocket";
+import { MEETING_NOT_FOUND_CLOSE, meetingSocketAction, shouldReconnectMeetingSocket } from "./meetingSocket";
+
+describe("meetingSocketAction", () => {
+  it("ignores a ping", () => {
+    expect(meetingSocketAction({ type: "ping" })).toEqual({ showProgress: false, refetch: false });
+  });
+
+  it("refetches, without touching the progress bar, when the Meeting changed elsewhere", () => {
+    expect(meetingSocketAction({ type: "meeting_changed" })).toEqual({ showProgress: false, refetch: true });
+  });
+
+  it("shows and refetches a failure", () => {
+    expect(meetingSocketAction({ type: "error", error: "boom" })).toEqual({ showProgress: true, refetch: true });
+  });
+
+  it("shows and refetches a finished Job", () => {
+    expect(meetingSocketAction({ type: "progress", progress: 100 })).toEqual({ showProgress: true, refetch: true });
+  });
+
+  it("only shows a Job still running", () => {
+    expect(meetingSocketAction({ type: "progress", progress: 48 })).toEqual({ showProgress: true, refetch: false });
+  });
+});
 
 describe("shouldReconnectMeetingSocket", () => {
   it("never reconnects once the page has let go of the Meeting", () => {
