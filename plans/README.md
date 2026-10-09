@@ -72,9 +72,9 @@ Profile only when asked; agent edits teach Vocabulary only with `--learn`.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 024 | Root gate passes, README current, ADR-0010 | P1 | S | — | TODO |
-| 025 | Validated, reversible Segment and Speaker edits | P1 | M | — | TODO |
-| 026 | A Meeting's Words with their confidence | P2 | S | — | TODO |
+| 024 | Root gate passes, README current, ADR-0010 | P1 | S | — | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
+| 025 | Validated, reversible Segment and Speaker edits | P1 | M | — | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
+| 026 | A Meeting's Words with their confidence | P2 | S | — | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 | 027 | Live Meeting page updates on API edits | P1 | S | 025 | TODO |
 | 028 | Names and reassignments survive Reprocessing (issue 12) | P1 | M | 025 | TODO |
 | 029 | Stdlib CLI: run and read Meetings | P1 | M | 024, 026 | TODO |
