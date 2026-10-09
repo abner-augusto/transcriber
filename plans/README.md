@@ -98,6 +98,7 @@ decided with the user on 2026-10-09; the decisions are in plan 032.
 |------|-------|----------|--------|------------|--------|
 | 032 | Review Notes: model, API, CLI and operator skill | P1 | L | 025–031 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 | 033 | Review Notes on the Meeting page | P1 | M | 032 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
+| 034 | Review Notes visible on the transcript and the audio bar | P2 | S | 033 | TODO |
 
 Direction, not yet planned: **split a Segment the Diarizer joined**. The user
 asked for it on 2026-10-09 ("tentar quebrar mais as falas que foram
