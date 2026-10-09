@@ -240,6 +240,8 @@ def test_losing_atomic_claim_returns_conflict(db_session, monkeypatch):
 
     monkeypatch.setattr("api.meetings.presets.resolve_preset", lambda _id: {"id": "test"})
     monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: ReadyHealth())
+    monkeypatch.setattr("api.meetings.diarizer_status", lambda _engine, **_kwargs: {
+        "state": "ready", "summary": "ready"})
     calls = []
 
     def lose_race(*args):
