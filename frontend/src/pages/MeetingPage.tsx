@@ -14,7 +14,7 @@ import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
 import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
 import { RECONNECT_DELAY_MS, meetingSocketAction, shouldReconnectMeetingSocket } from "../utils/meetingSocket";
 import { ActiveView } from "../utils/activeView";
-import { notesBySegment, splitNotes } from "../utils/reviewNotes";
+import { noteMarks, notesBySegment, splitNotes } from "../utils/reviewNotes";
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -403,7 +403,7 @@ export default function MeetingPage() {
       {/* Completed: show transcript */}
       {isCompleted && currentMeeting.segments && (
         <>
-          <AudioPlayer meetingId={currentMeeting.id} audioRef={audioRef} />
+          <AudioPlayer meetingId={currentMeeting.id} audioRef={audioRef} marks={noteMarks(reviewNotes)} />
           <div className="flex gap-6 mt-5">
             <div className="flex-1 min-w-0">
               <TranscriptView

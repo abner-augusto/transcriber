@@ -119,7 +119,7 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 5. Watch real-time progress as the pipeline runs
 6. Browse the transcript with synced audio playback
 7. Click speaker names to rename, click segments to edit text
-8. Settle **Review Notes** in the sidebar's Review tab: answer the agent's questions, accept or dismiss its suggestions, or leave a note on a segment (hover → Note)
+8. Settle **Review Notes** in the sidebar's Review tab: answer the agent's questions, accept or dismiss its suggestions, or leave a note on a segment (hover → Note). Segments with a note are tinted and the audio bar shows one clickable mark per note, amber when it waits for you and blue when it waits for the agent
 9. **Export** to SRT, WebVTT, TXT, Markdown, JSON, DOCX, or PDF
 
 ## Command line
