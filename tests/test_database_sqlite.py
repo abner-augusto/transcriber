@@ -22,7 +22,7 @@ def test_fresh_sqlite_database_initializes_without_legacy_database(tmp_path, mon
         assert connection.execute(text("PRAGMA journal_mode")).scalar_one() == "wal"
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
         assert connection.execute(text("PRAGMA busy_timeout")).scalar_one() == 5000
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 1
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 2
     reflected = set(inspect(engine).get_table_names())
     assert set(Base.metadata.tables).issubset(reflected)
     assert {"segments_fts", "segments_fts_data", "segments_fts_idx"}.issubset(reflected)
@@ -50,4 +50,21 @@ def test_orphan_cleanup_preserves_migration_backups(tmp_path, monkeypatch):
 
     assert (backups / "database.dump").read_bytes() == b"retained"
     assert not orphan.exists()
+    engine.dispose()
+
+
+def test_migration_2_adds_speaker_edited_to_an_existing_segments_table(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL)"
+        )
+
+    upgrade(engine)
+    upgrade(engine)
+
+    with engine.connect() as connection:
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(segments)")}
+        assert "speaker_edited" in columns
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 2
     engine.dispose()

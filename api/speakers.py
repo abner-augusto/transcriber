@@ -94,7 +94,7 @@ def merge_speakers(req: MergeSpeakersRequest, db: Session = Depends(get_db)):
 
     # Move all segments from source to target
     db.query(Segment).filter(Segment.speaker_id == source.id).update(
-        {"speaker_id": target.id}, synchronize_session="fetch"
+        {"speaker_id": target.id, "speaker_edited": True}, synchronize_session="fetch"
     )
 
     refresh_speaker_stats(db, target)

@@ -21,6 +21,8 @@ class Segment(Base):
     original_text: Mapped[str] = mapped_column(Text, nullable=True)
     order: Mapped[int] = mapped_column(Integer, nullable=False)
     is_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The user moved this Segment to another Speaker by hand (including by merge).
+    speaker_edited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     confidence: Mapped[float] = mapped_column(Float, nullable=True)
     corrections: Mapped[list] = mapped_column(JSON, nullable=True, default=list)
 
@@ -41,6 +43,7 @@ class Segment(Base):
             "original_text": self.original_text,
             "order": self.order,
             "is_edited": self.is_edited,
+            "speaker_edited": self.speaker_edited,
             "confidence": self.confidence,
             "corrections": self.corrections or [],
         }
