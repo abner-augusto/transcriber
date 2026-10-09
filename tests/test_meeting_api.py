@@ -338,3 +338,73 @@ def test_one_misheard_form_can_be_deleted_without_the_term(db_session):
     ]
     missing = client.delete(f"/api/vocabulary/{entry.id}/misheard-forms/Galo")
     assert missing.status_code == 404
+
+
+def _meeting_with_words(db_session):
+    meeting = Meeting(
+        title="Words",
+        status=MeetingStatus.COMPLETED,
+        raw_transcription={
+            "words": [
+                {"start": 0, "end": 0.4, "text": " Galo", "confidence": 0.31, "alignment_score": None},
+                {"start": 0.5, "end": 0.9, "text": " confirmou", "confidence": 0.92, "alignment_score": None},
+            ]
+        },
+    )
+    db_session.add(meeting)
+    db_session.commit()
+    return meeting.id
+
+
+def test_words_returns_stored_words_with_confidence(db_session):
+    meeting_id = _meeting_with_words(db_session)
+    client = TestClient(app)
+
+    response = client.get(f"/api/meetings/{meeting_id}/words")
+
+    assert response.status_code == 200
+    words = response.json()
+    assert [w["text"] for w in words] == [" Galo", " confirmou"]
+    assert [w["confidence"] for w in words] == [0.31, 0.92]
+    assert set(words[0]) == {"start", "end", "text", "confidence", "alignment_score"}
+
+
+def test_words_filters_by_time_range(db_session):
+    meeting_id = _meeting_with_words(db_session)
+    client = TestClient(app)
+
+    response = client.get(f"/api/meetings/{meeting_id}/words", params={"start": 0.45, "end": 1})
+
+    assert response.status_code == 200
+    assert [w["text"] for w in response.json()] == [" confirmou"]
+
+
+def test_words_of_an_untranscribed_meeting_is_empty(db_session):
+    meeting = Meeting(title="Fresh", status=MeetingStatus.UPLOADED)
+    db_session.add(meeting)
+    db_session.commit()
+    client = TestClient(app)
+
+    response = client.get(f"/api/meetings/{meeting.id}/words")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_words_rejects_inverted_range(db_session):
+    meeting_id = _meeting_with_words(db_session)
+    client = TestClient(app)
+
+    response = client.get(f"/api/meetings/{meeting_id}/words", params={"start": 5, "end": 1})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "start must not exceed end"
+
+
+def test_words_of_missing_meeting_is_404(db_session):
+    client = TestClient(app)
+
+    response = client.get("/api/meetings/does-not-exist/words")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Meeting not found"

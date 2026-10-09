@@ -17,6 +17,7 @@ from models import Meeting, MeetingStatus, Speaker, Segment
 from models.job import Job, JobType
 from config import get_meeting_path
 from services.audio_service import AudioService
+from transcript.words import words_from_stored
 from engines import probe_engine, diarizer_status
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
@@ -363,3 +364,27 @@ def reapply_vocabulary(meeting_id: str, db: Session = Depends(get_db)):
 def list_jobs(meeting_id: str, db: Session = Depends(get_db)):
     jobs = db.query(Job).filter(Job.meeting_id == meeting_id).order_by(Job.created_at.desc()).all()
     return [j.to_dict() for j in jobs]
+
+
+@router.get("/{meeting_id}/words")
+def list_words(
+    meeting_id: str,
+    start: float | None = None,
+    end: float | None = None,
+    db: Session = Depends(get_db),
+):
+    """The Meeting's Words as the Transcriber heard them, before Vocabulary Correction.
+
+    ``start``/``end`` (seconds) keep the Words that overlap that range.
+    """
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    if start is not None and end is not None and start > end:
+        raise HTTPException(400, "start must not exceed end")
+    words = words_from_stored(meeting.raw_transcription)
+    return [
+        w.to_dict()
+        for w in words
+        if (end is None or w.start <= end) and (start is None or w.end >= start)
+    ]
