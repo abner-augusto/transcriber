@@ -60,7 +60,7 @@ export interface Job {
 }
 
 export interface ProgressUpdate {
-  type: "progress" | "error" | "ping";
+  type: "progress" | "error" | "ping" | "meeting_changed";
   progress?: number;
   step?: string;
   status?: string;

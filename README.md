@@ -217,7 +217,7 @@ transcriber/
 | `GET` | `/api/model-settings/presets` | List model presets |
 | `GET` | `/api/model-settings/assignments` | Get model assignments |
 | `PUT` | `/api/model-settings/assignments` | Update model assignments |
-| `WS` | `/ws/meetings/{id}` | Progress updates |
+| `WS` | `/ws/meetings/{id}` | Progress updates, and `{"type": "meeting_changed"}` when a Segment, Speaker or the Meeting's details are edited, so an open page refetches |
 
 ## Author
 
