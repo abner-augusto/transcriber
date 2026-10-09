@@ -50,7 +50,10 @@ storage/**/*.json
 celerybeat-schedule
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/transcriber-operator/
 
 # OS
 .DS_Store

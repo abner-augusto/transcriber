@@ -14,6 +14,12 @@ Executable, step-by-step plans live in `plans/`; `plans/README.md` is the ordere
 
 Read `GLOSSARY.md` before changing domain behavior. Consult relevant decisions under `docs/adr/` before changing architecture or engine boundaries.
 
+## Operating the app
+
+To transcribe, name Speakers, or correct a Meeting (rather than change the code),
+follow `.claude/skills/transcriber-operator/SKILL.md`; it drives the running app
+through `uv run python -m transcriber_cli`. ADR-0010 says why that is allowed.
+
 ## Every change
 
 1. **Docs**: update the docs the change touches, so none contradicts the code or another doc.
