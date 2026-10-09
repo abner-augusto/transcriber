@@ -185,7 +185,6 @@ transcriber/
         │   ├── SpeakerPanel.tsx
         │   ├── AudioPlayer.tsx
         │   ├── AudioSourceSelect.tsx
-        │   ├── ActionsPanel.tsx
         │   ├── ProgressTracker.tsx
         │   ├── ExportDialog.tsx
         │   ├── EncryptDialog.tsx
@@ -217,8 +216,11 @@ transcriber/
 | `POST` | `/api/meetings/{id}/process` | Start transcription pipeline |
 | `GET` | `/api/meetings/{id}/audio` | Stream audio |
 | `GET` | `/api/meetings/{id}/export?format=srt` | Export transcript |
-| `PUT` | `/api/segments/{id}` | Edit segment text |
+| `GET` | `/api/meetings/{id}/words?start=&end=` | Words as the Transcriber heard them, before Vocabulary Correction; `start`/`end` (seconds) keep the Words overlapping that range |
+| `PUT` | `/api/segments/{id}` | Edit segment text; `learn: false` does not teach Vocabulary from the edit |
+| `POST` | `/api/segments/{id}/revert` | Undo a manual edit, restoring the derived text (teaches nothing) |
 | `PUT` | `/api/speakers/{id}` | Rename/recolor speaker |
+| `POST` | `/api/meetings/{id}/speakers` | Add a Speaker the Diarizer missed (`display_name`; label `MANUAL_<n>`) |
 | `POST` | `/api/speakers/merge` | Merge two speakers |
 | `POST` | `/api/meetings/{id}/rediarize` | Re-run speaker diarization |
 | `POST` | `/api/meetings/{id}/reidentify` | Re-identify speakers |
