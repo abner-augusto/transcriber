@@ -96,7 +96,7 @@ decided with the user on 2026-10-09; the decisions are in plan 032.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 032 | Review Notes: model, API, CLI and operator skill | P1 | L | 025–031 | TODO |
+| 032 | Review Notes: model, API, CLI and operator skill | P1 | L | 025–031 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 | 033 | Review Notes on the Meeting page | P1 | M | 032 | TODO |
 
 Direction, not yet planned: **split a Segment the Diarizer joined**. The user
