@@ -9,10 +9,19 @@ answer, the user has to find each passage, play it, and type the answer back.
 The Meeting page already has synced audio, live updates (plan 027) and a
 sidebar with tabs (Speakers, Analytics), so the conversation fits there.
 
-**Status:** needs-exploration. The design session started on 2026-10-09; the
-user had not answered round 1 yet.
+**Status:** ready-for-agent: plans 032 (backend, CLI and skill) and 033
+(Meeting page). The design was decided with the user on 2026-10-09. The full
+list is in plan 032 "Decisions". Round 1 below was confirmed, with one change
+to item 4: **the user creates descriptive comments only, never suggestions**,
+because they edit text directly. Round 2 was settled as follows:
 
-## Proposed decisions (round 1, the agent's recommendations, NOT confirmed)
+- resolved notes stay as history;
+- accepting a name suggestion saves the Voice Profile by default;
+- notes appear only in the JSON export;
+- issue 08 will reuse this model later, as `author="system"`;
+- the glossary name is "Review Note".
+
+## Decisions, round 1 (confirmed)
 
 1. **Anchor:** a time range (start/end seconds), not a Segment id. Segments
    are recreated on Reprocessing, so a note re-attaches to whichever Segment

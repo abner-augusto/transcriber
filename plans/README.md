@@ -89,6 +89,16 @@ dual-track Meeting transcribed, one old Meeting reviewed).
 |------|-------|----------|--------|------------|--------|
 | 031 | Fixes from the first real operator session (CLI output, `--unnamed`, `suspects` noise, new-term learning bug, skill rules) | P1 | M | 029, 030 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09) |
 
+### Review Notes (2026-10-09)
+
+Source: `.scratch/agent-operation/issues/01-review-notes.md`. The design was
+decided with the user on 2026-10-09; the decisions are in plan 032.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 032 | Review Notes: model, API, CLI and operator skill | P1 | L | 025–031 | TODO |
+| 033 | Review Notes on the Meeting page | P1 | M | 032 | TODO |
+
 Direction, not yet planned: **split a Segment the Diarizer joined**. The user
 asked for it on 2026-10-09 ("tentar quebrar mais as falas que foram
 juntadas"). There are two shapes. A manual `split` (API route plus CLI
