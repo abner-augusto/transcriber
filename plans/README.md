@@ -80,6 +80,23 @@ Profile only when asked; agent edits teach Vocabulary only with `--learn`.
 | 029 | Stdlib CLI: run and read Meetings | P1 | M | 024, 026 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09; README examples not run against a live app) |
 | 030 | CLI edits, `suspects`, operator skill | P1 | M | 025–029 | DONE (executor Claude Sonnet, reviewed and merged 2026-10-09; real-Meeting check not run) |
 
+### Operator field test (2026-10-09)
+
+Source: the first real session with the `transcriber-operator` skill (one new
+dual-track Meeting transcribed, one old Meeting reviewed).
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 031 | Fixes from the first real operator session (CLI output, `--unnamed`, `suspects` noise, new-term learning bug, skill rules) | P1 | M | 029, 030 | TODO |
+
+Direction, not yet planned: **split a Segment the Diarizer joined**. The user
+asked for it on 2026-10-09 ("tentar quebrar mais as falas que foram
+juntadas"). There are two shapes. A manual `split` (API route plus CLI
+command, cutting a Segment at a time using its Words) can be specified now.
+Making the Diarizer itself switch more (`speaker_switch_penalty`,
+`clustering_threshold` in the RunConfig) needs a bench run on the user's
+Meetings first. Design it with the user before planning.
+
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
