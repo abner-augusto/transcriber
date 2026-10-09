@@ -119,7 +119,7 @@ Meetings.
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | 035 | Split a Segment, kept through Reprocessing (API, CLI, skill) | P1 | M | 025–031 | DONE |
-| 036 | The split as a Review Note suggestion | P2 | S | 035 | TODO |
+| 036 | The split as a Review Note suggestion | P2 | S | 035 | DONE |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
