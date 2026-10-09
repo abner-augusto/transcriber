@@ -332,16 +332,20 @@ def _heard(text: str) -> str:
     return text.strip().strip(PUNCTUATION + " ").casefold()
 
 
-def _cut_before(api, meeting, segment, phrase) -> float:
-    """The start of the Word where `phrase` begins inside the Segment, as the Transcriber heard it."""
+def _segment_words(api, meeting, segment) -> list:
+    """The Words the Transcriber heard inside the Segment."""
     words = api.get(
         f"/api/meetings/{meeting['id']}/words",
         start=segment["start_time"], end=segment["end_time"],
     )
-    inside = [
+    return [
         word for word in words
         if word["start"] >= segment["start_time"] - 1e-6 and word["end"] <= segment["end_time"] + 1e-6
     ]
+
+
+def _cut_before(segment, inside, phrase) -> float:
+    """The start of the Word where `phrase` begins among the Segment's Words, as the Transcriber heard it."""
     heard = [(index, _heard(word["text"]), word) for index, word in enumerate(inside)]
     heard = [entry for entry in heard if entry[1]]
     wanted = [token for token in map(_heard, phrase.split()) if token]
@@ -365,7 +369,7 @@ def _cut_before(api, meeting, segment, phrase) -> float:
 def cmd_split(api, args):
     meeting = load_meeting(api, args.meeting)
     segment = resolve_segment(meeting, args.segment)
-    at = args.at if args.at is not None else _cut_before(api, meeting, segment, args.before)
+    at = args.at if args.at is not None else _cut_before(segment, _segment_words(api, meeting, segment), args.before)
     body = {"at": at}
     if args.speaker is not None:
         if args.speaker.startswith(NEW_SPEAKER_PREFIX):
@@ -446,6 +450,32 @@ def cmd_suggest_move(api, args):
     else:
         payload = {"target_label": resolve_speaker(meeting, args.speaker)["label"]}
     return _leave_note(api, args, meeting, segment, "speaker_move", args.why, payload)
+
+
+PREVIEW_WORDS = 5
+
+
+def cmd_suggest_split(api, args):
+    meeting = load_meeting(api, args.meeting)
+    segment = resolve_segment(meeting, args.segment)
+    inside = _segment_words(api, meeting, segment)
+    if args.before is not None:
+        at = _cut_before(segment, inside, args.before)
+    elif len(inside) < 2:
+        raise ApiError(400, f"#{segment['order']} has no Word boundary to cut at")
+    else:  # the same snap the split route makes: the nearest Word start after the first Word
+        at = min(inside[1:], key=lambda word: abs(word["start"] - args.at))["start"]
+    second_half = [word for word in inside if word["start"] >= at - 1e-6]
+    payload = {"at": at, "preview": " ".join(word["text"].strip() for word in second_half[:PREVIEW_WORDS])}
+    if args.speaker is not None:
+        if args.speaker.startswith(NEW_SPEAKER_PREFIX):
+            name = args.speaker[len(NEW_SPEAKER_PREFIX):].strip()
+            if not name:
+                raise ApiError(400, "new: needs a name, e.g. new:Carla")
+            payload["new_name"] = name
+        else:
+            payload["target_label"] = resolve_speaker(meeting, args.speaker)["label"]
+    return _leave_note(api, args, meeting, segment, "split", args.why, payload)
 
 
 def cmd_suggest_merge(api, args):
@@ -637,6 +667,19 @@ def build_parser() -> argparse.ArgumentParser:
     p = command("suggest-move", cmd_suggest_move, "propose moving a Segment to another Speaker (new:NAME for a new one)")
     p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
     p.add_argument("speaker", metavar="SPEAKER")
+    p.add_argument("--why", required=True, metavar="REASON")
+
+    p = command("suggest-split", cmd_suggest_split,
+                "propose cutting a Segment in two when the text does not show where the second person starts; "
+                "the user accepts it on the Meeting page")
+    p.add_argument("segment", metavar="SEG", help="Segment handle, #<order>")
+    where = p.add_mutually_exclusive_group(required=True)
+    where.add_argument("--at", type=parse_clock, metavar="T",
+                       help="cut at the Word starting nearest this time (seconds or mm:ss)")
+    where.add_argument("--before", metavar="WORDS",
+                       help="cut before these first Word(s) of the second half, as the Transcriber heard them")
+    p.add_argument("--speaker", metavar="SPEAKER",
+                   help="give the second half to this Speaker (new:NAME adds one when the user accepts)")
     p.add_argument("--why", required=True, metavar="REASON")
 
     p = command("suggest-merge", cmd_suggest_merge, "propose merging SOURCE into TARGET")

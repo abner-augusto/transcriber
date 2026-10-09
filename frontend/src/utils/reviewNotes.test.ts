@@ -161,6 +161,12 @@ describe("noteActions", () => {
     expect(noteActions(note({ kind: "speaker_merge" }))).toEqual(["accept", "dismiss"]);
   });
 
+  it("open split: accept, dismiss; resolved split: none", () => {
+    expect(noteActions(note({ kind: "split" }))).toEqual(["accept", "dismiss"]);
+    expect(noteActions(note({ kind: "split", status: "accepted" }))).toEqual([]);
+    expect(noteActions(note({ kind: "split", status: "dismissed" }))).toEqual([]);
+  });
+
   it("open comment: the user may close the agent's, not their own", () => {
     expect(noteActions(note({ kind: "comment", author: "agent" }))).toEqual(["done"]);
     expect(noteActions(note({ kind: "comment", author: "user" }))).toEqual([]);
@@ -195,6 +201,17 @@ describe("noteSummary", () => {
   it("speaker_merge shows source and target", () => {
     const n = note({ kind: "speaker_merge", payload: { source_label: "SPEAKER_02", target_label: "SPEAKER_00" } });
     expect(noteSummary(n)).toBe("SPEAKER_02 → SPEAKER_00");
+  });
+
+  it("split shows the first words of the second half, and the target when there is one", () => {
+    const payload = { at: 12.5, preview: "quem manda aqui" };
+    expect(noteSummary(note({ kind: "split", payload }))).toBe('split before "quem manda aqui"');
+    expect(noteSummary(note({ kind: "split", payload: { ...payload, target_label: "SPEAKER_01" } }))).toBe(
+      'split before "quem manda aqui" → SPEAKER_01',
+    );
+    expect(noteSummary(note({ kind: "split", payload: { ...payload, new_name: "Bia" } }))).toBe(
+      'split before "quem manda aqui" → new: Bia',
+    );
   });
 
   it("question and comment show the body", () => {

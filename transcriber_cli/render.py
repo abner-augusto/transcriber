@@ -63,6 +63,9 @@ def _proposal(note: dict) -> str | None:
         return payload.get("target_label") or f"new:{payload.get('new_name')}"
     if note["kind"] == "speaker_merge":
         return f"{payload.get('source_label')} into {payload.get('target_label')}"
+    if note["kind"] == "split":
+        target = payload.get("target_label") or (f"new:{payload['new_name']}" if payload.get("new_name") else None)
+        return f"before \"{payload.get('preview')}\"" + (f" to {target}" if target else "")
     return None
 
 
