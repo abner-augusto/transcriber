@@ -549,3 +549,57 @@ def test_set_updates_only_the_given_fields(db_session, api, capsys):
     assert code == 1
     assert "nothing to set" in err
 
+
+def test_suspects_prints_repeated_and_low_confidence_sections(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
+    for order in range(3):
+        add_segment(db_session, meeting, maria, order, 100.0 + order * 5, 104.0 + order * 5, "Obrigado.")
+    add_segment(db_session, meeting, maria, 3, 221.0, 225.0, "Galo confirmou", confidence=0.9)
+    meeting.raw_transcription = {"words": [
+        {"start": 221.0, "end": 221.4, "text": " Galo", "confidence": 0.3},
+        {"start": 221.5, "end": 222.0, "text": " confirmou", "confidence": 0.95},
+    ]}
+    db_session.commit()
+
+    code, out, _ = run(["suspects", meeting.id], api, capsys)
+
+    assert code == 0
+    assert "REPEATED (possible hallucination over silence)" in out
+    assert '  01:40-01:54 #0-#2 x3 "obrigado"' in out
+    assert "LOW-CONFIDENCE WORDS" in out
+    assert "  #3 03:41 Galo (0.30) | #3 03:41 Maria: Galo confirmou" in out
+    assert "CORRECTED BY VOCABULARY" not in out
+    assert "LOW-CONFIDENCE SEGMENTS" not in out
+
+
+def test_suspects_limit_caps_each_section_and_says_so(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
+    for order in range(3):
+        add_segment(db_session, meeting, maria, order, order * 10.0, order * 10.0 + 5, f"fala {order}", confidence=0.2)
+    db_session.commit()
+
+    code, out, _ = run(["suspects", meeting.id, "--limit", "2"], api, capsys)
+
+    assert code == 0
+    assert "LOW-CONFIDENCE SEGMENTS (showing 2 of 3)" in out
+    assert "fala 0" in out and "fala 1" in out
+    assert "fala 2" not in out
+
+
+def test_suspects_lists_vocabulary_corrections(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
+    add_segment(
+        db_session, meeting, maria, 77, 72.0, 75.0, "Garrah chegou", confidence=0.9,
+        corrections=[{"start": 72.0, "end": 72.4, "heard": " Galo", "term": "Garrah", "rule": "similar"}],
+    )
+    db_session.commit()
+
+    code, out, _ = run(["suspects", meeting.id], api, capsys)
+
+    assert code == 0
+    assert "CORRECTED BY VOCABULARY" in out
+    assert "  #77 01:12 Galo->Garrah (rule similar)" in out
+
