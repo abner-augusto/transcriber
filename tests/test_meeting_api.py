@@ -1,12 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from database import Base, get_db
 import jobs
-from jobs.runners import InProcessBus, InlineJobRunner
 from main import app
 from models import Meeting, MeetingStatus, Segment, Speaker, VocabularyEntry
 from models.job import Job, JobType
@@ -18,42 +13,6 @@ class FakeHealth:
             "state": "blocked", "summary": "runtime mismatch", "checks": [],
             "fingerprint": "fixture", "available": False, "reason": "runtime mismatch",
         }
-
-
-@pytest.fixture
-def db_session(monkeypatch):
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    runner = InlineJobRunner(handlers={})
-    bus = InProcessBus()
-    previous = jobs.configure(
-        runner=runner, progress_bus=bus, session_factory=TestingSessionLocal
-    )
-    app.state.test_job_runner = runner
-    app.state.test_progress_bus = bus
-
-    def override_get_db():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    session = TestingSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-        app.dependency_overrides.clear()
-        jobs.configure(**previous)
-        del app.state.test_job_runner
-        del app.state.test_progress_bus
 
 
 def test_update_meeting_title_and_vocabulary(db_session):
