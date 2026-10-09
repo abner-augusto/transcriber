@@ -652,6 +652,20 @@ def test_accepting_a_speaker_merge_with_a_vanished_speaker_is_a_conflict(db_sess
     assert accept(TestClient(app), note).status_code == 409
 
 
+def test_json_export_carries_every_note_with_its_status(db_session):
+    meeting, *_ = seed(db_session)
+    add_note(db_session, meeting, body="aberta")
+    add_note(db_session, meeting, body="fechada", status="done", reply="feito")
+    client = TestClient(app)
+
+    exported = client.get(f"/api/meetings/{meeting.id}/export", params={"format": "json"}).json()
+
+    assert sorted(n["body"] for n in exported["review_notes"]) == ["aberta", "fechada"]
+    assert {n["status"] for n in exported["review_notes"]} == {"open", "done"}
+    assert "review_notes" not in client.get(
+        f"/api/meetings/{meeting.id}/export", params={"format": "md"}).text
+
+
 def test_duplicating_a_meeting_does_not_copy_notes(db_session, monkeypatch, tmp_path):
     audio = tmp_path / "meeting.wav"
     audio.write_bytes(b"RIFF")
