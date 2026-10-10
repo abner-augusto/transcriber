@@ -193,6 +193,21 @@ def _spoken(*texts: str) -> list[Word]:
             (), "Ga rr ah", [],
             id="one-word-term-matches-at-most-two-words",
         ),
+        pytest.param(
+            _spoken(" Eu", " tenho", " o", " Henrique", " Marques,"), "Vocabulary: Henrique Marques",
+            (), "Eu tenho o Henrique Marques,", [],
+            id="a-neighbouring-article-is-never-absorbed",
+        ),
+        pytest.param(
+            _spoken(" da", " Brasil", " Urbano"), "Vocabulary: Brasil Urbano",
+            (), "da Brasil Urbano", [],
+            id="a-neighbouring-preposition-is-never-absorbed",
+        ),
+        pytest.param(
+            _spoken(" na", " oferta", " terreno."), "Vocabulary: Oferta Terreno",
+            (), "na Oferta Terreno.", ["Oferta Terreno"],
+            id="the-term-is-fixed-without-its-neighbour",
+        ),
     ],
 )
 def test_vocabulary_correction_rules_seen_in_processed_segments(
