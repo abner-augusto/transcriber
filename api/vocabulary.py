@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import VocabularyEntry
+from models import RejectedForm, VocabularyEntry
 
 router = APIRouter(prefix="/api/vocabulary", tags=["vocabulary"])
 
@@ -11,6 +11,24 @@ router = APIRouter(prefix="/api/vocabulary", tags=["vocabulary"])
 def list_vocabulary(db: Session = Depends(get_db)):
     entries = db.query(VocabularyEntry).order_by(VocabularyEntry.frequency.desc()).limit(200).all()
     return [e.to_dict() for e in entries]
+
+
+@router.get("/rejected-forms")
+def list_rejected_forms(db: Session = Depends(get_db)):
+    """Heard forms the user said are not a Misheard Form of a term, newest first."""
+    rows = db.query(RejectedForm).order_by(RejectedForm.created_at.desc()).all()
+    return [row.to_dict() for row in rows]
+
+
+@router.delete("/rejected-forms/{rejected_id}")
+def delete_rejected_form(rejected_id: str, db: Session = Depends(get_db)):
+    """Allow a heard form to be corrected to its term again, from the next Reprocessing."""
+    row = db.query(RejectedForm).filter(RejectedForm.id == rejected_id).first()
+    if not row:
+        raise HTTPException(404, "Rejected Form not found")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
 
 
 @router.delete("/{entry_id}")

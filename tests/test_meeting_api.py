@@ -1026,6 +1026,31 @@ def test_rejecting_a_correction_stored_before_offsets_asks_to_reapply_vocabulary
     assert db_session.query(RejectedForm).count() == 0
 
 
+def test_rejected_forms_are_listed_newest_first_and_can_be_removed(db_session):
+    from datetime import datetime
+
+    meeting, _ = _meeting_with_corrections(db_session)
+    db_session.add_all([
+        RejectedForm(
+            heard="Galo", term="Garrah", source_meeting_id=meeting.id, created_at=datetime(2026, 1, 1)
+        ),
+        RejectedForm(heard="Doker", term="Docker", created_at=datetime(2026, 2, 1)),
+    ])
+    db_session.commit()
+    client = TestClient(app)
+
+    listed = client.get("/api/vocabulary/rejected-forms").json()
+
+    assert [(item["heard"], item["term"], item["source_meeting_id"]) for item in listed] == [
+        ("Doker", "Docker", None), ("Galo", "Garrah", meeting.id),
+    ]
+    assert set(listed[0]) == {"id", "heard", "term", "source_meeting_id", "created_at"}
+
+    assert client.delete(f"/api/vocabulary/rejected-forms/{listed[0]['id']}").status_code == 200
+    assert [item["heard"] for item in client.get("/api/vocabulary/rejected-forms").json()] == ["Galo"]
+    assert client.delete(f"/api/vocabulary/rejected-forms/{listed[0]['id']}").status_code == 404
+
+
 @pytest.mark.parametrize("action", ["confirm", "reject"])
 def test_a_correction_action_is_refused_for_an_edited_segment_an_unknown_start_or_a_busy_meeting(
     db_session, action
