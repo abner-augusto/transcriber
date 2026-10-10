@@ -9,8 +9,10 @@ export default function DiarizationTab({ form }: Props) {
   const {
     diarizerEngine, setDiarizerEngine, diarizers, hfToken, setHfToken,
     clusterThreshold, setClusterThreshold, switchPenalty, setSwitchPenalty,
+    speechThreshold, setSpeechThreshold, minSpeakerSeconds, setMinSpeakerSeconds,
   } = form;
   const usesPyannote = diarizerEngine === "pyannote";
+  const usesNemotron = diarizerEngine === "nemotron-3-diarization";
 
   return (
     <>
@@ -105,6 +107,46 @@ export default function DiarizationTab({ form }: Props) {
                 className="accent-violet-600" />
               Use model default
             </label>
+          </div>
+        </>
+      )}
+
+      {usesNemotron && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Speech threshold</label>
+            <p className="text-xs text-slate-500 mb-2">
+              Speaker probability Nemotron counts as speech. Lower keeps quieter and shorter speech,
+              and opens more turns; higher keeps only confident speech.
+            </p>
+            <div className="flex items-center gap-3">
+              <input type="range" min={0.3} max={0.8} step={0.05}
+                value={speechThreshold}
+                onChange={(e) => setSpeechThreshold(parseFloat(e.target.value))}
+                className="flex-1 accent-violet-600" />
+              <span className="text-xs text-slate-400 font-mono w-10 text-right">{speechThreshold.toFixed(2)}</span>
+            </div>
+            <div className="flex text-[10px] text-slate-600 mt-1">
+              <span>more speech</span><span className="flex-1" /><span>less speech</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Minimum speech per Speaker</label>
+            <p className="text-xs text-slate-500 mb-2">
+              A Speaker with less speech than this in the whole Meeting is dropped; its words go to
+              the nearest Speaker. Catches echo and crosstalk channels.
+            </p>
+            <div className="flex items-center gap-2">
+              <input type="number" min={0} max={60} step={1}
+                value={minSpeakerSeconds}
+                onChange={(e) => {
+                  const seconds = parseFloat(e.target.value);
+                  if (Number.isFinite(seconds)) setMinSpeakerSeconds(seconds);
+                }}
+                className="w-24 bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+              <span className="text-xs text-slate-400">s</span>
+            </div>
           </div>
         </>
       )}
