@@ -1,7 +1,9 @@
 """Heuristics that point at passages worth a second look, without the audio."""
 
+import pytest
+
 from transcriber_cli.suspects import (
-    WEAK_WORD, corrected_segments, low_confidence_passages, repetition_windows,
+    WEAK_WORD, corrected_segments, low_confidence_passages, repetition_windows, speaker_cuts,
 )
 
 
@@ -89,3 +91,61 @@ def test_corrected_segments_are_those_with_corrections():
     segments = [seg(0, 0, 1, "x", corrections=[]), fixed, seg(2, 1, 2, "y")]
 
     assert corrected_segments(segments) == [fixed]
+
+
+def test_a_sentence_that_continues_across_two_speakers_is_a_cut():
+    segments = [
+        seg(68, 151.0, 151.6, "É, tá", speaker_id=1),
+        seg(69, 151.9, 153.0, "errado aqui, capitão.", speaker_id=2),
+    ]
+
+    assert speaker_cuts(segments) == [{"first_order": 68, "second_order": 69, "gap": 0.3}]
+
+
+@pytest.mark.parametrize("ending", [".", "?", "!", "…"])
+def test_a_first_segment_that_ends_a_sentence_is_not_a_cut(ending):
+    segments = [
+        seg(0, 0, 1, f"Pode ser{ending}", speaker_id=1),
+        seg(1, 1.2, 2, "Claro", speaker_id=2),
+    ]
+
+    assert speaker_cuts(segments) == []
+
+
+def test_the_same_speaker_on_both_sides_is_not_a_cut():
+    segments = [seg(0, 0, 1, "É, tá", speaker_id=1), seg(1, 1.2, 2, "errado", speaker_id=1)]
+
+    assert speaker_cuts(segments) == []
+
+
+def test_a_gap_over_one_second_is_not_a_cut_and_exactly_one_second_is():
+    far = [seg(0, 0, 1, "É, tá", speaker_id=1), seg(1, 2.5, 3, "errado", speaker_id=2)]
+    edge = [seg(0, 0, 1, "É, tá", speaker_id=1), seg(1, 2.0, 3, "errado", speaker_id=2)]
+
+    assert speaker_cuts(far) == []
+    assert speaker_cuts(edge) == [{"first_order": 0, "second_order": 1, "gap": 1.0}]
+
+
+@pytest.mark.parametrize("edited", [0, 1])
+def test_a_segment_whose_speaker_a_person_set_is_not_a_cut(edited):
+    segments = [seg(0, 0, 1, "É, tá", speaker_id=1), seg(1, 1.2, 2, "errado", speaker_id=2)]
+    segments[edited]["speaker_edited"] = True
+
+    assert speaker_cuts(segments) == []
+
+
+def test_segments_out_of_order_are_paired_by_order():
+    segments = [
+        seg(1, 1.2, 2, "errado", speaker_id=2),
+        seg(0, 0, 1, "É, tá", speaker_id=1),
+    ]
+
+    assert speaker_cuts(segments) == [{"first_order": 0, "second_order": 1, "gap": 0.2}]
+
+
+@pytest.mark.parametrize("missing", [0, 1])
+def test_a_segment_without_a_speaker_is_not_a_cut(missing):
+    segments = [seg(0, 0, 1, "É, tá", speaker_id=1), seg(1, 1.2, 2, "errado", speaker_id=2)]
+    segments[missing]["speaker_id"] = None
+
+    assert speaker_cuts(segments) == []
