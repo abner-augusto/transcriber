@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import axios from "axios";
 import type { ReviewNote, Segment } from "../types";
 import { acceptNote, answerNote, closeNote, dismissNote } from "../api";
+import { apiErrorMessage } from "../utils/apiError";
 import { noteActions, noteSegmentId, noteSummary, splitNotes } from "../utils/reviewNotes";
 import type { NoteAction } from "../utils/reviewNotes";
 
@@ -9,14 +9,6 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function errorMessage(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const detail = err.response?.data?.detail;
-    if (typeof detail === "string") return detail;
-  }
-  return "Something went wrong. Try again.";
 }
 
 const KIND_LABELS: Record<ReviewNote["kind"], string> = {
@@ -65,7 +57,7 @@ export default function ReviewPanel({ notes, segments, onUpdate, onSeek }: Props
       await action();
       onUpdate();
     } catch (err) {
-      setErrors((prev) => ({ ...prev, [note.id]: errorMessage(err) }));
+      setErrors((prev) => ({ ...prev, [note.id]: apiErrorMessage(err) }));
     } finally {
       setBusyId(null);
     }
