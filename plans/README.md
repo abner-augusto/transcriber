@@ -130,7 +130,7 @@ user asked to fix it and move the fixed values out of the code first.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 037 | Nemotron reads its settings from Preferences, not from code | P1 | S | 022, 023 | TODO |
+| 037 | Nemotron reads its settings from Preferences, not from code | P1 | S | 022, 023 | DONE |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
