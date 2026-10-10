@@ -15,7 +15,7 @@ and turns rejections into training data, which plan 014 deliberately left out
 
 **Blocked by:** plan 014 (needs `segments.corrections`).
 
-**Status:** needs-exploration
+**Status:** done (see "Design session, 2026-10-10" below)
 
 **Open questions for the exploration session:**
 - Word-level marks need Word positions inside Segment text; `corrections`
@@ -26,7 +26,7 @@ and turns rejections into training data, which plan 014 deliberately left out
 
 ## Design session, 2026-10-10
 
-**Status now:** ready-for-agent (plans 040, 041, 042).
+**Status now:** done (plans 040, 041, 042 merged 2026-10-10; Reapply Vocabulary run on the five Meetings).
 
 The survey before the design found that 42 of the 68 stored Corrections
 damaged correct text. The `similar` rule absorbed a neighbouring article,
