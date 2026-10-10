@@ -29,7 +29,8 @@ def test_process_applies_and_persists_vocabulary_without_changing_raw_words(
     meeting = harness.load(meeting_id)
     assert meeting.segments[0].text == "Garrah"
     assert meeting.segments[0].corrections == [{
-        "start": 0.1, "end": 0.6, "heard": "Garra", "term": "Garrah", "rule": "similar"
+        "start": 0.1, "end": 0.6, "heard": "Garra", "term": "Garrah", "rule": "similar",
+        "text_start": 0, "text_end": 6, "confirmed": False,
     }]
     assert meeting.raw_transcription["words"][0]["text"] == " Garra"
 
@@ -256,6 +257,64 @@ def test_a_merged_word_keeps_the_lowest_confidence_of_its_parts(monkeypatch, tmp
 
     assert segment.confidence == 0.7
     assert segment.corrections[0]["heard"] == "Gar rah,"
+
+
+@pytest.mark.parametrize(
+    ("words", "vocabulary", "misheard", "expected_text", "expected_span"),
+    [
+        pytest.param(
+            _spoken(" com", " Garra,", " ontem"), "Vocabulary: Garrah", (),
+            "com Garrah, ontem", "Garrah",
+            id="after-other-words-and-without-the-trailing-comma",
+        ),
+        pytest.param(
+            [Word(0.1, 0.5, " Gar", 0.9), Word(0.31, 0.4, " rah,", 0.7)], "Vocabulary: Garrah", (),
+            "Garrah,", "Garrah",
+            id="a-two-word-merge",
+        ),
+        pytest.param(
+            _spoken(" Garra", " chegou."), "Vocabulary: Garrah", (),
+            "Garrah chegou.", "Garrah",
+            id="at-the-start-after-the-leading-space-is-stripped",
+        ),
+        pytest.param(
+            _spoken(" (Garra)", " chegou."), "Vocabulary: Garrah", (),
+            "(Garrah) chegou.", "Garrah",
+            id="without-the-leading-punctuation",
+        ),
+        pytest.param(
+            _spoken(" Garrah", " e", " Garra"), "Vocabulary: Garrah", (),
+            "Garrah e Garrah", "Garrah",
+            id="the-same-term-uncorrected-earlier-in-the-text",
+        ),
+    ],
+)
+def test_a_correction_stores_where_its_term_sits_in_the_segment_text(
+    monkeypatch, tmp_path, words, vocabulary, misheard, expected_text, expected_span
+):
+    segment = _processed_segment(monkeypatch, tmp_path, words, vocabulary, misheard)
+
+    (correction,) = segment.corrections
+    assert segment.text == expected_text
+    assert segment.text[correction["text_start"]:correction["text_end"]] == expected_span
+    # The uncorrected twin comes first, so the span must be the later one.
+    if expected_text == "Garrah e Garrah":
+        assert correction["text_start"] == 9
+
+
+def test_a_misheard_rule_correction_is_stored_confirmed_and_a_similar_one_is_not(
+    monkeypatch, tmp_path
+):
+    learned = _processed_segment(
+        monkeypatch, tmp_path, _spoken(" Galo"), "Vocabulary: Garrah", (("Garrah", "Galo", 1),)
+    )
+    (tmp_path / "second").mkdir()
+    guessed = _processed_segment(
+        monkeypatch, tmp_path / "second", _spoken(" Garra"), "Vocabulary: Garrah"
+    )
+
+    assert [c["confirmed"] for c in learned.corrections] == [True]
+    assert [c["confirmed"] for c in guessed.corrections] == [False]
 
 
 @pytest.mark.parametrize("job_type", [JobType.REAPPLY_VOCABULARY, JobType.REIDENTIFY])
