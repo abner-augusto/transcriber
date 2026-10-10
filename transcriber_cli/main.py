@@ -213,6 +213,9 @@ def _section(title, entries, limit):
     return [f"{title}{note}", *(f"  {entry}" for entry in shown)]
 
 
+CUT_TEXT_CHARS = 60  # how much of each side of a cut sentence `suspects` shows
+
+
 def _order_range(first, last):
     return f"#{first}" if first == last else f"#{first}-#{last}"
 
@@ -226,6 +229,21 @@ def cmd_suspects(api, args):
     windows = suspects.repetition_windows(segments)
     passages = suspects.low_confidence_passages(words, segments, args.below)
     corrected = suspects.corrected_segments(segments)
+    cuts = suspects.speaker_cuts(segments)
+
+    def cut_entry(cut):
+        first, second = by_order[cut["first_order"]], by_order[cut["second_order"]]
+        first_text, second_text = first["text"].strip(), second["text"].strip()
+        if len(first_text) > CUT_TEXT_CHARS:
+            first_text = "…" + first_text[-CUT_TEXT_CHARS:]
+        if len(second_text) > CUT_TEXT_CHARS:
+            second_text = second_text[:CUT_TEXT_CHARS] + "…"
+        first_who = first.get("speaker_name") or first.get("speaker_label") or "?"
+        second_who = second.get("speaker_name") or second.get("speaker_label") or "?"
+        return (
+            f'#{first["order"]} {clock(first["start_time"])} {first_who}: "{first_text}" | '
+            f'#{second["order"]} {second_who}: "{second_text}"'
+        )
 
     def passage_entry(passage):
         weak = ", ".join(f"{text.strip()} {confidence:.2f}" for text, confidence in passage["words"])
@@ -244,12 +262,14 @@ def cmd_suspects(api, args):
         ]),
         ("LOW-CONFIDENCE PASSAGES (worst first)", [passage_entry(p) for p in passages]),
         ("CORRECTED BY VOCABULARY", fixes),
+        ("SENTENCE CUT BY A SPEAKER CHANGE", [cut_entry(c) for c in cuts]),
     ):
         lines += _section(title, entries, args.limit)
     emit(args, {
         "repeated": windows,
         "low_confidence_passages": passages,
         "corrected_segments": corrected,
+        "speaker_cuts": cuts,
     }, lines)
     return 0
 
@@ -592,7 +612,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--below", type=float, metavar="C", help="only Words with confidence under C")
 
     p = command("suspects", cmd_suspects,
-                "passages worth a second look: repeated sentences, Segments holding weak Words (worst first), Vocabulary fixes")
+                "passages worth a second look: repeated sentences, Segments holding weak Words (worst first), Vocabulary fixes, sentences cut by a Speaker change")
     p.add_argument("--below", type=float, default=suspects.WEAK_WORD, metavar="C",
                    help=f"Word confidence threshold (default {suspects.WEAK_WORD})")
     p.add_argument("--limit", type=int, default=40, metavar="N", help="at most N entries per section (default 40)")

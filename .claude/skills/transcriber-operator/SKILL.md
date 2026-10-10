@@ -62,19 +62,20 @@ When the evidence is thin or the name is new to a recurring meeting, leave a not
 
 ## 4. Review
 
-`suspects M` prints up to three sections. For each hit, `show M --from T --to T` reads the passage in context (a filtered `show` prints Segments only), and `words M --from T --to T --below 0.6` shows the Words as heard. To find a name, number or term, `show M --grep PATTERN` (case-insensitive regex; combines with `--speaker`, `--from`, `--to`).
+`suspects M` prints up to four sections. For each hit, `show M --from T --to T` reads the passage in context (a filtered `show` prints Segments only), and `words M --from T --to T --below 0.6` shows the Words as heard. To find a name, number or term, `show M --grep PATTERN` (case-insensitive regex; combines with `--speaker`, `--from`, `--to`).
 
 | Section | Reading |
 |---|---|
 | REPEATED | The same sentence back to back is a Transcriber filling silence. Report the time range; the text is not yours to fix. |
 | LOW-CONFIDENCE PASSAGES (worst first) | Segments holding Words under 0.4, each line ending `weak: word 0.14, ...`. Start at the top; a very low Word inside a name or term is the likeliest error. |
 | CORRECTED BY VOCABULARY | Check each `heard->term` fix against the context. |
+| SENTENCE CUT BY A SPEAKER CHANGE | A sentence that continues across two Speakers: the Diarizer usually moved the boundary by a few Words. Read the pair in context (show --from --to). If the text proves who finishes or starts the sentence, assign the short side to that Speaker; when the cut falls inside a line, split it. Otherwise suggest-move. A real interruption stays as it is. |
 
 Read the transcript yourself for two failures no command finds: a side conversation an open mic captured (a long off-topic block from someone who barely speaks otherwise) and plausible-sounding numbers. Leave an implausible number as `note M #N "..."`; the number stays as transcribed.
 
 Fix a passage with `edit M #N "text"` only when the transcript supports the fix: a term in the vocabulary or participants, the same word spelled right elsewhere, or an obvious grammar mishearing in context. For a fix the transcript does not prove, `suggest M #N "text" --why "..."` leaves the proposed text for the user to accept. With no candidate text, `ask M #N "..."`.
 
-**Done** when every `suspects` entry is fixed, left as a Review Note, or (a REPEATED range) reported to the user.
+**Done** when every `suspects` entry is fixed, left as a Review Note, judged a real interruption, or (a REPEATED range) reported to the user.
 
 ## 5. Hand off
 

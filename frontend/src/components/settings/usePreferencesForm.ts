@@ -20,7 +20,7 @@ export function usePreferencesForm() {
   const [clusterThreshold, setClusterThreshold] = useState<number | null>(null);
   const [diarizerEngine, setDiarizerEngine] = useState<NonNullable<DiarizationPrefs["engine"]>>("pyannote");
   const [speechThreshold, setSpeechThreshold] = useState(0.5);
-  const [minSpeakerSeconds, setMinSpeakerSeconds] = useState(5);
+  const [minSpeakerSeconds, setMinSpeakerSeconds] = useState(10);
   const [diarizers, setDiarizers] = useState<DiarizerOption[]>([]);
   const [switchPenalty, setSwitchPenalty] = useState(0.8);
   const [vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled] = useState(true);
@@ -44,7 +44,7 @@ export function usePreferencesForm() {
     setClusterThreshold(p.diarization?.clustering_threshold ?? null);
     setDiarizerEngine(p.diarization?.engine ?? "pyannote");
     setSpeechThreshold(p.diarization?.speech_threshold ?? 0.5);
-    setMinSpeakerSeconds(p.diarization?.min_speaker_seconds ?? 5);
+    setMinSpeakerSeconds(p.diarization?.min_speaker_seconds ?? 10);
     setSwitchPenalty(p.speaker_switch_penalty ?? 0.8);
     setVocabularyCorrectionEnabled(p.vocabulary_correction?.enabled ?? true);
     setVoiceProfiles(await listSpeakerProfiles());

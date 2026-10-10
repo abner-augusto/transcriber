@@ -6,6 +6,11 @@ SENTENCE_END = re.compile(r"[.!?…]+")
 NOT_WORD = re.compile(r"[^\w\s]|_")
 # Word confidence. Segment confidence (0.6, render.LOW_CONFIDENCE) is a different scale.
 WEAK_WORD = 0.4
+SENTENCE_FINAL = re.compile(r"[.!?…]$")
+# Mirrors Segment derivation's MAX_PAUSE_SECONDS (transcript/segments.py): a longer pause
+# already breaks a Segment, so a handoff that close is a cut sentence. The CLI is a
+# stdlib client and imports nothing from the app.
+CUT_MAX_GAP = 1.0
 
 
 def _sentences(text: str) -> list[str]:
@@ -70,3 +75,24 @@ def low_confidence_passages(
 def corrected_segments(segments: list[dict]) -> list[dict]:
     """Segments where Vocabulary Correction replaced a heard form."""
     return [s for s in segments if s.get("corrections")]
+
+
+def speaker_cuts(segments: list[dict], max_gap: float = CUT_MAX_GAP) -> list[dict]:
+    """Pairs of consecutive Segments where a sentence continues across a change of Speaker:
+    the first Segment does not end a sentence and the second starts within ``max_gap``
+    seconds. Usually a Diarizer boundary shifted by a few Words. A Segment whose Speaker a
+    person already set (``speaker_edited``) is skipped. Returns
+    {first_order, second_order, gap} in Meeting order."""
+    by_order = {s["order"]: s for s in segments}
+    cuts = []
+    for order in sorted(by_order):
+        first, second = by_order[order], by_order.get(order + 1)
+        if second is None or first.get("speaker_edited") or second.get("speaker_edited"):
+            continue
+        speakers = (first.get("speaker_id"), second.get("speaker_id"))
+        if None in speakers or speakers[0] == speakers[1]:
+            continue
+        gap = second["start_time"] - first["end_time"]
+        if gap <= max_gap and not SENTENCE_FINAL.search((first["text"] or "").strip()):
+            cuts.append({"first_order": order, "second_order": order + 1, "gap": round(gap, 2)})
+    return cuts

@@ -810,6 +810,40 @@ def test_suspects_lists_vocabulary_corrections(db_session, api, capsys):
     assert "  #77 01:12 Galo->Garrah (rule similar)" in out
 
 
+def seed_sentence_cut(db, first_text="É, tá"):
+    meeting = seed_meeting(db)
+    abner = add_speaker(db, meeting, "SPEAKER_00", "Abner")
+    garrah = add_speaker(db, meeting, "SPEAKER_01", "Garrah")
+    add_segment(db, meeting, abner, 68, 151.0, 151.6, first_text)
+    add_segment(db, meeting, garrah, 69, 151.7, 153.0, "errado aqui, capitão.")
+    db.commit()
+    return meeting
+
+
+def test_suspects_lists_sentences_cut_by_a_speaker_change(db_session, api, capsys):
+    meeting = seed_sentence_cut(db_session)
+
+    code, out, _ = run(["suspects", meeting.id], api, capsys)
+
+    assert code == 0
+    assert "SENTENCE CUT BY A SPEAKER CHANGE" in out
+    assert '  #68 02:31 Abner: "É, tá" | #69 Garrah: "errado aqui, capitão."' in out
+
+    code, out, _ = run(["--json", "suspects", meeting.id], api, capsys)
+
+    assert json.loads(out)["speaker_cuts"] == [{"first_order": 68, "second_order": 69, "gap": 0.1}]
+
+
+def test_suspects_shortens_the_cut_sentence_to_the_words_beside_the_boundary(db_session, api, capsys):
+    long_text = "".join(str(n % 10) for n in range(80))
+    meeting = seed_sentence_cut(db_session, first_text=long_text)
+
+    code, out, _ = run(["suspects", meeting.id], api, capsys)
+
+    assert code == 0
+    assert f'#68 02:31 Abner: "…{long_text[-60:]}" | #69 Garrah:' in out
+
+
 def review_meeting(db):
     meeting = seed_meeting(db)
     ana = add_speaker(db, meeting, "SPEAKER_00", "Ana")

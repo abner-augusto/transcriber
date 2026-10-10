@@ -58,7 +58,8 @@ class DiarizationPrefs(BaseModel):
     # Nemotron can open a speaker channel for a few seconds of echo or crosstalk (the
     # 2026-09-25 bench found 3.6 s on a dual-track system track); that Speaker would get
     # no Words and surface as an empty "Participant N".
-    min_speaker_seconds: float = Field(default=5.0, ge=0.0, le=60.0)
+    # 10 s since the 2026-10-10 bench: a 7.1 s and a 9.0 s channel were each a real participant's stray Words.
+    min_speaker_seconds: float = Field(default=10.0, ge=0.0, le=60.0)
 
 
 class VocabularyCorrectionPrefs(BaseModel):
