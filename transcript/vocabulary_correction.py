@@ -102,6 +102,8 @@ class VocabularyCorrection:
                 for index in range(start + 1, end)
             ):
                 break
+            if end > start + 1 and _ends_sentence(words[end - 2].text):
+                break
             heard_norm = normalize_vocabulary_text("".join(word.text for word in words[start:end]))
             heard_spelling = _without_edge_punctuation(
                 "".join(word.text for word in words[start:end])
@@ -121,13 +123,18 @@ class VocabularyCorrection:
                     heard_norm == term_norm and heard_spelling == term
                 ):
                     continue
-                ratio = SequenceMatcher(None, heard_norm, term_norm).ratio()
-                if (
-                    ratio >= SIMILAR_PHONETIC_RATIO
-                    and _phonetic_key("".join(word.text for word in words[start:end]))
-                    == _phonetic_key(term)
-                ) or ratio >= SIMILAR_RATIO:
-                    matches.append((end, 1, term, "similar"))
+                ratio = _similar_ratio("".join(word.text for word in words[start:end]), term)
+                if ratio is None:
+                    continue
+                # A neighbouring Word that only dilutes the match is not part of the term.
+                trimmed = [
+                    _similar_ratio("".join(word.text for word in words[first:last]), term)
+                    for first, last in ((start + 1, end), (start, end - 1))
+                    if end - start > 1
+                ]
+                if any(other is not None and other >= ratio for other in trimmed):
+                    continue
+                matches.append((end, 1, term, "similar"))
 
         if not matches:
             return None
@@ -214,9 +221,30 @@ def _letters(value: str) -> str:
     return "".join(ch for ch in value if ch.isalpha())
 
 
+def _digits(value: str) -> str:
+    return "".join(ch for ch in value if ch.isdigit())
+
+
 def _window_limit(phrase: str) -> int:
     """A phrase may be heard split into at most one more Word than it has."""
     return len(phrase.split()) + 1
+
+
+def _similar_ratio(heard_text: str, term: str) -> float | None:
+    """The match ratio when ``heard_text`` passes the ``similar`` test for ``term``, else None."""
+    heard_norm, term_norm = normalize_vocabulary_text(heard_text), normalize_vocabulary_text(term)
+    if _digits(heard_norm) != _digits(term_norm):
+        return None
+    ratio = SequenceMatcher(None, heard_norm, term_norm).ratio()
+    if ratio >= SIMILAR_RATIO or (
+        ratio >= SIMILAR_PHONETIC_RATIO and _phonetic_key(heard_text) == _phonetic_key(term)
+    ):
+        return ratio
+    return None
+
+
+def _ends_sentence(spelling: str) -> bool:
+    return spelling.rstrip().rstrip("\"')]}»”’").endswith((".", "?", "!", "…"))
 
 
 def _without_edge_punctuation(spelling: str) -> str:

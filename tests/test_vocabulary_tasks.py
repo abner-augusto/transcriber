@@ -96,6 +96,13 @@ def test_reapply_vocabulary_updates_segments_and_keeps_existing_speakers(
 def _processed_segment(
     monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = ()
 ):
+    (segment,) = _processed_segments(monkeypatch, tmp_path, words, vocabulary, misheard)
+    return segment
+
+
+def _processed_segments(
+    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = ()
+):
     harness = h.install(
         monkeypatch, tmp_path,
         transcriber=FakeTranscriber(words),
@@ -111,8 +118,7 @@ def _processed_segment(
     meeting_id = harness.meeting(vocabulary=vocabulary)
     job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
     assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
-    (segment,) = harness.load(meeting_id).segments
-    return segment
+    return harness.load(meeting_id).segments
 
 
 def _spoken(*texts: str) -> list[Word]:
@@ -193,6 +199,26 @@ def _spoken(*texts: str) -> list[Word]:
             (), "Ga rr ah", [],
             id="one-word-term-matches-at-most-two-words",
         ),
+        pytest.param(
+            _spoken(" Eu", " tenho", " o", " Henrique", " Marques,"), "Vocabulary: Henrique Marques",
+            (), "Eu tenho o Henrique Marques,", [],
+            id="a-neighbouring-article-is-never-absorbed",
+        ),
+        pytest.param(
+            _spoken(" da", " Brasil", " Urbano"), "Vocabulary: Brasil Urbano",
+            (), "da Brasil Urbano", [],
+            id="a-neighbouring-preposition-is-never-absorbed",
+        ),
+        pytest.param(
+            _spoken(" na", " oferta", " terreno."), "Vocabulary: Oferta Terreno",
+            (), "na Oferta Terreno.", ["Oferta Terreno"],
+            id="the-term-is-fixed-without-its-neighbour",
+        ),
+        pytest.param(
+            _spoken(" faixa", " 13"), "Vocabulary: Faixa 3",
+            (), "faixa 13", [],
+            id="digits-must-match-exactly",
+        ),
     ],
 )
 def test_vocabulary_correction_rules_seen_in_processed_segments(
@@ -202,6 +228,25 @@ def test_vocabulary_correction_rules_seen_in_processed_segments(
 
     assert segment.text == expected_text
     assert [correction["term"] for correction in segment.corrections] == expected_terms
+
+
+def test_a_window_never_crosses_a_sentence_end(monkeypatch, tmp_path):
+    # A sentence end closes the Segment, so the next sentence's Word stays a Segment of its own.
+    segments = _processed_segments(
+        monkeypatch, tmp_path, _spoken(" faixa", " 3.", " O"), "Vocabulary: Faixa 3"
+    )
+
+    assert [segment.text for segment in segments] == ["Faixa 3.", "O"]
+    assert [correction["term"] for correction in segments[0].corrections] == ["Faixa 3"]
+
+
+def test_a_term_is_not_heard_across_a_sentence_end(monkeypatch, tmp_path):
+    segments = _processed_segments(
+        monkeypatch, tmp_path, _spoken(" banco.", " central"), "Vocabulary: Banco Central"
+    )
+
+    assert [segment.text for segment in segments] == ["banco.", "central"]
+    assert [segment.corrections for segment in segments] == [[], []]
 
 
 def test_a_merged_word_keeps_the_lowest_confidence_of_its_parts(monkeypatch, tmp_path):
