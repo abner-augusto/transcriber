@@ -9,7 +9,7 @@ juntadas".
 which moves the whole Segment, and editing its text. Nothing cuts a Segment.
 
 **Status:** done for shape 1 (plans 035, 036 merged 2026-10-09). Shape 2
-(Diarizer tuning) is still open, waiting for a bench session. The design session ran on
+(Diarizer tuning) was benched on 2026-10-10; see "Bench, 2026-10-10" below. The design session ran on
 2026-10-09. The user did not answer the questions, so the recommended options
 were taken:
 - shape 1, the manual split, now; shape 2 waits for a bench session;
@@ -42,3 +42,38 @@ plan 028's rules. Revisit the page control if the user asks for it.
 - After Re-identify or Reapply Vocabulary, is a split re-applied (like a
   reassignment) or dropped?
 - Does the UI get a split action too, or is it CLI and Review Note only?
+
+## Bench, 2026-10-10
+
+Before the bench, plan 037 fixed a bug: the saved `clustering_threshold` never
+reached Nemotron, which ran with a literal `threshold=0.5`. Nemotron's knobs
+are now Preferences (`speech_threshold`, `min_speaker_seconds`).
+
+The setup: Sinop (`0d6197f6`, dual-track). Its reference is the current
+Segments, and the 53 Words in hand-corrected Segments count as known. The
+rest of the reference is the current output, so every disagreement there
+was read by hand. The `arquitetura-03` control audio lives on `D:/Nextcloud`
+and was not reachable.
+
+Results:
+- **`speaker_switch_penalty` from 0 to 2:** no value fixes a known Word below
+  1.2. At 1.2 and above, the new mid-sentence errors outnumber the fixes. 0.8
+  stays.
+- **Raw Turns instead of exclusive Turns:** fixes 15 known Words, but adds 17
+  new runs, mostly mid-sentence errors. Rejected.
+- **Nemotron `speech_threshold` from 0.3 to 0.8:** a single forward pass
+  extracted at each threshold. 0.5 reproduces the stored diarization exactly.
+  At most 5 known Words get fixed (0.75), and new errors appear. 0.5 stays.
+- **A constant Word/Turn time offset of ±0.1 to ±0.4 s:** always worse.
+- **`min_speaker_seconds` 10 instead of 5:** the one clean win.
+  - In Sinop it drops SPEAKER_03 (7.1 s), fixing 15 known Words (#124 to #127,
+    Eduardo) with no new disagreement.
+  - In `5068e1fa` it drops SPEAKER_01 (9.0 s). That Speaker's 9 Words go to
+    SPEAKER_03, as the user's merge already did.
+  - The other Nemotron Meetings do not change.
+
+The remaining boundary errors are 1 to 3 Words at a handoff, in both
+directions. Both channels are active there, and exclusive Turns leave the
+Words to the nearest Turn. No global knob moves them without breaking other
+handoffs. They stay an operator fix (`assign`), which a `suspects` section for
+short Segments between two other Speakers could speed up.
