@@ -214,6 +214,11 @@ def _spoken(*texts: str) -> list[Word]:
             (), "na Oferta Terreno.", ["Oferta Terreno"],
             id="the-term-is-fixed-without-its-neighbour",
         ),
+        pytest.param(
+            _spoken(" faixa", " 13"), "Vocabulary: Faixa 3",
+            (), "faixa 13", [],
+            id="digits-must-match-exactly",
+        ),
     ],
 )
 def test_vocabulary_correction_rules_seen_in_processed_segments(

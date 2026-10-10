@@ -152,7 +152,7 @@ page design follows.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 040 | Vocabulary Correction stops swallowing neighbouring Words | P0 | S | 014 | TODO |
+| 040 | Vocabulary Correction stops swallowing neighbouring Words | P0 | S | 014 | DONE |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.

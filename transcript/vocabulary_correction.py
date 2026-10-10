@@ -221,6 +221,10 @@ def _letters(value: str) -> str:
     return "".join(ch for ch in value if ch.isalpha())
 
 
+def _digits(value: str) -> str:
+    return "".join(ch for ch in value if ch.isdigit())
+
+
 def _window_limit(phrase: str) -> int:
     """A phrase may be heard split into at most one more Word than it has."""
     return len(phrase.split()) + 1
@@ -228,9 +232,10 @@ def _window_limit(phrase: str) -> int:
 
 def _similar_ratio(heard_text: str, term: str) -> float | None:
     """The match ratio when ``heard_text`` passes the ``similar`` test for ``term``, else None."""
-    ratio = SequenceMatcher(
-        None, normalize_vocabulary_text(heard_text), normalize_vocabulary_text(term)
-    ).ratio()
+    heard_norm, term_norm = normalize_vocabulary_text(heard_text), normalize_vocabulary_text(term)
+    if _digits(heard_norm) != _digits(term_norm):
+        return None
+    ratio = SequenceMatcher(None, heard_norm, term_norm).ratio()
     if ratio >= SIMILAR_RATIO or (
         ratio >= SIMILAR_PHONETIC_RATIO and _phonetic_key(heard_text) == _phonetic_key(term)
     ):
