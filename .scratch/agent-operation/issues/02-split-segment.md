@@ -52,8 +52,21 @@ are now Preferences (`speech_threshold`, `min_speaker_seconds`).
 The setup: Sinop (`0d6197f6`, dual-track). Its reference is the current
 Segments, and the 53 Words in hand-corrected Segments count as known. The
 rest of the reference is the current output, so every disagreement there
-was read by hand. The `arquitetura-03` control audio lives on `D:/Nextcloud`
-and was not reachable.
+was read by hand.
+
+The control is `arquitetura-03`, single-track. It uses Meeting `096d74f9`
+(the Parakeet copy, with stored Words and audio) and the hand-reviewed Gemini
+reference, which now lives in
+`D:\Nextcloud\_INTEGRARTE.ARQ\2-IAR_PROJETOS\1-ARQUITETURA\_2026\0-VIABILIDADES BRASIL URBANO\01 - SINOP - MT\5-BRIEFING_REUNIÕES`.
+The paths in `bench/samples/2026-08-18-arquitetura-03/manifest*.json` are
+stale. The control's WDER, with 4579 aligned Words and 79.6% coverage:
+- the stored pyannote diarization: 1.57%;
+- Nemotron at 0.5 and 0.8: 0.68%;
+- penalty 0.6 to 0.8 is best (31 errors); 0.0 gives 38, 2.0 gives 41;
+- `speech_threshold` 0.65 gives 26 errors against 31. In Sinop the same value
+  is neutral to slightly worse: two new mid-sentence errors, two ambiguous
+  changes, one known fix. That is too small a gain to act on;
+- `min_speaker_seconds` 10: no change, because the smallest Speaker has 37 s.
 
 Results:
 - **`speaker_switch_penalty` from 0 to 2:** no value fixes a known Word below
