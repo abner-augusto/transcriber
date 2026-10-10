@@ -1,9 +1,15 @@
 import { useMemo, useState } from "react";
 import type { ReviewNote, Segment } from "../types";
-import { acceptNote, answerNote, closeNote, dismissNote } from "../api";
+import { acceptNote, answerNote, closeNote, confirmCorrection, dismissNote, rejectCorrection } from "../api";
 import { apiErrorMessage } from "../utils/apiError";
+import { meetingCorrections } from "../utils/meetingCorrections";
+import type { CorrectionEntry } from "../utils/meetingCorrections";
 import { noteActions, noteSegmentId, noteSummary, splitNotes } from "../utils/reviewNotes";
 import type { NoteAction } from "../utils/reviewNotes";
+
+function correctionKey(entry: CorrectionEntry): string {
+  return `${entry.segmentId}:${entry.correction.start}`;
+}
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -46,6 +52,73 @@ export default function ReviewPanel({ notes, segments, onUpdate, onSeek }: Props
   const [showResolved, setShowResolved] = useState(false);
 
   const { open, resolved } = useMemo(() => splitNotes(notes), [notes]);
+
+  const [busyCorrection, setBusyCorrection] = useState<string | null>(null);
+  const [correctionErrors, setCorrectionErrors] = useState<Record<string, string>>({});
+  const [showConfirmed, setShowConfirmed] = useState(false);
+  const { toReview, confirmed } = useMemo(() => meetingCorrections(segments), [segments]);
+
+  async function actOnCorrection(entry: CorrectionEntry, action: typeof confirmCorrection) {
+    const key = correctionKey(entry);
+    setBusyCorrection(key);
+    setCorrectionErrors((prev) => {
+      const { [key]: _drop, ...rest } = prev;
+      return rest;
+    });
+    try {
+      await action(entry.segmentId, entry.correction.start);
+      onUpdate();
+    } catch (err) {
+      setCorrectionErrors((prev) => ({ ...prev, [key]: apiErrorMessage(err) }));
+    } finally {
+      setBusyCorrection(null);
+    }
+  }
+
+  function correctionRow(entry: CorrectionEntry, isConfirmed: boolean) {
+    const key = correctionKey(entry);
+    const busy = busyCorrection === key;
+    return (
+      <div key={key} className="rounded-lg p-3 bg-slate-800/30">
+        <div className="flex items-center gap-2 text-[10px]">
+          <button
+            onClick={() => onSeek(entry.correction.start)}
+            className="font-mono text-slate-500 hover:text-violet-400 transition"
+            title="Play from here"
+          >
+            {formatTime(entry.correction.start)}
+          </button>
+          <span className="text-slate-500">#{entry.order}</span>
+        </div>
+        <p className="text-sm mt-1.5 break-words">
+          <span className="text-slate-400">{entry.correction.heard}</span>
+          <span className="text-slate-500"> &rarr; </span>
+          <span className="text-white">{entry.correction.term}</span>
+        </p>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+          {!isConfirmed && (
+            <button
+              onClick={() => actOnCorrection(entry, confirmCorrection)}
+              disabled={busy}
+              title="Teach this form: it will be corrected the same way in future Meetings"
+              className="text-xs text-violet-400 hover:text-violet-300 disabled:opacity-40"
+            >
+              &#10003; Confirm
+            </button>
+          )}
+          <button
+            onClick={() => actOnCorrection(entry, rejectCorrection)}
+            disabled={busy}
+            title="Put back what was heard and never correct this form to this term again"
+            className="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-40"
+          >
+            &#8630; Undo
+          </button>
+        </div>
+        {correctionErrors[key] && <p className="text-xs text-red-400 mt-1.5">{correctionErrors[key]}</p>}
+      </div>
+    );
+  }
 
   async function run(note: ReviewNote, action: () => Promise<void>) {
     setBusyId(note.id);
@@ -244,6 +317,31 @@ export default function ReviewPanel({ notes, segments, onUpdate, onSeek }: Props
                   {warnings[note.id] && <p className="text-xs text-amber-400 mt-1">{warnings[note.id]}</p>}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {toReview.length + confirmed.length > 0 && (
+        <div className="mt-5 pt-4 border-t border-slate-800/50">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-semibold text-white text-sm">Vocabulary Corrections</h4>
+            {toReview.length > 0 && <span className="text-xs text-slate-500">{toReview.length} to review</span>}
+          </div>
+          {toReview.length > 0 && (
+            <div className="space-y-2">{toReview.map((entry) => correctionRow(entry, false))}</div>
+          )}
+          {confirmed.length > 0 && (
+            <div className="mt-3">
+              <button
+                onClick={() => setShowConfirmed(!showConfirmed)}
+                className="text-xs text-slate-500 hover:text-slate-300 transition"
+              >
+                {showConfirmed ? "▾" : "▸"} Confirmed ({confirmed.length})
+              </button>
+              {showConfirmed && (
+                <div className="space-y-2 mt-2">{confirmed.map((entry) => correctionRow(entry, true))}</div>
+              )}
             </div>
           )}
         </div>
