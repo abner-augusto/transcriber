@@ -57,6 +57,18 @@ export interface Speaker {
   segment_count: number;
 }
 
+/** A Vocabulary Correction in a Segment; offsets are absent on data from before plan 041. */
+export interface Correction {
+  start: number;
+  end: number;
+  heard: string;
+  term: string;
+  rule: string;
+  text_start?: number;
+  text_end?: number;
+  confirmed?: boolean;
+}
+
 export interface Segment {
   id: string;
   meeting_id: string;
@@ -71,6 +83,7 @@ export interface Segment {
   order: number;
   is_edited: boolean;
   confidence: number | null;
+  corrections?: Correction[];
 }
 
 export interface Job {
