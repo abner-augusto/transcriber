@@ -23,10 +23,16 @@ A way the Transcriber has been seen to get a Vocabulary term wrong ("Galo" for "
 when the user corrects a Segment. Belongs to the term, not to one Meeting.
 _Avoid_: alias, typo, mapping
 
+**Rejected Form**:
+A heard form the user said is not a Misheard Form of a term ("Galo" is not "Garrah" here). Vocabulary
+Correction never turns it into that term again, in any Meeting; the user can remove it later.
+_Avoid_: exception, blocklist, stopword
+
 **Vocabulary Correction**:
 Replacing Words the Transcriber misheard with the Vocabulary term they were meant to be. Applied
 when Segments are derived, so the Words stay as the Transcriber heard them and a Correction can
 be re-applied without transcribing again. Records what it changed, where, and by which rule.
+The user confirms or rejects each one on the Meeting page.
 _Avoid_: autocorrect, post-processing, spell check
 
 ### What the transcript is made of
