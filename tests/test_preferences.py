@@ -5,6 +5,7 @@ import pytest
 
 from preferences import (
     DEFAULT_SPEAKER_SWITCH_PENALTY,
+    DiarizationPrefs,
     PreferenceMigrationError,
     load,
     public,
@@ -23,6 +24,10 @@ def test_fresh_preferences_use_defaults_and_create_the_canonical_file(tmp_path):
     assert prefs.speaker_profiles_enabled is False
     assert prefs.speaker_switch_penalty == DEFAULT_SPEAKER_SWITCH_PENALTY
     assert (storage / "preferences.json").exists()
+
+
+def test_a_speaker_needs_ten_seconds_of_speech_by_default():
+    assert DiarizationPrefs().min_speaker_seconds == 10.0
 
 
 @pytest.mark.parametrize(

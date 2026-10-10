@@ -140,7 +140,7 @@ operator gets a `suspects` section that finds them.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 038 | The default minimum speech per Speaker becomes 10 s | P2 | XS | 037 | TODO |
+| 038 | The default minimum speech per Speaker becomes 10 s | P2 | XS | 037 | DONE |
 | 039 | `suspects` lists sentences cut by a change of Speaker | P1 | S | 029, 030 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or

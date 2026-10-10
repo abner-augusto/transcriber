@@ -69,7 +69,7 @@ def test_nemotron_factory_and_adapter_filter_short_speakers(monkeypatch):
     from engines import make_diarizer
 
     selected = _run_config({}).model_copy(update={
-        "diarization": DiarizationPrefs(engine="nemotron-3-diarization")
+        "diarization": DiarizationPrefs(engine="nemotron-3-diarization", min_speaker_seconds=5.0)
     })
     diarizer = make_diarizer(selected)
     assert isinstance(diarizer, IsolatedPythonDiarizer)

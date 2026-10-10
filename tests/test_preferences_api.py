@@ -34,7 +34,7 @@ def test_diarization_keeps_in_bounds_numbers_and_drops_the_rest(client):
 
     expected = {
         "engine": "pyannote", "clustering_threshold": 0.7, "Fa": 2.0,
-        "speech_threshold": 0.5, "min_speaker_seconds": 5.0,
+        "speech_threshold": 0.5, "min_speaker_seconds": 10.0,
     }
     assert client.stored()["diarization"] == expected
     assert result["diarization"] == expected
@@ -55,7 +55,7 @@ def test_nemotron_diarization_numbers_are_stored_and_out_of_range_ones_dropped(c
     }})
 
     assert result["diarization"]["speech_threshold"] == 0.5
-    assert result["diarization"]["min_speaker_seconds"] == 5.0
+    assert result["diarization"]["min_speaker_seconds"] == 10.0
 
 
 def test_diarization_engine_accepts_supported_ids_and_ignores_unknown(client):
