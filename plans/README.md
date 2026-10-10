@@ -121,6 +121,17 @@ Meetings.
 | 035 | Split a Segment, kept through Reprocessing (API, CLI, skill) | P1 | M | 025–031 | DONE |
 | 036 | The split as a Review Note suggestion | P2 | S | 035 | DONE |
 
+### Diarizer settings (2026-10-10)
+
+Checking the Diarizer before the calibration showed that the saved
+`clustering_threshold` never reaches Nemotron: `make_diarizer` passes a
+literal `threshold=0.5`, which is a speech-probability threshold anyway. The
+user asked to fix it and move the fixed values out of the code first.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 037 | Nemotron reads its settings from Preferences, not from code | P1 | S | 022, 023 | TODO |
+
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
