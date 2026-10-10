@@ -20,7 +20,10 @@ _Avoid_: prompt, hints, glossary, dictionary
 
 **Misheard Form**:
 A way the Transcriber has been seen to get a Vocabulary term wrong ("Galo" for "Garrah"), learned
-when the user corrects a Segment. Belongs to the term, not to one Meeting.
+when the user corrects a Segment. Belongs to the term, not to one Meeting. Learned only from edits
+whose new phrase looks like a term (capitalized or an acronym, or already named in the Meeting's
+Vocabulary or participants). It corrects on its own after two sightings, but its Corrections stay
+marked for review until the user confirms one of them.
 _Avoid_: alias, typo, mapping
 
 **Rejected Form**:

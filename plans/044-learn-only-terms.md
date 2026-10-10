@@ -80,6 +80,18 @@ already reviewed and hides the error.
      orchestrator lists the entries that fail rule 1, shows them to the user,
      and deletes the approved ones through `DELETE /api/vocabulary/{id}`.
 
+**Amendment (2026-10-10).** Executing step 2 showed that three existing tests
+teach a sentence-initial name ("Galo" -> "Garrah"), which rule 1 rejects. A
+capitalized word at a sentence start now also counts as capital evidence when
+the same word (case-sensitive, edge punctuation stripped) appears capitalized
+mid-sentence in the Meeting's Segment texts. This is a pure input,
+`learned_from_edit(..., known=(), proper=())`, computed by
+`tasks/vocabulary.learn_from_edit` with `capitalized_mid_sentence`. Two
+deviations from the steps as written: `_looks_like_term(words, start, end,
+proper)` has no `known` argument (`learned_from_edit` checks known terms
+itself), and the edit `"no faixa 3 hoje"` -> `"no Faixa 3 hoje"` learns
+`"Faixa"`, because the diff changes only that word.
+
 ## Current state
 
 - `transcript/vocabulary_correction.py`:
