@@ -61,7 +61,7 @@ export default function CorrectionMark({ segmentId, correction, children, onChan
         aria-haspopup="true"
         aria-expanded={open}
         className={`underline decoration-dotted underline-offset-2 cursor-pointer ${
-          confirmed ? "decoration-slate-500/50" : "decoration-violet-400/70"
+          confirmed ? "decoration-slate-500/50" : "decoration-cyan-300 decoration-2 bg-cyan-400/10 rounded-sm"
         }`}
       >
         {children}
