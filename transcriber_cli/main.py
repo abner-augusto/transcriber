@@ -612,7 +612,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--below", type=float, metavar="C", help="only Words with confidence under C")
 
     p = command("suspects", cmd_suspects,
-                "passages worth a second look: repeated sentences, Segments holding weak Words (worst first), Vocabulary fixes")
+                "passages worth a second look: repeated sentences, Segments holding weak Words (worst first), Vocabulary fixes, sentences cut by a Speaker change")
     p.add_argument("--below", type=float, default=suspects.WEAK_WORD, metavar="C",
                    help=f"Word confidence threshold (default {suspects.WEAK_WORD})")
     p.add_argument("--limit", type=int, default=40, metavar="N", help="at most N entries per section (default 40)")
