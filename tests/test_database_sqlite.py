@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 from sqlalchemy import inspect
@@ -22,7 +24,7 @@ def test_fresh_sqlite_database_initializes_without_legacy_database(tmp_path, mon
         assert connection.execute(text("PRAGMA journal_mode")).scalar_one() == "wal"
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
         assert connection.execute(text("PRAGMA busy_timeout")).scalar_one() == 5000
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 3
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 4
     reflected = set(inspect(engine).get_table_names())
     assert set(Base.metadata.tables).issubset(reflected)
     assert {"segments_fts", "segments_fts_data", "segments_fts_idx"}.issubset(reflected)
@@ -67,7 +69,7 @@ def test_migration_2_adds_speaker_edited_to_an_existing_segments_table(tmp_path)
     with engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(segments)")}
         assert "speaker_edited" in columns
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 3
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 4
     engine.dispose()
 
 
@@ -85,5 +87,65 @@ def test_migration_3_adds_split_times_to_an_existing_meetings_table(tmp_path):
     with engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(meetings)")}
         assert "split_times" in columns
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 3
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 4
+    engine.dispose()
+
+
+def _database_before_migration_4(tmp_path, corrections_per_segment):
+    """A database at schema version 3, holding stored Corrections and learned entries."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL, corrections JSON)"
+        )
+        connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
+        connection.exec_driver_sql(
+            "CREATE TABLE vocabulary_entries (id TEXT PRIMARY KEY, term TEXT, misheard_as JSON)"
+        )
+        for index, corrections in enumerate(corrections_per_segment):
+            connection.execute(
+                text("INSERT INTO segments VALUES (:id, 'x', :corrections)"),
+                {"id": f"s{index}", "corrections": json.dumps(corrections)},
+            )
+    return engine
+
+
+def _forms(engine, term):
+    with engine.connect() as connection:
+        raw = connection.execute(
+            text("SELECT misheard_as FROM vocabulary_entries WHERE term = :term"), {"term": term}
+        ).scalar_one()
+    return json.loads(raw)
+
+
+def test_migration_4_confirms_the_forms_of_confirmed_corrections(tmp_path):
+    def stored(heard, term, confirmed):
+        return {"heard": heard, "term": term, "rule": "misheard", "confirmed": confirmed}
+
+    engine = _database_before_migration_4(tmp_path, [
+        [stored(" Galo,", "Garrah", True), stored(" Doker", "Docker", False)],
+        [stored("Garra", "Garrah", False)],
+    ])
+    with engine.begin() as connection:
+        for term, forms in (
+            ("Garrah", [{"form": "galo", "count": 2}, {"form": "Garra", "count": 3}]),
+            ("Docker", [{"form": "Doker", "count": 2, "confirmed": False}]),
+            ("Revit", None),
+        ):
+            connection.execute(
+                text("INSERT INTO vocabulary_entries VALUES (:id, :term, :forms)"),
+                {"id": term, "term": term, "forms": json.dumps(forms)},
+            )
+
+    upgrade(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("DELETE FROM schema_migrations WHERE version = 4")
+    upgrade(engine)  # an interrupted migration runs again without changing the result
+
+    assert _forms(engine, "Garrah") == [
+        {"form": "galo", "count": 2, "confirmed": True},
+        {"form": "Garra", "count": 3},
+    ]
+    assert _forms(engine, "Docker") == [{"form": "Doker", "count": 2, "confirmed": False}]
+    assert _forms(engine, "Revit") is None
     engine.dispose()
