@@ -255,7 +255,7 @@ def cmd_suspects(api, args):
     fixes = [
         f"#{s['order']} {clock(s['start_time'])} {fix['heard'].strip()}->{fix['term'].strip()} "
         f"(rule {fix.get('rule')})"
-        for s in corrected for fix in s["corrections"]
+        for s in corrected for fix in suspects.unconfirmed_corrections(s)
     ]
     lines = []
     for title, entries in (

@@ -874,6 +874,31 @@ def test_suspects_lists_vocabulary_corrections(db_session, api, capsys):
     assert "  #77 01:12 Galo->Garrah (rule similar)" in out
 
 
+def test_suspects_skips_corrections_the_user_confirmed_and_show_marks_them(db_session, api, capsys):
+    meeting = seed_meeting(db_session)
+    maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")
+    add_segment(
+        db_session, meeting, maria, 77, 72.0, 75.0, "Garrah Docker", confidence=0.9,
+        corrections=[
+            {"start": 72.0, "end": 72.4, "heard": " Galo", "term": "Garrah", "rule": "misheard",
+             "text_start": 0, "text_end": 6, "confirmed": True},
+            {"start": 73.0, "end": 73.4, "heard": " Doker", "term": "Docker", "rule": "similar",
+             "text_start": 7, "text_end": 13, "confirmed": False},
+        ],
+    )
+    db_session.commit()
+
+    code, out, _ = run(["suspects", meeting.id], api, capsys)
+
+    assert code == 0
+    assert "Doker->Docker (rule similar)" in out
+    assert "Galo->Garrah" not in out
+
+    code, out, _ = run(["show", meeting.id], api, capsys)
+
+    assert "[confirmed: Galo->Garrah] [fixed: Doker->Docker]" in out
+
+
 def seed_sentence_cut(db, first_text="É, tá"):
     meeting = seed_meeting(db)
     abner = add_speaker(db, meeting, "SPEAKER_00", "Abner")
