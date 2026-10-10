@@ -93,7 +93,7 @@ Report what you named and what you edited (Segment handles) in a short summary. 
 
 ## Line markers
 
-`[edited]` text changed by hand, `[moved]` Speaker changed by hand, `[conf 0.41]` Segment confidence under 0.6, `[fixed: heard->term]` a Vocabulary Correction.
+`[edited]` text changed by hand, `[moved]` Speaker changed by hand, `[conf 0.41]` Segment confidence under 0.6, `[fixed: heard->term]` a Vocabulary Correction the user has not reviewed, `[confirmed: heard->term]` one the user confirmed.
 
 ## Commands
 
