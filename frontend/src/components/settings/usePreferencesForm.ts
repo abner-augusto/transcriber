@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import {
   getSettings, updatePreferences, listSpeakerProfiles, deleteSpeakerProfile,
   listVocabulary, listVocabularyProfiles, createVocabularyProfile, deleteVocabularyProfile,
+  listRejectedForms, deleteRejectedForm,
 } from "../../api";
-import type { DiarizerOption, DiarizationPrefs, SpeakerProfile, VocabularyEntry } from "../../api";
+import type { DiarizerOption, DiarizationPrefs, RejectedForm, SpeakerProfile, VocabularyEntry } from "../../api";
 import type { VocabularyProfile } from "../../types";
+import { apiErrorMessage } from "../../utils/apiError";
 import { buildDiarizationPayload } from "./preferencesPayload";
 
 /**
@@ -26,6 +28,7 @@ export function usePreferencesForm() {
   const [vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled] = useState(true);
   const [voiceProfiles, setVoiceProfiles] = useState<SpeakerProfile[]>([]);
   const [learnedVocab, setLearnedVocab] = useState<VocabularyEntry[]>([]);
+  const [rejectedForms, setRejectedForms] = useState<RejectedForm[]>([]);
   const [vocabProfiles, setVocabProfiles] = useState<VocabularyProfile[]>([]);
   const [newProfileName, setNewProfileName] = useState("");
   const [newProfileTerms, setNewProfileTerms] = useState("");
@@ -49,7 +52,17 @@ export function usePreferencesForm() {
     setVocabularyCorrectionEnabled(p.vocabulary_correction?.enabled ?? true);
     setVoiceProfiles(await listSpeakerProfiles());
     setLearnedVocab(await listVocabulary());
+    setRejectedForms(await listRejectedForms());
     setVocabProfiles(await listVocabularyProfiles());
+  }
+
+  async function handleDeleteRejectedForm(id: string) {
+    try {
+      await deleteRejectedForm(id);
+      setRejectedForms((forms) => forms.filter((f) => f.id !== id));
+    } catch (err) {
+      alert(apiErrorMessage(err));
+    }
   }
 
   async function handleCreateVocabProfile() {
@@ -111,6 +124,7 @@ export function usePreferencesForm() {
     vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled,
     voiceProfiles,
     learnedVocab, setLearnedVocab,
+    rejectedForms, handleDeleteRejectedForm,
     vocabProfiles,
     newProfileName, setNewProfileName,
     newProfileTerms, setNewProfileTerms,

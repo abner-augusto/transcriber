@@ -3,6 +3,8 @@ import type { ReviewNote, Segment, Speaker } from "../types";
 import { createUserComment, updateSegmentText } from "../api";
 import { useStore } from "../store";
 import { segmentTone } from "../utils/reviewNotes";
+import { correctionPieces } from "../utils/corrections";
+import CorrectionMark from "./CorrectionMark";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -76,6 +78,19 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
       }
     }
     setNotingId(null);
+  }
+
+  // The Segment's text, with each Word a Vocabulary Correction changed marked.
+  function renderText(seg: Segment) {
+    return correctionPieces(seg.text, seg.corrections ?? []).map((piece, i) =>
+      piece.correction ? (
+        <CorrectionMark key={i} segmentId={seg.id} correction={piece.correction} onChanged={onUpdate}>
+          {piece.text}
+        </CorrectionMark>
+      ) : (
+        <Fragment key={i}>{piece.text}</Fragment>
+      ),
+    );
   }
 
   function startEdit(seg: Segment) {
@@ -208,10 +223,10 @@ export default function TranscriptView({ segments, speakers, audioRef, onUpdate,
                       >
                         {seg.confidence != null && seg.confidence < 0.6 ? (
                           <span className="underline decoration-amber-500/70 decoration-wavy underline-offset-2">
-                            {seg.text}
+                            {renderText(seg)}
                           </span>
                         ) : (
-                          seg.text
+                          renderText(seg)
                         )}
                         {seg.confidence != null && seg.confidence < 0.6 && (
                           <span className="ml-1.5 text-[10px] text-amber-500/80 font-mono align-middle">

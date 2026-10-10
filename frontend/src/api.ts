@@ -72,6 +72,18 @@ export async function updateSegmentText(
   return data;
 }
 
+/** Teach a Vocabulary Correction's heard form as a Misheard Form of its term. */
+export async function confirmCorrection(segmentId: string, start: number): Promise<Segment> {
+  const { data } = await api.post(`/segments/${segmentId}/corrections/confirm`, { start });
+  return data;
+}
+
+/** Put back what was heard and never correct that form to that term again. */
+export async function rejectCorrection(segmentId: string, start: number): Promise<Segment> {
+  const { data } = await api.post(`/segments/${segmentId}/corrections/reject`, { start });
+  return data;
+}
+
 export async function updateSegmentSpeaker(
   id: string,
   speakerId: string
@@ -274,6 +286,23 @@ export async function deleteVocabularyEntry(id: string): Promise<void> {
 export async function deleteMisheardForm(id: string, form: string): Promise<VocabularyEntry> {
   const { data } = await api.delete(`/vocabulary/${id}/misheard-forms/${encodeURIComponent(form)}`);
   return data;
+}
+
+export interface RejectedForm {
+  id: string;
+  heard: string;
+  term: string;
+  source_meeting_id: string | null;
+  created_at: string | null;
+}
+
+export async function listRejectedForms(): Promise<RejectedForm[]> {
+  const { data } = await api.get("/vocabulary/rejected-forms");
+  return data;
+}
+
+export async function deleteRejectedForm(id: string): Promise<void> {
+  await api.delete(`/vocabulary/rejected-forms/${id}`);
 }
 
 export async function suggestVocabulary(): Promise<{ terms: string[]; text: string }> {

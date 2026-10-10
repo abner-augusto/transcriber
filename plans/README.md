@@ -154,7 +154,7 @@ page design follows.
 |------|-------|----------|--------|------------|--------|
 | 040 | Vocabulary Correction stops swallowing neighbouring Words | P0 | S | 014 | DONE |
 | 041 | Confirm or reject a Vocabulary Correction (backend, CLI, glossary) | P1 | M | 014, 040 | DONE |
-| 042 | Vocabulary Corrections on the Meeting page and in Settings | P1 | M | 041 | TODO |
+| 042 | Vocabulary Corrections on the Meeting page and in Settings | P1 | M | 041 | DONE |
 
 Decisions (user, 2026-10-10):
 - a mark on the corrected Word, with confirm and undo; the Review tab is not
