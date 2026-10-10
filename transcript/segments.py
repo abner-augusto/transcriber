@@ -340,7 +340,7 @@ def _stored_corrections(
                 "rule": item.rule,
                 "text_start": text_start,
                 "text_end": text_start + len(item.term),
-                "confirmed": item.rule == "misheard",
+                "confirmed": item.confirmed,
             })
         offset += len(word.text)
     return stored

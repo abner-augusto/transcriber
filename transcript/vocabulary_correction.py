@@ -27,6 +27,8 @@ class MisheardForm:
     heard: str
     term: str
     count: int
+    # The user accepted this form once; until then its Corrections stay up for review.
+    confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,8 @@ class Correction:
     heard: str
     term: str
     rule: Literal["similar", "misheard"]
+    # A misheard Correction is confirmed when its form is; a similar one never is.
+    confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -78,7 +82,7 @@ class VocabularyCorrection:
                 i += 1
                 continue
 
-            end_index, term, rule = match
+            end_index, term, rule, confirmed = match
             matched = words[i:end_index]
             heard = "".join(word.text for word in matched).strip()
             replacement = _replacement_word(matched, term)
@@ -89,6 +93,7 @@ class VocabularyCorrection:
                 heard=heard,
                 term=term,
                 rule=rule,
+                confirmed=confirmed,
             ))
             i = end_index
 
@@ -96,7 +101,7 @@ class VocabularyCorrection:
 
     def _match_at(
         self, words: list[Word], start: int
-    ) -> tuple[int, str, Literal["similar", "misheard"]] | None:
+    ) -> tuple[int, str, Literal["similar", "misheard"], bool] | None:
         eligible = [
             form for form in self.misheard
             if form.count >= 2 or normalize_vocabulary_text(form.term) in {
@@ -108,7 +113,7 @@ class VocabularyCorrection:
             + [_window_limit(form.heard) for form in eligible]
             + [1]
         )
-        matches: list[tuple[int, int, str, Literal["similar", "misheard"]]] = []
+        matches: list[tuple[int, int, str, Literal["similar", "misheard"], bool]] = []
         for end in range(start + 1, min(len(words), start + max_words) + 1):
             window = end - start
             if end > start + 1 and any(
@@ -130,7 +135,7 @@ class VocabularyCorrection:
                 if heard_norm == normalize_vocabulary_text(form.heard) and (
                     heard_norm, normalize_vocabulary_text(form.term)
                 ) not in self.rejected:
-                    matches.append((end, 2, form.term, "misheard"))
+                    matches.append((end, 2, form.term, "misheard", form.confirmed))
             for term in self.terms:
                 if window > _window_limit(term):
                     continue
@@ -152,14 +157,14 @@ class VocabularyCorrection:
                 ]
                 if any(other is not None and other >= ratio for other in trimmed):
                     continue
-                matches.append((end, 1, term, "similar"))
+                matches.append((end, 1, term, "similar", False))
 
         if not matches:
             return None
         # Misheard rules win; then prefer the longest word window. Stable input order
         # breaks ties between equally eligible Vocabulary terms.
-        end, _, term, rule = max(matches, key=lambda item: (item[1], item[0]))
-        return end, term, rule
+        end, _, term, rule, confirmed = max(matches, key=lambda item: (item[1], item[0]))
+        return end, term, rule, confirmed
 
 
 def learned_from_edit(

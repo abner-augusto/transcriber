@@ -607,7 +607,7 @@ def test_edit_does_not_teach_vocabulary_unless_asked_to_learn(db_session, api, c
     code, _, _ = run(["edit", meeting.id, "#0", "o Garrah", "--learn"], api, capsys)
     assert code == 0
     db_session.refresh(entry)
-    assert entry.misheard_as == [{"form": "Galo", "count": 1}]
+    assert entry.misheard_as == [{"form": "Galo", "count": 1, "confirmed": False}]
 
 
 def test_revert_restores_the_text_and_refuses_an_unedited_segment(db_session, api, capsys):

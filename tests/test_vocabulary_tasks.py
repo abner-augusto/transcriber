@@ -115,8 +115,11 @@ def _processed_segments(
         update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
     ))
     with harness.session_factory() as db:
-        for term, form, count in misheard:
-            db.add(VocabularyEntry(term=term, misheard_as=[{"form": form, "count": count}]))
+        for term, form, count, *confirmed in misheard:
+            item = {"form": form, "count": count}
+            if confirmed:
+                item["confirmed"] = confirmed[0]
+            db.add(VocabularyEntry(term=term, misheard_as=[item]))
         for heard, term in rejected:
             db.add(RejectedForm(heard=heard, term=term))
         db.commit()
@@ -306,18 +309,23 @@ def test_a_correction_stores_where_its_term_sits_in_the_segment_text(
         assert correction["text_start"] == 9
 
 
-def test_a_misheard_rule_correction_is_stored_confirmed_and_a_similar_one_is_not(
-    monkeypatch, tmp_path
-):
-    learned = _processed_segment(
-        monkeypatch, tmp_path, _spoken(" Galo"), "Vocabulary: Garrah", (("Garrah", "Galo", 1),)
+def test_a_correction_is_stored_confirmed_only_when_its_misheard_form_is(monkeypatch, tmp_path):
+    confirmed = _processed_segment(
+        monkeypatch, tmp_path, _spoken(" Galo"), "Vocabulary: Garrah",
+        (("Garrah", "Galo", 2, True),),
     )
     (tmp_path / "second").mkdir()
+    unconfirmed = _processed_segment(
+        monkeypatch, tmp_path / "second", _spoken(" Galo"), "Vocabulary: Garrah",
+        (("Garrah", "Galo", 2),),
+    )
+    (tmp_path / "third").mkdir()
     guessed = _processed_segment(
-        monkeypatch, tmp_path / "second", _spoken(" Garra"), "Vocabulary: Garrah"
+        monkeypatch, tmp_path / "third", _spoken(" Garra"), "Vocabulary: Garrah"
     )
 
-    assert [c["confirmed"] for c in learned.corrections] == [True]
+    assert [c["confirmed"] for c in confirmed.corrections] == [True]
+    assert [c["confirmed"] for c in unconfirmed.corrections] == [False]
     assert [c["confirmed"] for c in guessed.corrections] == [False]
 
 
