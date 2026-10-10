@@ -236,6 +236,10 @@ transcriber/
 | `GET` | `/api/meetings/{id}/words?start=&end=` | Words as the Transcriber heard them, before Vocabulary Correction; `start`/`end` (seconds) keep the Words overlapping that range |
 | `PUT` | `/api/segments/{id}` | Edit segment text; `learn: false` does not teach Vocabulary from the edit |
 | `POST` | `/api/segments/{id}/revert` | Undo a manual edit, restoring the derived text (teaches nothing) |
+| `POST` | `/api/segments/{id}/corrections/confirm` | Accept a Vocabulary Correction (`start` identifies it): teaches its heard form as a Misheard Form of the term. 409 for an edited Segment or an unknown `start` |
+| `POST` | `/api/segments/{id}/corrections/reject` | Undo a Vocabulary Correction: restores the heard text and records a Rejected Form, so that form never becomes that term again in any Meeting. Same 409s, and 409 for a Correction stored before offsets existed (reapply Vocabulary first) |
+| `GET` | `/api/vocabulary/rejected-forms` | List Rejected Forms, newest first |
+| `DELETE` | `/api/vocabulary/rejected-forms/{id}` | Remove a Rejected Form; the next Reprocessing corrects that form again |
 | `PUT` | `/api/segments/{id}/speaker` | Move a Segment to another Speaker of the same Meeting |
 | `POST` | `/api/segments/{id}/split` | Cut a Segment in two at the Word start nearest `at`; optional `speaker_id` for the second half. The cut is stored on the Meeting as a Split and survives every Reprocessing. Refused for an edited Segment |
 | `POST` | `/api/segments/{id}/unsplit` | Join a Segment with the next one when a Split lies between them, and drop the Split |

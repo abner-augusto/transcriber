@@ -153,7 +153,7 @@ page design follows.
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | 040 | Vocabulary Correction stops swallowing neighbouring Words | P0 | S | 014 | DONE |
-| 041 | Confirm or reject a Vocabulary Correction (backend, CLI, glossary) | P1 | M | 014, 040 | TODO |
+| 041 | Confirm or reject a Vocabulary Correction (backend, CLI, glossary) | P1 | M | 014, 040 | DONE |
 | 042 | Vocabulary Corrections on the Meeting page and in Settings | P1 | M | 041 | TODO |
 
 Decisions (user, 2026-10-10):

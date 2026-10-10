@@ -263,6 +263,16 @@ def build_segments(
 
     Returns {start, end, text, speaker, confidence} dicts in time order.
     """
+    return [
+        _close(group)
+        for group in _segment_groups(words, turns, switch_penalty, splits)
+    ]
+
+
+def _segment_groups(
+    words: list[Word], turns: list[Turn], switch_penalty: float, splits: Sequence[float],
+) -> list[list[tuple[Word, str]]]:
+    """The attributed Words that make up each Segment, in time order."""
     if not words:
         return []
 
@@ -270,19 +280,19 @@ def build_segments(
     speakers = smooth_word_speakers(words, turns, switch_penalty=switch_penalty)
     attributed = list(zip(words, speakers))
 
-    segments: list[dict] = []
+    groups: list[list[tuple[Word, str]]] = []
     current: list[tuple[Word, str]] = []
 
     for word, speaker in attributed:
         if current and _breaks_before(current, word, speaker, splits):
-            segments.append(_close(current))
+            groups.append(current)
             current = []
         current.append((word, speaker))
 
     if current:
-        segments.append(_close(current))
+        groups.append(current)
 
-    return segments
+    return groups
 
 
 def derive_segments(
@@ -299,23 +309,41 @@ def derive_segments(
     """
     turns = diarization.attribution_turns if diarization is not None else []
     corrected_words, corrections = correction.apply(words) if correction else (words, [])
-    segments = build_segments(corrected_words, turns, switch_penalty=switch_penalty, splits=splits)
-    for segment in segments:
-        segment_corrections = [
-            item for item in corrections
-            if item.start >= segment["start"] and item.end <= segment["end"]
-        ]
-        segment["corrections"] = [
-            {
+    by_start = {item.start: item for item in corrections}
+    segments: list[dict] = []
+    for group in _segment_groups(corrected_words, turns, switch_penalty, splits):
+        segment = _close(group)
+        segment["corrections"] = _stored_corrections(group, by_start)
+        segments.append(segment)
+    return segments
+
+
+def _stored_corrections(
+    group: list[tuple[Word, str]], by_start: dict[float, Correction]
+) -> list[dict]:
+    """The Corrections whose corrected Word is in this Segment, with where the term sits in its text."""
+    joined = "".join(word.text for word, _ in group)
+    stripped = len(joined) - len(joined.lstrip())
+    stored: list[dict] = []
+    offset = 0
+    for word, _ in group:
+        item = by_start.get(word.start)
+        if item is not None and item.term in word.text:
+            # The term sits inside this one corrected Word, so an uncorrected twin
+            # elsewhere in the text can never be mistaken for it.
+            text_start = offset + word.text.index(item.term) - stripped
+            stored.append({
                 "start": item.start,
                 "end": item.end,
                 "heard": item.heard,
                 "term": item.term,
                 "rule": item.rule,
-            }
-            for item in segment_corrections
-        ]
-    return segments
+                "text_start": text_start,
+                "text_end": text_start + len(item.term),
+                "confirmed": item.rule == "misheard",
+            })
+        offset += len(word.text)
+    return stored
 
 
 def _breaks_before(

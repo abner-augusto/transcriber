@@ -72,9 +72,14 @@ def low_confidence_passages(
     return sorted(passages, key=lambda p: p["worst"])
 
 
+def unconfirmed_corrections(segment: dict) -> list[dict]:
+    """The Segment's Vocabulary Corrections the user has not confirmed."""
+    return [fix for fix in segment.get("corrections") or [] if not fix.get("confirmed")]
+
+
 def corrected_segments(segments: list[dict]) -> list[dict]:
-    """Segments where Vocabulary Correction replaced a heard form."""
-    return [s for s in segments if s.get("corrections")]
+    """Segments where Vocabulary Correction replaced a heard form and the user has not confirmed it."""
+    return [s for s in segments if unconfirmed_corrections(s)]
 
 
 def speaker_cuts(segments: list[dict], max_gap: float = CUT_MAX_GAP) -> list[dict]:

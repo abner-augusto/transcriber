@@ -93,6 +93,15 @@ def test_corrected_segments_are_those_with_corrections():
     assert corrected_segments(segments) == [fixed]
 
 
+def test_corrected_segments_skip_corrections_the_user_confirmed():
+    confirmed = {"heard": "Galo", "term": "Garrah", "rule": "misheard", "confirmed": True}
+    open_fix = {"heard": "Doker", "term": "Docker", "rule": "similar", "confirmed": False}
+    only_confirmed = seg(0, 0, 1, "Garrah", corrections=[confirmed])
+    mixed = seg(1, 1, 2, "Garrah Docker", corrections=[confirmed, open_fix])
+
+    assert corrected_segments([only_confirmed, mixed]) == [mixed]
+
+
 def test_a_sentence_that_continues_across_two_speakers_is_a_cut():
     segments = [
         seg(68, 151.0, 151.6, "É, tá", speaker_id=1),

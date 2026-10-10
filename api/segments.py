@@ -7,8 +7,14 @@ import preferences
 from database import get_db
 from meeting_store import refresh_speaker_stats
 from models import Meeting, MeetingStatus, Segment, Speaker
-from tasks.vocabulary import learn_from_edit, vocabulary_correction_for_meeting
+from tasks.vocabulary import (
+    learn_from_edit,
+    record_rejected_form,
+    teach_confirmed_correction,
+    vocabulary_correction_for_meeting,
+)
 from transcript.segments import derive_segments
+from transcript.vocabulary_correction import without_edge_punctuation
 from transcript.words import words_from_stored
 
 router = APIRouter(prefix="/api", tags=["segments"])
@@ -125,6 +131,73 @@ def revert_segment_text(segment_id: str, db: Session = Depends(get_db)):
     segment.text = segment.original_text
     segment.is_edited = False
     segment.corrections = []
+    db.commit()
+    jobs.notify_meeting_changed(segment.meeting_id)
+    return segment.to_dict()
+
+
+class CorrectionRef(BaseModel):
+    # The Correction's own start time: its identity within the Segment.
+    start: float
+
+
+def _correction_target(db: Session, segment_id: str, start: float) -> tuple[Segment, int]:
+    """The Segment and the index of the stored Correction starting at `start`, or HTTP 404/409."""
+    segment = db.query(Segment).filter(Segment.id == segment_id).first()
+    if not segment:
+        raise HTTPException(404, "Segment not found")
+    require_editable(db, segment.meeting_id)
+    if segment.is_edited:
+        raise HTTPException(409, "Segment was edited by hand; revert the edit first")
+    for index, item in enumerate(segment.corrections or []):
+        if abs(item["start"] - start) <= TIME_TOLERANCE:
+            return segment, index
+    raise HTTPException(409, "No Correction starts there")
+
+
+@router.post("/segments/{segment_id}/corrections/confirm")
+def confirm_correction(segment_id: str, req: CorrectionRef, db: Session = Depends(get_db)):
+    """Accept a Vocabulary Correction: teach its heard form as a Misheard Form of the term."""
+    segment, index = _correction_target(db, segment_id, req.start)
+    corrections = [dict(item) for item in segment.corrections]
+    item = corrections[index]
+    if not item.get("confirmed"):
+        teach_confirmed_correction(
+            db, heard=item["heard"], term=item["term"], meeting_id=segment.meeting_id
+        )
+        item["confirmed"] = True
+        segment.corrections = corrections  # a new list, so the JSON column saves
+    db.commit()
+    jobs.notify_meeting_changed(segment.meeting_id)
+    return segment.to_dict()
+
+
+@router.post("/segments/{segment_id}/corrections/reject")
+def reject_correction(segment_id: str, req: CorrectionRef, db: Session = Depends(get_db)):
+    """Undo a Vocabulary Correction everywhere: put the heard form back and never correct it again.
+
+    The Segment stays derived (not ``is_edited``). Other Meetings keep their stored
+    text until their next Reprocessing, which honours the Rejected Form.
+    """
+    segment, index = _correction_target(db, segment_id, req.start)
+    corrections = [dict(item) for item in segment.corrections]
+    item = corrections.pop(index)
+    start, end = item.get("text_start"), item.get("text_end")
+    if start is None or end is None or segment.text[start:end] != item["term"]:
+        raise HTTPException(409, "Corrections predate their text offsets; reapply Vocabulary first")
+
+    heard = without_edge_punctuation(item["heard"])
+    record_rejected_form(db, heard=heard, term=item["term"], meeting_id=segment.meeting_id)
+
+    shift = len(heard) - (end - start)
+    for other in corrections:
+        if other.get("text_start") is not None and other["text_start"] >= end:
+            other["text_start"] += shift
+            other["text_end"] += shift
+    segment.text = segment.text[:start] + heard + segment.text[end:]
+    if segment.original_text is not None:
+        segment.original_text = segment.original_text[:start] + heard + segment.original_text[end:]
+    segment.corrections = corrections
     db.commit()
     jobs.notify_meeting_changed(segment.meeting_id)
     return segment.to_dict()

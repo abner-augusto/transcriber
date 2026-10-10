@@ -2,12 +2,13 @@
 
 import logging
 
-from models import VocabularyEntry
+from models import RejectedForm, VocabularyEntry
 from transcript.vocabulary_correction import (
     MisheardForm,
     VocabularyCorrection,
     learned_from_edit,
     normalize_vocabulary_text,
+    without_edge_punctuation,
 )
 
 log = logging.getLogger(__name__)
@@ -17,7 +18,8 @@ def vocabulary_correction_for_meeting(db, meeting, *, enabled: bool = True):
     if not enabled:
         return None
     forms = load_misheard_forms(db)
-    return VocabularyCorrection.for_meeting(meeting.vocabulary, forms)
+    rejected = [(row.heard, row.term) for row in db.query(RejectedForm).all()]
+    return VocabularyCorrection.for_meeting(meeting.vocabulary, forms, rejected)
 
 
 def load_misheard_forms(db):
@@ -54,6 +56,39 @@ def learn_from_edit(
     except Exception:
         log.warning("Vocabulary learning failed for Meeting %s", meeting_id, exc_info=True)
         db.rollback()
+
+
+def teach_confirmed_correction(db, *, heard: str, term: str, meeting_id: str) -> None:
+    """Persist what confirming a Correction teaches: the term, and heard as its Misheard Form."""
+    normalized_term = normalize_vocabulary_text(term)
+    if not any(
+        normalize_vocabulary_text(row.term) == normalized_term
+        for row in db.query(VocabularyEntry).all()
+    ):
+        db.add(VocabularyEntry(term=term, source_meeting_id=meeting_id))
+        db.flush()  # so the entry is found when its Misheard Form is recorded
+    _record_misheard_form(db, heard=without_edge_punctuation(heard), term=term)
+
+
+def record_rejected_form(db, *, heard: str, term: str, meeting_id: str) -> None:
+    """Persist a Rejected Form (once) and stop the term's entry from learning it as a Misheard Form."""
+    normalized_heard, normalized_term = normalize_vocabulary_text(heard), normalize_vocabulary_text(term)
+    if not any(
+        (normalize_vocabulary_text(row.heard), normalize_vocabulary_text(row.term))
+        == (normalized_heard, normalized_term)
+        for row in db.query(RejectedForm).all()
+    ):
+        db.add(RejectedForm(heard=heard, term=term, source_meeting_id=meeting_id))
+    for entry in db.query(VocabularyEntry).all():
+        if normalize_vocabulary_text(entry.term) != normalized_term:
+            continue
+        forms = entry.misheard_as or []
+        kept = [
+            form for form in forms
+            if normalize_vocabulary_text(form.get("form", "")) != normalized_heard
+        ]
+        if len(kept) != len(forms):
+            entry.misheard_as = kept
 
 
 def _record_misheard_form(db, *, heard: str, term: str) -> None:

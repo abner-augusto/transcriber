@@ -35,7 +35,8 @@ def segment_line(seg: dict) -> str:
     if confidence is not None and confidence < LOW_CONFIDENCE:
         line += f" [conf {confidence:.2f}]"
     for fix in seg.get("corrections") or []:
-        line += f" [fixed: {fix['heard'].strip()}->{fix['term'].strip()}]"
+        mark = "confirmed" if fix.get("confirmed") else "fixed"
+        line += f" [{mark}: {fix['heard'].strip()}->{fix['term'].strip()}]"
     return line
 
 

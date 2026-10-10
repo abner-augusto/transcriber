@@ -1,7 +1,7 @@
 import pytest
 
 from engines import Turn, Word, DiarizationResult
-from models import JobType, Meeting, VocabularyEntry
+from models import JobType, Meeting, RejectedForm, VocabularyEntry
 from tasks.process_meeting import process_meeting_task
 from tasks.reprocess_task import reapply_vocabulary_task
 
@@ -29,7 +29,8 @@ def test_process_applies_and_persists_vocabulary_without_changing_raw_words(
     meeting = harness.load(meeting_id)
     assert meeting.segments[0].text == "Garrah"
     assert meeting.segments[0].corrections == [{
-        "start": 0.1, "end": 0.6, "heard": "Garra", "term": "Garrah", "rule": "similar"
+        "start": 0.1, "end": 0.6, "heard": "Garra", "term": "Garrah", "rule": "similar",
+        "text_start": 0, "text_end": 6, "confirmed": False,
     }]
     assert meeting.raw_transcription["words"][0]["text"] == " Garra"
 
@@ -94,14 +95,16 @@ def test_reapply_vocabulary_updates_segments_and_keeps_existing_speakers(
 
 
 def _processed_segment(
-    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = ()
+    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = (),
+    rejected: tuple = (),
 ):
-    (segment,) = _processed_segments(monkeypatch, tmp_path, words, vocabulary, misheard)
+    (segment,) = _processed_segments(monkeypatch, tmp_path, words, vocabulary, misheard, rejected)
     return segment
 
 
 def _processed_segments(
-    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = ()
+    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = (),
+    rejected: tuple = (),
 ):
     harness = h.install(
         monkeypatch, tmp_path,
@@ -114,6 +117,8 @@ def _processed_segments(
     with harness.session_factory() as db:
         for term, form, count in misheard:
             db.add(VocabularyEntry(term=term, misheard_as=[{"form": form, "count": count}]))
+        for heard, term in rejected:
+            db.add(RejectedForm(heard=heard, term=term))
         db.commit()
     meeting_id = harness.meeting(vocabulary=vocabulary)
     job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
@@ -256,6 +261,135 @@ def test_a_merged_word_keeps_the_lowest_confidence_of_its_parts(monkeypatch, tmp
 
     assert segment.confidence == 0.7
     assert segment.corrections[0]["heard"] == "Gar rah,"
+
+
+@pytest.mark.parametrize(
+    ("words", "vocabulary", "misheard", "expected_text", "expected_span"),
+    [
+        pytest.param(
+            _spoken(" com", " Garra,", " ontem"), "Vocabulary: Garrah", (),
+            "com Garrah, ontem", "Garrah",
+            id="after-other-words-and-without-the-trailing-comma",
+        ),
+        pytest.param(
+            [Word(0.1, 0.5, " Gar", 0.9), Word(0.31, 0.4, " rah,", 0.7)], "Vocabulary: Garrah", (),
+            "Garrah,", "Garrah",
+            id="a-two-word-merge",
+        ),
+        pytest.param(
+            _spoken(" Garra", " chegou."), "Vocabulary: Garrah", (),
+            "Garrah chegou.", "Garrah",
+            id="at-the-start-after-the-leading-space-is-stripped",
+        ),
+        pytest.param(
+            _spoken(" (Garra)", " chegou."), "Vocabulary: Garrah", (),
+            "(Garrah) chegou.", "Garrah",
+            id="without-the-leading-punctuation",
+        ),
+        pytest.param(
+            _spoken(" Garrah", " e", " Garra"), "Vocabulary: Garrah", (),
+            "Garrah e Garrah", "Garrah",
+            id="the-same-term-uncorrected-earlier-in-the-text",
+        ),
+    ],
+)
+def test_a_correction_stores_where_its_term_sits_in_the_segment_text(
+    monkeypatch, tmp_path, words, vocabulary, misheard, expected_text, expected_span
+):
+    segment = _processed_segment(monkeypatch, tmp_path, words, vocabulary, misheard)
+
+    (correction,) = segment.corrections
+    assert segment.text == expected_text
+    assert segment.text[correction["text_start"]:correction["text_end"]] == expected_span
+    # The uncorrected twin comes first, so the span must be the later one.
+    if expected_text == "Garrah e Garrah":
+        assert correction["text_start"] == 9
+
+
+def test_a_misheard_rule_correction_is_stored_confirmed_and_a_similar_one_is_not(
+    monkeypatch, tmp_path
+):
+    learned = _processed_segment(
+        monkeypatch, tmp_path, _spoken(" Galo"), "Vocabulary: Garrah", (("Garrah", "Galo", 1),)
+    )
+    (tmp_path / "second").mkdir()
+    guessed = _processed_segment(
+        monkeypatch, tmp_path / "second", _spoken(" Garra"), "Vocabulary: Garrah"
+    )
+
+    assert [c["confirmed"] for c in learned.corrections] == [True]
+    assert [c["confirmed"] for c in guessed.corrections] == [False]
+
+
+@pytest.mark.parametrize(
+    ("words", "misheard", "rejected", "expected_text", "expected_terms"),
+    [
+        pytest.param(
+            _spoken(" Garra"), (), (("Garra", "Garrah"),), "Garra", [],
+            id="a-rejected-form-stops-a-similar-match",
+        ),
+        pytest.param(
+            _spoken(" Galo"), (("Garrah", "Galo", 2),), (("Galo", "Garrah"),), "Galo", [],
+            id="a-rejected-form-stops-a-misheard-match",
+        ),
+        pytest.param(
+            _spoken(" (Garra),"), (), (("garra", "GARRAH"),), "(Garra),", [],
+            id="rejection-ignores-case-accents-and-punctuation",
+        ),
+        pytest.param(
+            _spoken(" Garra"), (), (("Garra", "Docker"),), "Garrah", ["Garrah"],
+            id="a-rejected-form-of-another-term-changes-nothing",
+        ),
+    ],
+)
+def test_a_rejected_form_is_never_corrected_to_that_term(
+    monkeypatch, tmp_path, words, misheard, rejected, expected_text, expected_terms
+):
+    segment = _processed_segment(
+        monkeypatch, tmp_path, words, "Vocabulary: Garrah", misheard, rejected
+    )
+
+    assert segment.text == expected_text
+    assert [correction["term"] for correction in segment.corrections] == expected_terms
+
+
+def test_a_rejected_correction_is_not_applied_again_when_vocabulary_is_reapplied(
+    monkeypatch, tmp_path
+):
+    from fastapi.testclient import TestClient
+
+    from database import get_db
+    from main import app
+
+    harness = h.install(
+        monkeypatch, tmp_path,
+        transcriber=FakeTranscriber([Word(0.1, 0.6, " Garra", 0.8), Word(0.7, 0.9, " chegou.", 0.8)]),
+        diarization=DiarizationResult(turns=[Turn(0, 1, "SPEAKER_00")]),
+    )
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+        update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
+    ))
+    meeting_id = harness.meeting(vocabulary="Vocabulary: Garrah")
+    assert process_meeting_task(meeting_id, harness.job(meeting_id, JobType.PROCESS_MEETING))["status"] == "completed"
+    (segment,) = harness.load(meeting_id).segments
+    assert segment.text == "Garrah chegou."
+
+    def session():
+        with harness.session_factory() as db:
+            yield db
+
+    monkeypatch.setitem(app.dependency_overrides, get_db, session)
+    response = TestClient(app).post(
+        f"/api/segments/{segment.id}/corrections/reject", json={"start": 0.1}
+    )
+    assert response.status_code == 200
+    assert response.json()["text"] == "Garra chegou."
+
+    job_id = harness.job(meeting_id, JobType.REAPPLY_VOCABULARY)
+    assert reapply_vocabulary_task(meeting_id, job_id)["status"] == "completed"
+
+    (segment,) = harness.load(meeting_id).segments
+    assert (segment.text, segment.corrections) == ("Garra chegou.", [])
 
 
 @pytest.mark.parametrize("job_type", [JobType.REAPPLY_VOCABULARY, JobType.REIDENTIFY])
