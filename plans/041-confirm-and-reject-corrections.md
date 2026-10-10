@@ -8,7 +8,7 @@
 >
 > **Drift check (run first)**: confirm plan 040 is DONE in `plans/README.md`.
 > Then run
-> `git diff --stat MERGE_040..HEAD -- transcript/ tasks/vocabulary.py api/segments.py api/vocabulary.py models/ transcriber_cli/ GLOSSARY.md`.
+> `git diff --stat 832fe14..HEAD -- transcript/ tasks/vocabulary.py api/segments.py api/vocabulary.py models/ transcriber_cli/ GLOSSARY.md`.
 > Any output is a STOP condition until compared with the excerpts below.
 
 ## Status
