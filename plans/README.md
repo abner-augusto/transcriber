@@ -132,6 +132,17 @@ user asked to fix it and move the fixed values out of the code first.
 |------|-------|----------|--------|------------|--------|
 | 037 | Nemotron reads its settings from Preferences, not from code | P1 | S | 022, 023 | DONE |
 
+The bench that followed (issue 02, "Bench, 2026-10-10") kept
+`speaker_switch_penalty` at 0.8 and `speech_threshold` at 0.5. It raised
+`min_speaker_seconds` to 10 s; the user approved that value and the code
+default. Shifted boundaries at handoffs are not fixable by any setting, so the
+operator gets a `suspects` section that finds them.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 038 | The default minimum speech per Speaker becomes 10 s | P2 | XS | 037 | TODO |
+| 039 | `suspects` lists sentences cut by a change of Speaker | P1 | S | 029, 030 | TODO |
+
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
