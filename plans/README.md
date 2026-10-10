@@ -156,6 +156,7 @@ page design follows.
 | 041 | Confirm or reject a Vocabulary Correction (backend, CLI, glossary) | P1 | M | 014, 040 | DONE |
 | 042 | Vocabulary Corrections on the Meeting page and in Settings | P1 | M | 041 | DONE |
 | 043 | Corrections stand out, and the Review tab lists them all | P2 | S | 042 | DONE |
+| 044 | An edit teaches only term-like phrases, and learned forms wait for confirmation | P1 | M | 014, 041 | TODO |
 
 Decisions (user, 2026-10-10):
 - a mark on the corrected Word, with confirm and undo; the Review tab is not
