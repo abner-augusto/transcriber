@@ -8,7 +8,7 @@ interface Props {
 export default function PreferencesTab({ form }: Props) {
   const {
     defaultVocab, setDefaultVocab, voiceProfilesEnabled, setVoiceProfilesEnabled,
-    voiceProfiles, learnedVocab, setLearnedVocab,
+    voiceProfiles, learnedVocab, setLearnedVocab, rejectedForms, handleDeleteRejectedForm,
     vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled,
     vocabProfiles, newProfileName, setNewProfileName, newProfileTerms, setNewProfileTerms,
     savingVocabProfile, handleCreateVocabProfile, handleDeleteVocabProfile, handleDeleteVoiceProfile,
@@ -67,6 +67,30 @@ export default function PreferencesTab({ form }: Props) {
                     </button>
                   </span>
                 ))}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {rejectedForms.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-1">Never corrected</label>
+          <p className="text-xs text-slate-500 mb-1.5">
+            Heard forms you undid. Vocabulary Correction leaves them as heard.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {rejectedForms.map((f) => (
+              <span key={f.id}
+                className="inline-flex items-center gap-1 bg-slate-800/50 rounded-md px-2 py-1 text-xs text-slate-300 group">
+                {f.heard} <span className="text-slate-500">&#8603;</span> {f.term}
+                <button aria-label={`Correct "${f.heard}" to "${f.term}" again`}
+                  onClick={() => handleDeleteRejectedForm(f.id)}
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-600 hover:text-red-400 transition ml-0.5">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </span>
             ))}
           </div>
