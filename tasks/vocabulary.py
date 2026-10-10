@@ -1,13 +1,16 @@
 """Database boundary for the pure Vocabulary Correction value."""
 
 import logging
+import re
 
-from models import RejectedForm, VocabularyEntry
+from models import Meeting, RejectedForm, Segment, VocabularyEntry
 from transcript.vocabulary_correction import (
     MisheardForm,
     VocabularyCorrection,
+    capitalized_mid_sentence,
     learned_from_edit,
     normalize_vocabulary_text,
+    parse_vocabulary,
     without_edge_punctuation,
 )
 
@@ -25,7 +28,12 @@ def vocabulary_correction_for_meeting(db, meeting, *, enabled: bool = True):
 def load_misheard_forms(db):
     """Load learned forms at the database boundary for correction."""
     return [
-        MisheardForm(heard=item["form"], term=entry.term, count=item["count"])
+        MisheardForm(
+            heard=item["form"],
+            term=entry.term,
+            count=item["count"],
+            confirmed=item.get("confirmed", False) is True,
+        )
         for entry in db.query(VocabularyEntry).all()
         for item in (entry.misheard_as or [])
         if isinstance(item, dict) and isinstance(item.get("form"), str)
@@ -38,7 +46,19 @@ def learn_from_edit(
 ) -> None:
     """Persist the Vocabulary a manual Segment edit teaches (see ``learned_from_edit``)."""
     undone = {(c["term"], c["heard"]) for c in corrections}
-    terms, forms = learned_from_edit(before, after, undone=undone)
+    meeting = db.get(Meeting, meeting_id)
+    known = [
+        *parse_vocabulary(meeting.vocabulary if meeting else None),
+        *(
+            name.strip()
+            for name in re.split(r"[,\n]", (meeting.participants if meeting else None) or "")
+            if name.strip()
+        ),
+    ]
+    proper = capitalized_mid_sentence(
+        text for (text,) in db.query(Segment.text).filter(Segment.meeting_id == meeting_id)
+    )
+    terms, forms = learned_from_edit(before, after, undone=undone, known=known, proper=proper)
 
     for term in dict.fromkeys(terms):
         existing = db.query(VocabularyEntry).filter(VocabularyEntry.term == term).first()
@@ -67,7 +87,7 @@ def teach_confirmed_correction(db, *, heard: str, term: str, meeting_id: str) ->
     ):
         db.add(VocabularyEntry(term=term, source_meeting_id=meeting_id))
         db.flush()  # so the entry is found when its Misheard Form is recorded
-    _record_misheard_form(db, heard=without_edge_punctuation(heard), term=term)
+    _record_misheard_form(db, heard=without_edge_punctuation(heard), term=term, confirmed=True)
 
 
 def record_rejected_form(db, *, heard: str, term: str, meeting_id: str) -> None:
@@ -91,7 +111,8 @@ def record_rejected_form(db, *, heard: str, term: str, meeting_id: str) -> None:
             entry.misheard_as = kept
 
 
-def _record_misheard_form(db, *, heard: str, term: str) -> None:
+def _record_misheard_form(db, *, heard: str, term: str, confirmed: bool = False) -> None:
+    """Count one more sighting of ``heard`` for ``term``; ``confirmed`` marks the form reviewed."""
     normalized_term = normalize_vocabulary_text(term)
     entry = next((
         row for row in db.query(VocabularyEntry).all()
@@ -107,6 +128,8 @@ def _record_misheard_form(db, *, heard: str, term: str) -> None:
     )
     if existing:
         existing["count"] += 1
+        if confirmed:
+            existing["confirmed"] = True
     else:
-        forms.append({"form": heard, "count": 1})
+        forms.append({"form": heard, "count": 1, "confirmed": confirmed})
     entry.misheard_as = forms

@@ -1,5 +1,7 @@
 """Numbered SQLite schema migrations; model metadata is the initial baseline."""
 
+import json
+
 from sqlalchemy import text
 
 
@@ -10,6 +12,55 @@ def _add_column(table: str, column: str, ddl: str):
         if column not in existing:
             connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
     return apply
+
+
+def _confirm_forms_of_confirmed_corrections(connection):
+    """Mark a learned Misheard Form confirmed when a stored Correction of it was confirmed.
+
+    Before forms carried their own flag, confirming a Correction was recorded only on
+    the Segment. Idempotent; a database without these tables or columns is left alone.
+    """
+    from transcript.vocabulary_correction import normalize_vocabulary_text
+
+    tables = {row[0] for row in connection.exec_driver_sql(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    )}
+    if not {"segments", "vocabulary_entries"} <= tables:
+        return
+    columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(segments)")}
+    if "corrections" not in columns:
+        return
+
+    confirmed: set[tuple[str, str]] = set()
+    for (raw,) in connection.exec_driver_sql("SELECT corrections FROM segments"):
+        for item in (json.loads(raw) if raw else None) or []:
+            if isinstance(item, dict) and item.get("confirmed") is True:
+                confirmed.add((
+                    normalize_vocabulary_text(item.get("heard", "")),
+                    normalize_vocabulary_text(item.get("term", "")),
+                ))
+
+    for entry_id, term, raw in connection.exec_driver_sql(
+        "SELECT id, term, misheard_as FROM vocabulary_entries"
+    ).fetchall():
+        forms = json.loads(raw) if raw else None
+        if not isinstance(forms, list):
+            continue
+        changed = False
+        for form in forms:
+            if (
+                isinstance(form, dict)
+                and form.get("confirmed") is not True
+                and (normalize_vocabulary_text(form.get("form", "")), normalize_vocabulary_text(term))
+                in confirmed
+            ):
+                form["confirmed"] = True
+                changed = True
+        if changed:
+            connection.execute(
+                text("UPDATE vocabulary_entries SET misheard_as = :forms WHERE id = :id"),
+                {"forms": json.dumps(forms), "id": entry_id},
+            )
 
 
 # Segment search indexes the implicit rowid of ``segments``, whose primary key is
@@ -55,6 +106,11 @@ _MIGRATIONS = (
         3,
         "meeting split_times",
         (_add_column("meetings", "split_times", "JSON"),),
+    ),
+    (
+        4,
+        "confirmed Misheard Forms from confirmed Corrections",
+        (_confirm_forms_of_confirmed_corrections,),
     ),
 )
 

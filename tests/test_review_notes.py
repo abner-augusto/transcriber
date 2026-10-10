@@ -396,7 +396,8 @@ def accept(client, note, **body):
 def test_accepting_a_text_note_edits_the_segment_and_teaches_vocabulary(db_session):
     from models import VocabularyEntry
 
-    meeting, _, _, first, _ = seed(db_session)
+    meeting, _, _, first, second = seed(db_session)
+    second.text = "Concordo com o Garrah"  # the name, capitalized mid-sentence, makes the edit a term
     entry = VocabularyEntry(term="Garrah")
     db_session.add(entry)
     note = text_note(db_session, meeting)
@@ -413,7 +414,7 @@ def test_accepting_a_text_note_edits_the_segment_and_teaches_vocabulary(db_sessi
     assert first.is_edited
     assert note.status == "accepted"
     assert note.resolved_at is not None
-    assert entry.misheard_as == [{"form": "Galo", "count": 1}]
+    assert entry.misheard_as == [{"form": "Galo", "count": 1, "confirmed": False}]
 
 
 def test_accepting_a_text_note_without_teaching_leaves_vocabulary_alone(db_session):

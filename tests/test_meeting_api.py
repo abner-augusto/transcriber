@@ -272,19 +272,80 @@ def test_segment_edits_learn_and_increment_misheard_form(db_session):
     db_session.flush()
     segment = Segment(
         meeting_id=meeting.id, start_time=0, end_time=0.5,
-        text="Galo", original_text="Galo", order=0,
+        text="o Galo", original_text="o Galo", order=0,
     )
     db_session.add(segment)
     db_session.commit()
 
     client = TestClient(app)
     for _ in range(2):
-        response = client.put(f"/api/segments/{segment.id}", json={"text": "Garrah"})
+        response = client.put(f"/api/segments/{segment.id}", json={"text": "o Garrah"})
         assert response.status_code == 200
-        assert response.json()["text"] == "Garrah"
+        assert response.json()["text"] == "o Garrah"
 
     db_session.refresh(entry)
-    assert entry.misheard_as == [{"form": "Galo", "count": 2}]
+    assert entry.misheard_as == [{"form": "Galo", "count": 2, "confirmed": False}]
+
+
+def _meeting_with_segments(db_session, texts, **meeting_fields):
+    meeting = Meeting(title="Gate", status=MeetingStatus.COMPLETED, **meeting_fields)
+    db_session.add(meeting)
+    db_session.flush()
+    segments = [
+        Segment(
+            meeting_id=meeting.id, start_time=float(order), end_time=order + 0.5,
+            text=text, original_text=text, order=order,
+        )
+        for order, text in enumerate(texts)
+    ]
+    db_session.add_all(segments)
+    db_session.commit()
+    return meeting, segments
+
+
+def test_a_sentence_initial_name_is_learned_when_the_meeting_capitalizes_it_elsewhere(db_session):
+    entry = VocabularyEntry(term="Garrah")
+    db_session.add(entry)
+    _, (target, _) = _meeting_with_segments(db_session, ["Galo disse isso", "falei com o Garrah hoje"])
+
+    response = TestClient(app).put(f"/api/segments/{target.id}", json={"text": "Garrah disse isso"})
+
+    assert response.status_code == 200
+    db_session.refresh(entry)
+    assert entry.misheard_as == [{"form": "Galo", "count": 1, "confirmed": False}]
+
+
+def test_an_edit_of_common_words_teaches_no_vocabulary(db_session):
+    _, (target,) = _meeting_with_segments(db_session, ["e tu falou com ele"])
+
+    response = TestClient(app).put(f"/api/segments/{target.id}", json={"text": "e o valor com ele"})
+
+    assert response.status_code == 200
+    assert db_session.query(VocabularyEntry).count() == 0
+
+
+def test_an_edit_to_a_term_of_the_meeting_vocabulary_is_learned_in_lowercase(db_session):
+    _, (target,) = _meeting_with_segments(
+        db_session, ["sem habitese hoje"], vocabulary="habite-se"
+    )
+
+    response = TestClient(app).put(f"/api/segments/{target.id}", json={"text": "sem habite-se hoje"})
+
+    assert response.status_code == 200
+    entry = db_session.query(VocabularyEntry).filter_by(term="habite-se").one()
+    assert entry.misheard_as == [{"form": "habitese", "count": 1, "confirmed": False}]
+
+
+def test_an_edit_to_a_participant_name_is_learned_in_lowercase(db_session):
+    _, (target,) = _meeting_with_segments(
+        db_session, ["falou o buno hoje"], participants="ana maria\nbruno"
+    )
+
+    response = TestClient(app).put(f"/api/segments/{target.id}", json={"text": "falou o bruno hoje"})
+
+    assert response.status_code == 200
+    entry = db_session.query(VocabularyEntry).filter_by(term="bruno").one()
+    assert entry.misheard_as == [{"form": "buno", "count": 1, "confirmed": False}]
 
 
 def test_an_edit_teaching_a_new_term_records_its_misheard_form(db_session):
@@ -304,7 +365,7 @@ def test_an_edit_teaching_a_new_term_records_its_misheard_form(db_session):
 
     assert response.status_code == 200
     entry = db_session.query(VocabularyEntry).filter_by(term="Informakon").one()
-    assert entry.misheard_as == [{"form": "Infarmacom", "count": 1}]
+    assert entry.misheard_as == [{"form": "Infarmacom", "count": 1, "confirmed": False}]
 
 
 def test_undoing_a_correction_by_hand_teaches_nothing_and_clears_corrections(db_session):
@@ -919,8 +980,25 @@ def test_confirming_a_correction_teaches_its_misheard_form_and_marks_it_confirme
     assert [c["confirmed"] for c in body["corrections"]] == [True, False]
     entry = db_session.query(VocabularyEntry).filter_by(term="Garrah").one()
     assert entry.source_meeting_id == meeting.id
-    assert entry.misheard_as == [{"form": "Galo", "count": 1}]
+    assert entry.misheard_as == [{"form": "Galo", "count": 1, "confirmed": True}]
     assert events != []
+
+
+def test_confirming_a_correction_confirms_a_form_learned_from_an_edit(db_session):
+    _, segment = _meeting_with_corrections(db_session)
+    entry = VocabularyEntry(
+        term="Garrah", misheard_as=[{"form": "Galo", "count": 2, "confirmed": False}]
+    )
+    db_session.add(entry)
+    db_session.commit()
+
+    response = TestClient(app).post(
+        f"/api/segments/{segment.id}/corrections/confirm", json={"start": 0.5}
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(entry)
+    assert entry.misheard_as == [{"form": "Galo", "count": 3, "confirmed": True}]
 
 
 def test_confirming_with_an_existing_term_adds_the_form_without_a_second_entry(db_session):
@@ -934,7 +1012,10 @@ def test_confirming_with_an_existing_term_adds_the_form_without_a_second_entry(d
 
     assert response.status_code == 200
     (entry,) = db_session.query(VocabularyEntry).all()
-    assert entry.misheard_as == [{"form": "Garra", "count": 1}, {"form": "Galo", "count": 1}]
+    assert entry.misheard_as == [
+        {"form": "Garra", "count": 1},
+        {"form": "Galo", "count": 1, "confirmed": True},
+    ]
 
 
 def test_confirming_twice_teaches_once(db_session):
@@ -947,7 +1028,7 @@ def test_confirming_twice_teaches_once(db_session):
         ).status_code == 200
 
     entry = db_session.query(VocabularyEntry).filter_by(term="Garrah").one()
-    assert entry.misheard_as == [{"form": "Galo", "count": 1}]
+    assert entry.misheard_as == [{"form": "Galo", "count": 1, "confirmed": True}]
 
 
 def test_rejecting_a_correction_reverts_its_text_and_shifts_the_later_offsets(db_session):
