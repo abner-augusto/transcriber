@@ -88,5 +88,13 @@ Results:
 The remaining boundary errors are 1 to 3 Words at a handoff, in both
 directions. Both channels are active there, and exclusive Turns leave the
 Words to the nearest Turn. No global knob moves them without breaking other
-handoffs. They stay an operator fix (`assign`), which a `suspects` section for
-short Segments between two other Speakers could speed up.
+handoffs. They stay an operator fix (`assign`).
+
+The follow-ups landed on 2026-10-10:
+- the user's Preference and the code default of `min_speaker_seconds` are now
+  10 s (plan 038);
+- `suspects` gained the section SENTENCE CUT BY A SPEAKER CHANGE (plan 039).
+  On Sinop's uncorrected Segments it flags 29 pairs and finds 14 of the 17
+  hand-fixed Segments.
+
+Shape 2 is closed.
