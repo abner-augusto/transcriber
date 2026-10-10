@@ -153,6 +153,17 @@ page design follows.
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | 040 | Vocabulary Correction stops swallowing neighbouring Words | P0 | S | 014 | TODO |
+| 041 | Confirm or reject a Vocabulary Correction (backend, CLI, glossary) | P1 | M | 014, 040 | TODO |
+| 042 | Vocabulary Corrections on the Meeting page and in Settings | P1 | M | 041 | TODO |
+
+Decisions (user, 2026-10-10):
+- a mark on the corrected Word, with confirm and undo; the Review tab is not
+  used;
+- undo is global and recorded as a Rejected Form, which the user can manage
+  in Settings;
+- confirm teaches the Misheard Form;
+- the five Meetings with stored Corrections get Reapply Vocabulary after
+  041.
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
