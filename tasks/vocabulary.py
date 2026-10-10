@@ -1,13 +1,16 @@
 """Database boundary for the pure Vocabulary Correction value."""
 
 import logging
+import re
 
-from models import RejectedForm, VocabularyEntry
+from models import Meeting, RejectedForm, Segment, VocabularyEntry
 from transcript.vocabulary_correction import (
     MisheardForm,
     VocabularyCorrection,
+    capitalized_mid_sentence,
     learned_from_edit,
     normalize_vocabulary_text,
+    parse_vocabulary,
     without_edge_punctuation,
 )
 
@@ -38,7 +41,19 @@ def learn_from_edit(
 ) -> None:
     """Persist the Vocabulary a manual Segment edit teaches (see ``learned_from_edit``)."""
     undone = {(c["term"], c["heard"]) for c in corrections}
-    terms, forms = learned_from_edit(before, after, undone=undone)
+    meeting = db.get(Meeting, meeting_id)
+    known = [
+        *parse_vocabulary(meeting.vocabulary if meeting else None),
+        *(
+            name.strip()
+            for name in re.split(r"[,\n]", (meeting.participants if meeting else None) or "")
+            if name.strip()
+        ),
+    ]
+    proper = capitalized_mid_sentence(
+        text for (text,) in db.query(Segment.text).filter(Segment.meeting_id == meeting_id)
+    )
+    terms, forms = learned_from_edit(before, after, undone=undone, known=known, proper=proper)
 
     for term in dict.fromkeys(terms):
         existing = db.query(VocabularyEntry).filter(VocabularyEntry.term == term).first()

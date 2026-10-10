@@ -592,19 +592,19 @@ def test_edit_does_not_teach_vocabulary_unless_asked_to_learn(db_session, api, c
     entry = VocabularyEntry(term="Garrah")
     db_session.add(entry)
     ana = add_speaker(db_session, meeting, "SPEAKER_00", "Ana")
-    add_segment(db_session, meeting, ana, 0, 0.0, 1.0, "Galo", original_text="Galo")
+    add_segment(db_session, meeting, ana, 0, 0.0, 1.0, "o Galo", original_text="o Galo")
     db_session.commit()
 
-    code, out, _ = run(["edit", meeting.id, "#0", "Garrah"], api, capsys)
+    code, out, _ = run(["edit", meeting.id, "#0", "o Garrah"], api, capsys)
 
     assert code == 0
-    assert "#0 00:00 Ana: Garrah [edited]" in out
+    assert "#0 00:00 Ana: o Garrah [edited]" in out
     db_session.refresh(entry)
     assert not entry.misheard_as
 
-    code, _, _ = run(["edit", meeting.id, "#0", "Galo"], api, capsys)
+    code, _, _ = run(["edit", meeting.id, "#0", "o Galo"], api, capsys)
     assert code == 0
-    code, _, _ = run(["edit", meeting.id, "#0", "Garrah", "--learn"], api, capsys)
+    code, _, _ = run(["edit", meeting.id, "#0", "o Garrah", "--learn"], api, capsys)
     assert code == 0
     db_session.refresh(entry)
     assert entry.misheard_as == [{"form": "Galo", "count": 1}]

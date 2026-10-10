@@ -396,7 +396,8 @@ def accept(client, note, **body):
 def test_accepting_a_text_note_edits_the_segment_and_teaches_vocabulary(db_session):
     from models import VocabularyEntry
 
-    meeting, _, _, first, _ = seed(db_session)
+    meeting, _, _, first, second = seed(db_session)
+    second.text = "Concordo com o Garrah"  # the name, capitalized mid-sentence, makes the edit a term
     entry = VocabularyEntry(term="Garrah")
     db_session.add(entry)
     note = text_note(db_session, meeting)
