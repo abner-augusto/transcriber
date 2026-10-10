@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     vibevoice_python: str = "./venv-engines/vibevoice/Scripts/python.exe"
     nemotron_diarization_python: str = "./venv-engines/nemotron-diarization/Scripts/python.exe"
     nemotron_diarization_model_path: str = "./models/nemotron-diarization"
+    nemotron_diarization_device: str = "cuda"
     engine_runtime_timeout_seconds: float = 7200.0
     engine_runtime_debug_directory: str = ""
 

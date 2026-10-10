@@ -22,6 +22,7 @@ from engines.parakeet_cpp import parse_words as parse_parakeet
 from engines.whisper_cpp import MIN_TAIL_SECONDS as WHISPER_MIN_TAIL_SECONDS
 from engines.whisper_cpp import WhisperCppTranscriber
 from engines.whisper_cpp import parse_words as parse_whisper
+from config import settings
 from preferences import DiarizationPrefs, VocabularyCorrectionPrefs, WhisperDtwPrefs
 from run_config import RunConfig
 
@@ -51,13 +52,14 @@ def test_a_fake_satisfies_the_ports():
 def test_default_diarizer_factory_stays_pyannote():
     from engines.pyannote import PyannoteDiarizer
     selected = _run_config({}).model_copy(update={
-        "diarization": DiarizationPrefs(clustering_threshold=0.6)
+        "diarization": DiarizationPrefs(clustering_threshold=0.6, speech_threshold=0.3)
     })
 
     diarizer = make_diarizer(selected, hf_token="token")
 
     assert isinstance(diarizer, PyannoteDiarizer)
-    # The Engine choice is not a clustering knob; pyannote would try to cast it to a float.
+    # Neither the Engine choice nor Nemotron's knobs are clustering knobs; pyannote would
+    # try to cast them to floats.
     assert diarizer.clustering == {"clustering_threshold": 0.6}
 
 
@@ -71,6 +73,7 @@ def test_nemotron_factory_and_adapter_filter_short_speakers(monkeypatch):
     })
     diarizer = make_diarizer(selected)
     assert isinstance(diarizer, IsolatedPythonDiarizer)
+    assert diarizer.device == settings.nemotron_diarization_device
 
     response = types.SimpleNamespace(native_turns=(
         Turn(0, 8, "SPEAKER_00"), Turn(6, 14, "SPEAKER_01"), Turn(1, 4.5, "SPEAKER_02")
@@ -80,6 +83,24 @@ def test_nemotron_factory_and_adapter_filter_short_speakers(monkeypatch):
     assert result.engine == "nemotron-3-diarization"
     assert {turn.speaker for turn in result.turns} == {"SPEAKER_00", "SPEAKER_01"}
     assert result.exclusive_turns == [Turn(0, 6, "SPEAKER_00"), Turn(8, 14, "SPEAKER_01")]
+
+
+def test_nemotron_reads_its_knobs_from_the_run_config(monkeypatch):
+    selected = _run_config({}).model_copy(update={
+        "diarization": DiarizationPrefs(
+            engine="nemotron-3-diarization", speech_threshold=0.35, min_speaker_seconds=3.0
+        )
+    })
+    diarizer = make_diarizer(selected)
+    assert diarizer.options == {"threshold": 0.35}
+
+    response = types.SimpleNamespace(native_turns=(
+        Turn(0, 8, "SPEAKER_00"), Turn(6, 14, "SPEAKER_01"), Turn(1, 4.5, "SPEAKER_02")
+    ))
+    monkeypatch.setattr("engines.isolated_python.launch_engine", lambda **_kwargs: response)
+    result = diarizer.diarize("audio.wav")
+
+    assert {turn.speaker for turn in result.turns} == {"SPEAKER_00", "SPEAKER_01", "SPEAKER_02"}
 
 
 def test_whisper_subword_tokens_are_stitched_back_into_words():

@@ -210,6 +210,8 @@ export interface DiarizationPrefs {
   clustering_threshold?: number | null;
   Fa?: number | null;
   Fb?: number | null;
+  speech_threshold?: number;
+  min_speaker_seconds?: number;
 }
 
 export interface DiarizerOption {

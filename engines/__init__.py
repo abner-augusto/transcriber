@@ -127,11 +127,15 @@ def make_diarizer(run_config: "RunConfig", *, hf_token: str = "") -> Diarizer:
     if run_config.diarization.engine == "nemotron-3-diarization":
         from config import settings
         from .isolated_python import IsolatedPythonDiarizer
-        return IsolatedPythonDiarizer(model_path=settings.nemotron_diarization_model_path,
-            device="cuda", threshold=0.5)
-    from .pyannote import PyannoteDiarizer
+        return IsolatedPythonDiarizer(
+            model_path=settings.nemotron_diarization_model_path,
+            device=settings.nemotron_diarization_device,
+            threshold=run_config.diarization.speech_threshold,
+            min_speaker_seconds=run_config.diarization.min_speaker_seconds,
+        )
+    from .pyannote import CLUSTERING_PREF_TO_PARAM, PyannoteDiarizer
     return PyannoteDiarizer(
-        clustering=run_config.diarization.model_dump(exclude_none=True, exclude={"engine"}),
+        clustering=run_config.diarization.model_dump(include=set(CLUSTERING_PREF_TO_PARAM), exclude_none=True),
         auth_token=hf_token,
     )
 

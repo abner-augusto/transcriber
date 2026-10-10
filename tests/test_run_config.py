@@ -38,7 +38,9 @@ def test_run_config_resolves_result_choices_without_secrets(
         hf_auth_token="hf-secret",
         forced_alignment=ForcedAlignmentPrefs(enabled=True, device="auto"),
         whisper_dtw=WhisperDtwPrefs(enabled=True, preset="large.v3"),
-        diarization=DiarizationPrefs(clustering_threshold=0.62),
+        diarization=DiarizationPrefs(
+            clustering_threshold=0.62, speech_threshold=0.4, min_speaker_seconds=2.0
+        ),
         speaker_switch_penalty=0.4,
         speaker_profiles_enabled=True,
         vocabulary_correction=VocabularyCorrectionPrefs(enabled=False),
@@ -54,6 +56,9 @@ def test_run_config_resolves_result_choices_without_secrets(
     assert config.whisper_dtw.enabled is False
     assert config.whisper_dtw.preset == "large.v3"
     assert config.diarization.clustering_threshold == 0.62
+    assert config.diarization.speech_threshold == 0.4
+    assert stored["diarization"]["speech_threshold"] == 0.4
+    assert stored["diarization"]["min_speaker_seconds"] == 2.0
     assert config.speaker_switch_penalty == 0.4
     assert config.speaker_profiles_enabled is True
     assert config.vocabulary_correction.enabled is False

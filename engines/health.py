@@ -280,7 +280,7 @@ def probe_engine(preset: dict, deep: bool = False) -> EngineHealth:
 def diarizer_status(engine: str, *, hf_token: str = "") -> dict:
     """Health of a Diarizer Engine, in the same shape as a Preset's."""
     if engine == "nemotron-3-diarization":
-        preset = {"engine": engine, "model_path": settings.nemotron_diarization_model_path, "device": "cuda"}
+        preset = {"engine": engine, "model_path": settings.nemotron_diarization_model_path, "device": settings.nemotron_diarization_device}
         return probe_engine(preset).to_dict()
     if engine == "pyannote":
         # find_spec, not import: importing pyannote.audio pulls torch into the API process.
