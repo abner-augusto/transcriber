@@ -27,7 +27,7 @@ TARGET_SAMPLE_RATE = 16000
 # defaults. The clustering threshold is the main knob: lower splits more readily
 # (one person can become several speakers), higher merges more readily. Fa/Fb are
 # VBx-style and only some pipelines expose them — an unknown key is ignored below.
-_CLUSTERING_PREF_TO_PARAM = {
+CLUSTERING_PREF_TO_PARAM = {
     "clustering_threshold": "threshold",
     "Fa": "Fa",
     "Fb": "Fb",
@@ -105,7 +105,7 @@ class PyannoteDiarizer:
         default_clustering = dict(cls._default_params.get("clustering", {}))
 
         requested_overrides = {}
-        for pref, param in _CLUSTERING_PREF_TO_PARAM.items():
+        for pref, param in CLUSTERING_PREF_TO_PARAM.items():
             if cfg.get(pref) is not None:
                 try:
                     requested_overrides[param] = float(cfg[pref])
@@ -114,7 +114,7 @@ class PyannoteDiarizer:
 
         # Also support raw param names if present
         for k, v in cfg.items():
-            if k not in _CLUSTERING_PREF_TO_PARAM and v is not None:
+            if k not in CLUSTERING_PREF_TO_PARAM and v is not None:
                 try:
                     requested_overrides[k] = float(v)
                 except (ValueError, TypeError):

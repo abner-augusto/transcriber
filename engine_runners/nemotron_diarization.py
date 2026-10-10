@@ -41,7 +41,7 @@ class NemotronDiarization:
         with torch.inference_mode():
             logits = self.model(**inputs).logits
         segments = self.processor.extract_speaker_dict(
-            logits, inputs.attention_mask, threshold=float(self.request.options.get("threshold", 0.5))
+            logits, inputs.attention_mask, threshold=float(self.request.options["threshold"])
         )[0]
         return [Turn(s["Start"], s["End"], f"SPEAKER_{s['Speaker']:02d}")
                 for s in segments if s["End"] > s["Start"]]

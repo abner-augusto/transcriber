@@ -11,12 +11,6 @@ from .ports import DiarizationResult, Transcription
 
 log = logging.getLogger(__name__)
 
-# A Speaker with less total speech than this across the whole Meeting is dropped.
-# Nemotron can open a speaker channel for a few seconds of echo or crosstalk (the
-# 2026-09-25 bench found 3.6 s on a dual-track system track); that Speaker would get
-# no Words and surface as an empty "Participant N".
-MIN_SPEAKER_SECONDS = 5.0
-
 
 class IsolatedPythonTranscriber:
     def __init__(self, *, engine_id: str, model_path: str, aligner_path: str | None,
@@ -64,9 +58,10 @@ class IsolatedPythonDiarizer:
 
     engine_id = "nemotron-3-diarization"
 
-    def __init__(self, *, model_path: str, device: str, threshold: float = 0.5):
+    def __init__(self, *, model_path: str, device: str, threshold: float, min_speaker_seconds: float):
         self.model_path, self.device = model_path, device
         self.options = {"threshold": threshold}
+        self.min_speaker_seconds = min_speaker_seconds
 
     def _request(self, operation: str, audio_path: str):
         request = EngineRequest.from_dict({"schema_version": 1, "operation": operation,
@@ -92,8 +87,8 @@ class IsolatedPythonDiarizer:
         speech: dict[str, float] = {}
         for turn in turns:
             speech[turn.speaker] = speech.get(turn.speaker, 0.0) + turn.end - turn.start
-        dropped = {speaker for speaker, seconds in speech.items() if seconds < MIN_SPEAKER_SECONDS}
+        dropped = {speaker for speaker, seconds in speech.items() if seconds < self.min_speaker_seconds}
         if dropped:
-            log.info("[nemotron] dropped %s: under %.0f s of speech", sorted(dropped), MIN_SPEAKER_SECONDS)
+            log.info("[nemotron] dropped %s: under %.0f s of speech", sorted(dropped), self.min_speaker_seconds)
         turns = [turn for turn in turns if turn.speaker not in dropped]
         return DiarizationResult(turns, exclusive_turns=compute_exclusive_turns(turns), engine=self.engine_id)

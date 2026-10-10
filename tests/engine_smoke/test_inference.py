@@ -15,7 +15,14 @@ def test_selected_preset_satisfies_word_and_turn_contracts(
     if selected_engine_smoke_preset.get("diarizer"):
         from config import settings
         from engines.isolated_python import IsolatedPythonDiarizer
-        turns = IsolatedPythonDiarizer(model_path=settings.nemotron_diarization_model_path, device="cuda").diarize(str(engine_smoke_audio)).turns
+        from preferences import DiarizationPrefs
+        diarizer = IsolatedPythonDiarizer(
+            model_path=settings.nemotron_diarization_model_path,
+            device=settings.nemotron_diarization_device,
+            threshold=DiarizationPrefs().speech_threshold,
+            min_speaker_seconds=DiarizationPrefs().min_speaker_seconds,
+        )
+        turns = diarizer.diarize(str(engine_smoke_audio)).turns
         assert turns
     else:
         from scripts.engine_smoke import infer_preset
