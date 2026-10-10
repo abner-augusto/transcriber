@@ -102,6 +102,8 @@ class VocabularyCorrection:
                 for index in range(start + 1, end)
             ):
                 break
+            if end > start + 1 and _ends_sentence(words[end - 2].text):
+                break
             heard_norm = normalize_vocabulary_text("".join(word.text for word in words[start:end]))
             heard_spelling = _without_edge_punctuation(
                 "".join(word.text for word in words[start:end])
@@ -234,6 +236,10 @@ def _similar_ratio(heard_text: str, term: str) -> float | None:
     ):
         return ratio
     return None
+
+
+def _ends_sentence(spelling: str) -> bool:
+    return spelling.rstrip().rstrip("\"')]}»”’").endswith((".", "?", "!", "…"))
 
 
 def _without_edge_punctuation(spelling: str) -> str:
