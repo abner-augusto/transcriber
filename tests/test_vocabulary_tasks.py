@@ -1,7 +1,7 @@
 import pytest
 
 from engines import Turn, Word, DiarizationResult
-from models import JobType, Meeting, VocabularyEntry
+from models import JobType, Meeting, RejectedForm, VocabularyEntry
 from tasks.process_meeting import process_meeting_task
 from tasks.reprocess_task import reapply_vocabulary_task
 
@@ -95,14 +95,16 @@ def test_reapply_vocabulary_updates_segments_and_keeps_existing_speakers(
 
 
 def _processed_segment(
-    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = ()
+    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = (),
+    rejected: tuple = (),
 ):
-    (segment,) = _processed_segments(monkeypatch, tmp_path, words, vocabulary, misheard)
+    (segment,) = _processed_segments(monkeypatch, tmp_path, words, vocabulary, misheard, rejected)
     return segment
 
 
 def _processed_segments(
-    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = ()
+    monkeypatch, tmp_path, words: list[Word], vocabulary: str, misheard: tuple = (),
+    rejected: tuple = (),
 ):
     harness = h.install(
         monkeypatch, tmp_path,
@@ -115,6 +117,8 @@ def _processed_segments(
     with harness.session_factory() as db:
         for term, form, count in misheard:
             db.add(VocabularyEntry(term=term, misheard_as=[{"form": form, "count": count}]))
+        for heard, term in rejected:
+            db.add(RejectedForm(heard=heard, term=term))
         db.commit()
     meeting_id = harness.meeting(vocabulary=vocabulary)
     job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
@@ -315,6 +319,38 @@ def test_a_misheard_rule_correction_is_stored_confirmed_and_a_similar_one_is_not
 
     assert [c["confirmed"] for c in learned.corrections] == [True]
     assert [c["confirmed"] for c in guessed.corrections] == [False]
+
+
+@pytest.mark.parametrize(
+    ("words", "misheard", "rejected", "expected_text", "expected_terms"),
+    [
+        pytest.param(
+            _spoken(" Garra"), (), (("Garra", "Garrah"),), "Garra", [],
+            id="a-rejected-form-stops-a-similar-match",
+        ),
+        pytest.param(
+            _spoken(" Galo"), (("Garrah", "Galo", 2),), (("Galo", "Garrah"),), "Galo", [],
+            id="a-rejected-form-stops-a-misheard-match",
+        ),
+        pytest.param(
+            _spoken(" (Garra),"), (), (("garra", "GARRAH"),), "(Garra),", [],
+            id="rejection-ignores-case-accents-and-punctuation",
+        ),
+        pytest.param(
+            _spoken(" Garra"), (), (("Garra", "Docker"),), "Garrah", ["Garrah"],
+            id="a-rejected-form-of-another-term-changes-nothing",
+        ),
+    ],
+)
+def test_a_rejected_form_is_never_corrected_to_that_term(
+    monkeypatch, tmp_path, words, misheard, rejected, expected_text, expected_terms
+):
+    segment = _processed_segment(
+        monkeypatch, tmp_path, words, "Vocabulary: Garrah", misheard, rejected
+    )
+
+    assert segment.text == expected_text
+    assert [correction["term"] for correction in segment.corrections] == expected_terms
 
 
 @pytest.mark.parametrize("job_type", [JobType.REAPPLY_VOCABULARY, JobType.REIDENTIFY])

@@ -2,7 +2,7 @@
 
 import logging
 
-from models import VocabularyEntry
+from models import RejectedForm, VocabularyEntry
 from transcript.vocabulary_correction import (
     MisheardForm,
     VocabularyCorrection,
@@ -17,7 +17,8 @@ def vocabulary_correction_for_meeting(db, meeting, *, enabled: bool = True):
     if not enabled:
         return None
     forms = load_misheard_forms(db)
-    return VocabularyCorrection.for_meeting(meeting.vocabulary, forms)
+    rejected = [(row.heard, row.term) for row in db.query(RejectedForm).all()]
+    return VocabularyCorrection.for_meeting(meeting.vocabulary, forms, rejected)
 
 
 def load_misheard_forms(db):

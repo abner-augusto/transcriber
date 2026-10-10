@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 import re
 import unicodedata
 from difflib import SequenceMatcher
+from collections.abc import Iterable
 from typing import Literal
 
 from engines import Word
@@ -43,12 +44,25 @@ class VocabularyCorrection:
 
     terms: list[str]
     misheard: list[MisheardForm]
+    # Normalized (heard, term) pairs the user rejected: never corrected, by either rule.
+    rejected: tuple[tuple[str, str], ...] = ()
 
     @classmethod
     def for_meeting(
-        cls, meeting_vocabulary: str | None, misheard: list[MisheardForm]
+        cls,
+        meeting_vocabulary: str | None,
+        misheard: list[MisheardForm],
+        rejected: Iterable[tuple[str, str]] = (),
     ) -> "VocabularyCorrection":
-        return cls(parse_vocabulary(meeting_vocabulary), misheard)
+        """``rejected`` holds (heard, term) pairs as written; they are normalized here."""
+        return cls(
+            parse_vocabulary(meeting_vocabulary),
+            misheard,
+            tuple(
+                (normalize_vocabulary_text(heard), normalize_vocabulary_text(term))
+                for heard, term in rejected
+            ),
+        )
 
     def apply(self, words: list[Word]) -> tuple[list[Word], list[Correction]]:
         if not words or (not self.terms and not self.misheard):
@@ -113,12 +127,16 @@ class VocabularyCorrection:
             for form in eligible:
                 if window > _window_limit(form.heard):
                     continue
-                if heard_norm == normalize_vocabulary_text(form.heard):
+                if heard_norm == normalize_vocabulary_text(form.heard) and (
+                    heard_norm, normalize_vocabulary_text(form.term)
+                ) not in self.rejected:
                     matches.append((end, 2, form.term, "misheard"))
             for term in self.terms:
                 if window > _window_limit(term):
                     continue
                 term_norm = normalize_vocabulary_text(term)
+                if (heard_norm, term_norm) in self.rejected:
+                    continue
                 if len(_letters(term_norm)) < 4 or (
                     heard_norm == term_norm and heard_spelling == term
                 ):
