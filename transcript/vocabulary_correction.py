@@ -16,8 +16,8 @@ SIMILAR_RATIO = 0.92
 MAX_MERGE_GAP_SECONDS = 0.5
 # A learned phrase this long is a rewrite, not a correction.
 MAX_LEARNED_PHRASE_LENGTH = 100
-# Shorter lowercase words are common words, not names or technical terms.
-MIN_LOWERCASE_TERM_LENGTH = 5
+# Words a multi-word name may contain without capitals ("Casa de Pedra").
+_CONNECTORS = frozenset({"de", "da", "do", "das", "dos", "e"})
 # Punctuation the transcript attaches to a word's edges; never part of a learned term or form.
 EDGE_PUNCTUATION = ".,;:!?…\"'()[]"
 
@@ -163,13 +163,22 @@ class VocabularyCorrection:
 
 
 def learned_from_edit(
-    before: str, after: str, *, undone: set[tuple[str, str]] = frozenset()
+    before: str,
+    after: str,
+    *,
+    undone: set[tuple[str, str]] = frozenset(),
+    known: Iterable[str] = (),
+    proper: Iterable[str] = (),
 ) -> tuple[list[str], list[tuple[str, str]]]:
     """Return the terms and (heard, term) Misheard Forms a manual edit teaches.
 
-    A replaced or inserted phrase becomes a term; a replaced phrase is also a
-    Misheard Form of it. ``undone`` holds (term, heard) pairs of Corrections the
-    edit may reverse: putting back what the Engine heard teaches nothing.
+    A replaced or inserted phrase becomes a term, and a replaced phrase is also a
+    Misheard Form of it, only when it looks like a term (see ``_looks_like_term``).
+    ``undone`` holds (term, heard) pairs of Corrections the edit may reverse:
+    putting back what the Engine heard teaches nothing. ``known`` holds terms the
+    Meeting already names (its Vocabulary, its participants): they always qualify.
+    ``proper`` holds words the Meeting's text writes capitalized mid-sentence (see
+    ``capitalized_mid_sentence``): their capital counts even at a sentence start.
     """
     if not before or not after or before.strip() == after.strip():
         return [], []
@@ -177,12 +186,18 @@ def learned_from_edit(
         (normalize_vocabulary_text(term), normalize_vocabulary_text(heard))
         for term, heard in undone
     }
+    known_terms = {normalize_vocabulary_text(term) for term in known}
+    proper_words = frozenset(proper)
     old_words, new_words = before.split(), after.split()
     terms: list[str] = []
     forms: list[tuple[str, str]] = []
     for op, i1, i2, j1, j2 in SequenceMatcher(None, old_words, new_words).get_opcodes():
         new_phrase = " ".join(new_words[j1:j2]).strip(EDGE_PUNCTUATION)
-        if not _worth_learning(new_phrase):
+        if not 2 <= len(new_phrase) < MAX_LEARNED_PHRASE_LENGTH:
+            continue
+        if normalize_vocabulary_text(new_phrase) not in known_terms and not _looks_like_term(
+            new_words, j1, j2, proper_words
+        ):
             continue
         if op == "insert":
             terms.append(new_phrase)
@@ -197,10 +212,46 @@ def learned_from_edit(
     return terms, forms
 
 
-def _worth_learning(phrase: str) -> bool:
-    if not 2 <= len(phrase) < MAX_LEARNED_PHRASE_LENGTH:
-        return False
-    return not (phrase.islower() and len(phrase) < MIN_LOWERCASE_TERM_LENGTH)
+def capitalized_mid_sentence(texts: Iterable[str]) -> set[str]:
+    """Words (edge punctuation stripped) the texts write capitalized away from a sentence start."""
+    found: set[str] = set()
+    for text in texts:
+        words = text.split()
+        for index in range(1, len(words)):
+            if _ends_sentence(words[index - 1]):
+                continue
+            word = words[index].strip(EDGE_PUNCTUATION)
+            letters = _letters(word)
+            if letters and letters[0].isupper():
+                found.add(word)
+    return found
+
+
+def _looks_like_term(
+    words: list[str], start: int, end: int, proper: frozenset[str] = frozenset()
+) -> bool:
+    """Whether ``words[start:end]`` reads as a name or a technical term.
+
+    Every word is capitalized, an acronym, a connector or a number, and at least
+    one is capitalized or an acronym. A capital that only starts a sentence is no
+    evidence, so "Obrigado." alone is not a term while "Pacaembu" mid-sentence is,
+    unless the word is in ``proper``: the Meeting capitalizes it elsewhere too.
+    """
+    sentence_start = start == 0 or _ends_sentence(words[start - 1])
+    evidence = False
+    for index in range(start, end):
+        word = words[index].strip(EDGE_PUNCTUATION)
+        letters = _letters(word)
+        if not letters or word.casefold() in _CONNECTORS:
+            continue
+        if word.isupper() and len(letters) >= 2:
+            evidence = True
+        elif letters[0].isupper():
+            initial = index == start and sentence_start
+            evidence = evidence or not initial or word in proper
+        else:
+            return False
+    return evidence
 
 
 def parse_vocabulary(text: str | None) -> list[str]:
