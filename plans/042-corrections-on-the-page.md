@@ -9,7 +9,7 @@
 > **Drift check (run first)**: confirm plan 041 is DONE in `plans/README.md`,
 > and that `GET /api/vocabulary/rejected-forms` and
 > `POST /api/segments/{id}/corrections/confirm|reject` exist (`rg -n "rejected-forms|corrections/confirm|corrections/reject" api/`).
-> Then run `git diff --stat MERGE_041..HEAD -- frontend/src/`; any output is a
+> Then run `git diff --stat 78ef268..HEAD -- frontend/src/`; any output is a
 > STOP condition until compared with the excerpts below.
 
 ## Status
