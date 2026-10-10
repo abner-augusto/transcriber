@@ -51,6 +51,14 @@ class DiarizationPrefs(BaseModel):
     clustering_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     Fa: float | None = Field(default=None, ge=0.0, le=5.0)
     Fb: float | None = Field(default=None, ge=0.0, le=5.0)
+    # Nemotron's own knobs; pyannote never receives them.
+    # The speaker probability that counts as speech.
+    speech_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
+    # A Speaker with less total speech than this across the whole Meeting is dropped.
+    # Nemotron can open a speaker channel for a few seconds of echo or crosstalk (the
+    # 2026-09-25 bench found 3.6 s on a dual-track system track); that Speaker would get
+    # no Words and surface as an empty "Participant N".
+    min_speaker_seconds: float = Field(default=5.0, ge=0.0, le=60.0)
 
 
 class VocabularyCorrectionPrefs(BaseModel):
