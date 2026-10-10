@@ -142,6 +142,8 @@ uv run python -m transcriber_cli suggest <id> '#142' "Garrah confirmou" --why "o
 uv run python -m transcriber_cli suggest-split <id> '#142' --before "Quem manda" --speaker "Maria" --why "pergunta e resposta"
 ```
 
+`<id>` is a Meeting's full id, a unique prefix of 4+ characters, or its exact title. A full id is fetched directly; a prefix or a title first reads the Meeting list.
+
 An edit from the command line teaches Vocabulary only with `--learn`; an agent cannot hear the audio, so its corrections are guesses until you confirm them.
 
 `split` cuts a Segment the Diarizer joined (two people on one line) at a Word, by time (`--at`) or by the first Word(s) of the second half (`--before`). The Meeting keeps the cut, so it survives every Reprocessing, Re-diarize included; `unsplit` takes it back. Later Segment handles (`#N`) shift by one. When the text alone does not show the cut, `suggest-split` takes the same arguments and leaves it as a Review Note; accepting the note on the Review tab runs the `split`.

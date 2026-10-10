@@ -1,8 +1,11 @@
 """Short handles for Meetings, Segments, and Speakers."""
 
+import re
+
 from .client import Api, ApiError
 
 MIN_PREFIX = 4
+FULL_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 def _ambiguous(handle, kind, candidates):
@@ -10,7 +13,17 @@ def _ambiguous(handle, kind, candidates):
 
 
 def resolve_meeting(api: Api, handle: str) -> dict:
-    """The Meeting dict for an id, a unique id prefix (4+ chars), or an exact title."""
+    """The Meeting dict for an id, a unique id prefix (4+ chars), or an exact title.
+
+    A full id is fetched directly and comes back as the full Meeting (with
+    `segments`); any other handle is matched against the Meeting list.
+    """
+    if FULL_ID.fullmatch(handle):
+        try:
+            return api.get(f"/api/meetings/{handle}")
+        except ApiError as error:
+            if error.status != 404:
+                raise
     meetings = api.get("/api/meetings")
     for meeting in meetings:
         if meeting["id"] == handle:

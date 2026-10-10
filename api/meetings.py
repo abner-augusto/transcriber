@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from pydantic import BaseModel
 
@@ -55,6 +55,12 @@ def list_meetings(db: Session = Depends(get_db)):
         )
         .outerjoin(speaker_counts, Meeting.id == speaker_counts.c.meeting_id)
         .outerjoin(segment_counts, Meeting.id == segment_counts.c.meeting_id)
+        # The raw Engine output is megabytes per Meeting; the list never shows it.
+        .options(
+            defer(Meeting.raw_transcription),
+            defer(Meeting.raw_diarization),
+            defer(Meeting.split_times),
+        )
         .order_by(Meeting.created_at.desc())
         .all()
     )

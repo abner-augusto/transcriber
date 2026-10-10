@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 import jobs
 from main import app
@@ -65,6 +66,33 @@ def test_update_nonexistent_meeting(db_session):
     client = TestClient(app)
     resp = client.put("/api/meetings/nonexistent-id", json={"title": "New Title"})
     assert resp.status_code == 404
+
+
+def test_meeting_list_never_reads_the_raw_engine_output(db_session):
+    """The raw JSON columns run to megabytes per Meeting; the list does not show them."""
+    meeting = Meeting(
+        title="Obra 12", status=MeetingStatus.COMPLETED,
+        raw_transcription={"segments": []}, raw_diarization={"turns": []}, split_times=[60.0],
+    )
+    db_session.add(meeting)
+    db_session.commit()
+    statements = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        resp = TestClient(app).get("/api/meetings")
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+    assert resp.status_code == 200
+    assert [m["title"] for m in resp.json()] == ["Obra 12"]
+    sql = " ".join(statements)
+    for column in ("raw_transcription", "raw_diarization", "split_times"):
+        assert column not in sql
 
 
 def test_blocked_preset_cannot_create_or_queue_job(db_session, monkeypatch):

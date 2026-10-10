@@ -103,6 +103,70 @@ def test_meeting_handle_resolves_title_and_reports_unknown(db_session, api, caps
     assert "No Meeting matches 'nothing-like-it'" in err
 
 
+FULL_ID = "0f3c2a9e-5b1d-4c7a-9e2f-8a6b4d1c3e5f"
+
+
+@pytest.fixture
+def requested(db_session):
+    """An Api over the app that also records each request as 'METHOD /path'."""
+    paths = []
+    forward = forward_to_app(TestClient(app))
+
+    def transport(method, url, headers, body):
+        paths.append(f"{method} /{url.split('://', 1)[1].split('/', 1)[1].split('?', 1)[0]}")
+        return forward(method, url, headers, body)
+
+    return Api(base_url="http://test", transport=transport), paths
+
+
+def test_a_full_meeting_id_is_fetched_directly_without_listing_meetings(db_session, requested, capsys):
+    seed_meeting(db_session, id=FULL_ID, title="Obra 12")
+    db_session.commit()
+    api, paths = requested
+
+    code, out, _ = run(["show", FULL_ID], api, capsys)
+
+    assert code == 0
+    assert "Obra 12" in out
+    assert paths == [f"GET /api/meetings/{FULL_ID}"]
+
+
+def test_a_full_meeting_id_resolves_for_commands_that_need_only_the_id(db_session, requested, capsys):
+    seed_meeting(db_session, id=FULL_ID)
+    db_session.commit()
+    api, paths = requested
+
+    code, _, _ = run(["words", FULL_ID, "--from", "0:00", "--to", "1:00"], api, capsys)
+
+    assert code == 0
+    assert "GET /api/meetings" not in paths
+    assert paths[-1] == f"GET /api/meetings/{FULL_ID}/words"
+
+
+def test_an_unknown_full_meeting_id_reports_no_match(db_session, requested, capsys):
+    seed_meeting(db_session)
+    db_session.commit()
+    api, _ = requested
+
+    code, out, err = run(["show", FULL_ID], api, capsys)
+
+    assert code == 1
+    assert f"No Meeting matches '{FULL_ID}'" in err
+    assert out == ""
+
+
+def test_a_prefix_or_title_handle_lists_meetings_then_fetches_the_match(db_session, requested, capsys):
+    seed_meeting(db_session, id=FULL_ID, title="Obra 12")
+    db_session.commit()
+    api, paths = requested
+
+    for handle in (FULL_ID[:8], "obra 12"):
+        paths.clear()
+        code, _, _ = run(["show", handle], api, capsys)
+        assert code == 0
+        assert paths == ["GET /api/meetings", f"GET /api/meetings/{FULL_ID}"]
+
+
 def test_show_renders_segment_lines_with_markers(db_session, api, capsys):
     meeting = seed_meeting(db_session)
     maria = add_speaker(db_session, meeting, "SPEAKER_00", "Maria")

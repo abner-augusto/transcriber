@@ -31,7 +31,10 @@ def emit(args, data, text_lines):
 
 def load_meeting(api, handle) -> dict:
     """The full Meeting (Speakers, Segments) for any Meeting handle."""
-    return api.get(f"/api/meetings/{resolve_meeting(api, handle)['id']}")
+    meeting = resolve_meeting(api, handle)
+    if "segments" in meeting:
+        return meeting
+    return api.get(f"/api/meetings/{meeting['id']}")
 
 
 # --- commands -------------------------------------------------------------
