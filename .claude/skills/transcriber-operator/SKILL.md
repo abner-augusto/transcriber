@@ -11,6 +11,8 @@ Run each phase to its done-line, then move on. Every edit shows up on the open M
 
 A **Review Note** is how you ask the user something about a passage: it sits at a time range of the Meeting, and the user answers or accepts it on the Meeting page. When the evidence is not enough to act, leave a note; a chat question sends the user hunting for the passage. Direct `edit`, `rename`, `merge` and `assign` stay for what the transcript proves.
 
+Each note carries one proposal. Accept applies it, and Dismiss means the passage stays as it is. A dismissed note is therefore settled, often because the user heard a real interruption. When you see two possible fixes, leave one note per fix.
+
 ## 1. Preflight
 
 Run `health`. Exit 2 means the app is down: start it in the background (`./start.ps1` on Windows, `./start.sh` elsewhere) and repeat `health` until it exits 0.
