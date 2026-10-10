@@ -143,6 +143,17 @@ operator gets a `suspects` section that finds them.
 | 038 | The default minimum speech per Speaker becomes 10 s | P2 | XS | 037 | DONE |
 | 039 | `suspects` lists sentences cut by a change of Speaker | P1 | S | 029, 030 | DONE |
 
+### Visible Vocabulary Corrections (issue 08, 2026-10-10)
+
+Surveying the 68 stored Corrections before designing the page showed that 42
+of them damaged correct text: the `similar` rule absorbed a neighbouring
+article, crossed a sentence end, or changed a digit. That is fixed first; the
+page design follows.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 040 | Vocabulary Correction stops swallowing neighbouring Words | P0 | S | 014 | TODO |
+
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
