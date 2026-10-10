@@ -353,6 +353,45 @@ def test_a_rejected_form_is_never_corrected_to_that_term(
     assert [correction["term"] for correction in segment.corrections] == expected_terms
 
 
+def test_a_rejected_correction_is_not_applied_again_when_vocabulary_is_reapplied(
+    monkeypatch, tmp_path
+):
+    from fastapi.testclient import TestClient
+
+    from database import get_db
+    from main import app
+
+    harness = h.install(
+        monkeypatch, tmp_path,
+        transcriber=FakeTranscriber([Word(0.1, 0.6, " Garra", 0.8), Word(0.7, 0.9, " chegou.", 0.8)]),
+        diarization=DiarizationResult(turns=[Turn(0, 1, "SPEAKER_00")]),
+    )
+    monkeypatch.setattr("run_config.resolve_run_config", lambda meeting: h.TEST_RUN_CONFIG.model_copy(
+        update={"vocabulary_correction": VocabularyCorrectionPrefs(enabled=True)}
+    ))
+    meeting_id = harness.meeting(vocabulary="Vocabulary: Garrah")
+    assert process_meeting_task(meeting_id, harness.job(meeting_id, JobType.PROCESS_MEETING))["status"] == "completed"
+    (segment,) = harness.load(meeting_id).segments
+    assert segment.text == "Garrah chegou."
+
+    def session():
+        with harness.session_factory() as db:
+            yield db
+
+    monkeypatch.setitem(app.dependency_overrides, get_db, session)
+    response = TestClient(app).post(
+        f"/api/segments/{segment.id}/corrections/reject", json={"start": 0.1}
+    )
+    assert response.status_code == 200
+    assert response.json()["text"] == "Garra chegou."
+
+    job_id = harness.job(meeting_id, JobType.REAPPLY_VOCABULARY)
+    assert reapply_vocabulary_task(meeting_id, job_id)["status"] == "completed"
+
+    (segment,) = harness.load(meeting_id).segments
+    assert (segment.text, segment.corrections) == ("Garra chegou.", [])
+
+
 @pytest.mark.parametrize("job_type", [JobType.REAPPLY_VOCABULARY, JobType.REIDENTIFY])
 def test_reprocessing_keeps_an_edited_segment_and_gives_it_no_corrections(
     monkeypatch, tmp_path, job_type

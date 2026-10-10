@@ -4,7 +4,7 @@ from sqlalchemy import event
 
 import jobs
 from main import app
-from models import Meeting, MeetingStatus, Segment, Speaker, VocabularyEntry
+from models import Meeting, MeetingStatus, RejectedForm, Segment, Speaker, VocabularyEntry
 from models.job import Job, JobType
 
 
@@ -872,3 +872,176 @@ def test_unsplit_refuses_an_edited_half(db_session, isolated_preferences):
 
     assert response.status_code == 409
     assert "revert the edit first" in response.json()["detail"]
+
+
+def _meeting_with_corrections(db_session, status=MeetingStatus.COMPLETED, **segment_columns):
+    """A Segment "com Garrah, ontem Docker" holding two stored Corrections (Galo->Garrah, Doker->Docker)."""
+    meeting = Meeting(title="Corrections", status=status, vocabulary="Vocabulary: Garrah, Docker")
+    db_session.add(meeting)
+    db_session.flush()
+    text = "com Garrah, ontem Docker"
+    segment = Segment(
+        meeting_id=meeting.id, start_time=0.0, end_time=2.0, order=0,
+        text=text, original_text=text,
+        corrections=[
+            {
+                "start": 0.5, "end": 0.9, "heard": "Galo,", "term": "Garrah", "rule": "similar",
+                "text_start": 4, "text_end": 10, "confirmed": False,
+            },
+            {
+                "start": 1.5, "end": 1.9, "heard": "Doker", "term": "Docker", "rule": "similar",
+                "text_start": 18, "text_end": 24, "confirmed": False,
+            },
+        ],
+        **segment_columns,
+    )
+    db_session.add(segment)
+    db_session.commit()
+    return meeting, segment
+
+
+def test_confirming_a_correction_teaches_its_misheard_form_and_marks_it_confirmed(db_session):
+    meeting, segment = _meeting_with_corrections(db_session)
+    client = TestClient(app)
+    responses = []
+
+    events = _events_caused_by(
+        meeting.id,
+        lambda: responses.append(
+            client.post(f"/api/segments/{segment.id}/corrections/confirm", json={"start": 0.5})
+        ),
+    )
+
+    (response,) = responses
+    assert response.status_code == 200
+    body = response.json()
+    assert body["text"] == "com Garrah, ontem Docker"
+    assert [c["confirmed"] for c in body["corrections"]] == [True, False]
+    entry = db_session.query(VocabularyEntry).filter_by(term="Garrah").one()
+    assert entry.source_meeting_id == meeting.id
+    assert entry.misheard_as == [{"form": "Galo", "count": 1}]
+    assert events != []
+
+
+def test_confirming_with_an_existing_term_adds_the_form_without_a_second_entry(db_session):
+    _, segment = _meeting_with_corrections(db_session)
+    db_session.add(VocabularyEntry(term="garrah", misheard_as=[{"form": "Garra", "count": 1}]))
+    db_session.commit()
+
+    response = TestClient(app).post(
+        f"/api/segments/{segment.id}/corrections/confirm", json={"start": 0.5}
+    )
+
+    assert response.status_code == 200
+    (entry,) = db_session.query(VocabularyEntry).all()
+    assert entry.misheard_as == [{"form": "Garra", "count": 1}, {"form": "Galo", "count": 1}]
+
+
+def test_confirming_twice_teaches_once(db_session):
+    _, segment = _meeting_with_corrections(db_session)
+    client = TestClient(app)
+
+    for _ in range(2):
+        assert client.post(
+            f"/api/segments/{segment.id}/corrections/confirm", json={"start": 0.5}
+        ).status_code == 200
+
+    entry = db_session.query(VocabularyEntry).filter_by(term="Garrah").one()
+    assert entry.misheard_as == [{"form": "Galo", "count": 1}]
+
+
+def test_rejecting_a_correction_reverts_its_text_and_shifts_the_later_offsets(db_session):
+    meeting, segment = _meeting_with_corrections(db_session)
+    client = TestClient(app)
+    responses = []
+
+    events = _events_caused_by(
+        meeting.id,
+        lambda: responses.append(
+            client.post(f"/api/segments/{segment.id}/corrections/reject", json={"start": 0.5})
+        ),
+    )
+
+    (response,) = responses
+    assert response.status_code == 200
+    body = response.json()
+    assert body["text"] == "com Galo, ontem Docker"
+    assert body["original_text"] == "com Galo, ontem Docker"
+    assert body["is_edited"] is False
+    assert body["corrections"] == [{
+        "start": 1.5, "end": 1.9, "heard": "Doker", "term": "Docker", "rule": "similar",
+        "text_start": 16, "text_end": 22, "confirmed": False,
+    }]
+    assert body["text"][16:22] == "Docker"
+    assert events != []
+
+
+def test_rejecting_records_one_rejected_form_across_meetings(db_session):
+    first_meeting, first = _meeting_with_corrections(db_session)
+    _, second = _meeting_with_corrections(db_session)
+    client = TestClient(app)
+
+    for segment in (first, second):
+        assert client.post(
+            f"/api/segments/{segment.id}/corrections/reject", json={"start": 0.5}
+        ).status_code == 200
+
+    (rejected,) = db_session.query(RejectedForm).all()
+    assert (rejected.heard, rejected.term, rejected.source_meeting_id) == (
+        "Galo", "Garrah", first_meeting.id
+    )
+
+
+def test_rejecting_removes_the_same_misheard_form_from_the_term(db_session):
+    _, segment = _meeting_with_corrections(db_session)
+    entry = VocabularyEntry(
+        term="Garrah", misheard_as=[{"form": "galo", "count": 3}, {"form": "Garra", "count": 1}]
+    )
+    db_session.add(entry)
+    db_session.commit()
+
+    response = TestClient(app).post(
+        f"/api/segments/{segment.id}/corrections/reject", json={"start": 0.5}
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(entry)
+    assert entry.misheard_as == [{"form": "Garra", "count": 1}]
+
+
+def test_rejecting_a_correction_stored_before_offsets_asks_to_reapply_vocabulary(db_session):
+    _, segment = _meeting_with_corrections(db_session)
+    segment.corrections = [
+        {key: value for key, value in item.items() if key not in ("text_start", "text_end", "confirmed")}
+        for item in segment.corrections
+    ]
+    db_session.commit()
+
+    response = TestClient(app).post(
+        f"/api/segments/{segment.id}/corrections/reject", json={"start": 0.5}
+    )
+
+    assert response.status_code == 409
+    assert "reapply Vocabulary first" in response.json()["detail"]
+    assert db_session.query(RejectedForm).count() == 0
+
+
+@pytest.mark.parametrize("action", ["confirm", "reject"])
+def test_a_correction_action_is_refused_for_an_edited_segment_an_unknown_start_or_a_busy_meeting(
+    db_session, action
+):
+    _, edited = _meeting_with_corrections(db_session, is_edited=True)
+    _, plain = _meeting_with_corrections(db_session)
+    _, busy = _meeting_with_corrections(db_session, status=MeetingStatus.PROCESSING)
+    client = TestClient(app)
+
+    def post(segment, start=0.5):
+        return client.post(f"/api/segments/{segment.id}/corrections/{action}", json={"start": start})
+
+    assert post(edited).status_code == 409
+    assert post(plain, start=0.7).status_code == 409
+    assert post(busy).status_code == 409
+    assert client.post(
+        f"/api/segments/nobody/corrections/{action}", json={"start": 0.5}
+    ).status_code == 404
+    assert db_session.query(VocabularyEntry).count() == 0

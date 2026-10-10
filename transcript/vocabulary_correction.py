@@ -119,7 +119,7 @@ class VocabularyCorrection:
             if end > start + 1 and _ends_sentence(words[end - 2].text):
                 break
             heard_norm = normalize_vocabulary_text("".join(word.text for word in words[start:end]))
-            heard_spelling = _without_edge_punctuation(
+            heard_spelling = without_edge_punctuation(
                 "".join(word.text for word in words[start:end])
             )
             if not heard_norm:
@@ -265,7 +265,7 @@ def _ends_sentence(spelling: str) -> bool:
     return spelling.rstrip().rstrip("\"')]}»”’").endswith((".", "?", "!", "…"))
 
 
-def _without_edge_punctuation(spelling: str) -> str:
+def without_edge_punctuation(spelling: str) -> str:
     return re.sub(r"^\W+|\W+$", "", spelling)
 
 
