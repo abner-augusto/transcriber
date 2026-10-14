@@ -1,6 +1,7 @@
 """Numbered SQLite schema migrations; model metadata is the initial baseline."""
 
 import json
+import os
 
 from sqlalchemy import text
 
@@ -63,6 +64,49 @@ def _confirm_forms_of_confirmed_corrections(connection):
             )
 
 
+def _audio_paths_of_deleted_files(connection):
+    """Make a Meeting's audio columns point at files that exist (plan 045).
+
+    The app keeps only ``audio.wav`` once a Meeting is processed, and a manual cleanup
+    deleted the sources of older Meetings without touching their rows. A mic or system
+    path whose file is gone becomes NULL. An ``audio_filepath`` whose file is gone moves to
+    the ``audio.wav`` beside it, or becomes NULL when that is gone too. A path is judged
+    only when its folder exists: without the folder, the files cannot be told from an
+    unmounted disk or another working directory, and the row is left alone.
+    Changes rows only, never files. Idempotent; a database without these columns is left
+    alone.
+    """
+    tables = {row[0] for row in connection.exec_driver_sql(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    )}
+    if "meetings" not in tables:
+        return
+    columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(meetings)")}
+    if not {"audio_filepath", "mic_audio_filepath", "system_audio_filepath"} <= columns:
+        return
+
+    def gone(path):
+        return bool(path) and not os.path.exists(path) and os.path.isdir(os.path.dirname(path))
+
+    for meeting_id, audio, mic, system in connection.exec_driver_sql(
+        "SELECT id, audio_filepath, mic_audio_filepath, system_audio_filepath FROM meetings"
+    ).fetchall():
+        values = {}
+        if gone(audio):
+            kept = os.path.join(os.path.dirname(audio), "audio.wav")
+            values["audio_filepath"] = kept if os.path.exists(kept) else None
+        if gone(mic):
+            values["mic_audio_filepath"] = None
+        if gone(system):
+            values["system_audio_filepath"] = None
+        if values:
+            assignments = ", ".join(f"{column} = :{column}" for column in values)
+            connection.execute(
+                text(f"UPDATE meetings SET {assignments} WHERE id = :id"),
+                {**values, "id": meeting_id},
+            )
+
+
 # Segment search indexes the implicit rowid of ``segments``, whose primary key is
 # TEXT. SQLite documents that VACUUM *may* renumber such rowids; SQLite 3.50
 # preserves them (checked 2026-09-25, including VACUUM INTO). If search ever
@@ -111,6 +155,11 @@ _MIGRATIONS = (
         4,
         "confirmed Misheard Forms from confirmed Corrections",
         (_confirm_forms_of_confirmed_corrections,),
+    ),
+    (
+        5,
+        "audio paths of deleted files",
+        (_audio_paths_of_deleted_files,),
     ),
 )
 
