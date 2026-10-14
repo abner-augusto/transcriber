@@ -6,6 +6,7 @@ from sqlalchemy import String, Float, Integer, DateTime, JSON, Enum, Text, Boole
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
+from services.source_reference import describe
 
 
 class MeetingStatus(str, enum.Enum):
@@ -77,6 +78,7 @@ class Meeting(Base):
             "system_audio_filepath": self.system_audio_filepath,
             "is_dual_track": self.is_dual_track,
             "reprocessable": self.reprocessable,
+            "sources": describe(self.source_refs),
             "duration": self.duration,
             "preset_id": self.preset_id,
             "min_speakers": self.min_speakers,

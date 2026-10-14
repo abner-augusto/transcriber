@@ -255,6 +255,34 @@ def update_meeting(meeting_id: str, req: UpdateMeetingRequest, db: Session = Dep
     return meeting.to_dict()
 
 
+class SourcesRequest(BaseModel):
+    source: str | None = None
+    system_source: str | None = None
+    adopt: bool = False
+
+
+@router.put("/{meeting_id}/sources")
+def point_sources(meeting_id: str, req: SourcesRequest, db: Session = Depends(get_db)):
+    """Point the Meeting at where its original recording(s) live now.
+
+    The file must be the recording the Meeting was made from (same size and hash). The
+    original is only read, never moved or changed.
+    """
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    try:
+        meeting.source_refs = source_reference.repoint(
+            meeting, req.source, req.system_source, adopt=req.adopt,
+            duration_of=AudioService().get_duration,
+        )
+    except source_reference.SourceError as error:
+        raise HTTPException(error.status_code, error.message)
+    db.commit()
+    jobs.notify_meeting_changed(meeting.id)
+    return meeting.to_dict()
+
+
 @router.delete("/{meeting_id}")
 def delete_meeting(meeting_id: str, db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
