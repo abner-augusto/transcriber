@@ -79,7 +79,7 @@ def find(ref: dict, roots) -> Path | None:
     return None
 
 
-class SourceError(Exception):
+class SourceError(RuntimeError):
     """A Source Reference operation the user must correct; carries the HTTP status to answer."""
 
     def __init__(self, status_code: int, message: str):

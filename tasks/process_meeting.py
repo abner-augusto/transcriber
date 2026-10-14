@@ -8,6 +8,7 @@ from jobs import MeetingNotFoundError, running
 from meeting_store import labels_with_segments, rebuild_speakers_and_segments
 from engines import make_aligner, make_diarizer, make_transcriber, raw_transcription
 from services.audio_retention import drop_raw_audio
+from services.source_reference import locate_tracks
 from services.audio_service import AudioService
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
@@ -37,8 +38,12 @@ def process_meeting_task(meeting_id: str, job_id: str):
             # Step 1: Extract audio
             current.progress(2, "Extracting audio...")
             if meeting.is_dual_track:
+                # The tracks the app holds, or the originals where their Source References
+                # say they are. Either way they are only read.
+                tracks = locate_tracks(meeting)
+                db.commit()  # a path found by searching is remembered
                 audio_path = audio_service.extract_dual_audio(
-                    meeting.mic_audio_filepath, meeting.system_audio_filepath, meeting.id
+                    str(tracks.mic), str(tracks.system), meeting.id
                 )
             else:
                 audio_path = audio_service.extract_audio(

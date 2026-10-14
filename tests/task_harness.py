@@ -55,6 +55,9 @@ class TaskHarness:
             if dual_track:
                 meeting.mic_audio_filepath = str(self.storage / "mic.wav")
                 meeting.system_audio_filepath = str(self.storage / "system.wav")
+                # Sources the app holds, which a dual-track Job reads.
+                (self.storage / "mic.wav").write_bytes(b"")
+                (self.storage / "system.wav").write_bytes(b"")
             db.add(meeting)
             db.commit()
             return meeting.id

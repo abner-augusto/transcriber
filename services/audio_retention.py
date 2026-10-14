@@ -44,6 +44,16 @@ def drop_raw_audio(meeting) -> None:
     meeting.system_audio_filepath = None
 
 
+def drop_processed_tracks(meeting_id: str) -> None:
+    """Delete only the two processed tracks, for a Job that made them just to read them."""
+    directory = get_meeting_path(meeting_id)
+    for name in DROPPED_NAMES:
+        try:
+            (directory / name).unlink(missing_ok=True)
+        except OSError as exc:
+            log.warning("Could not delete %s: %s", directory / name, exc)
+
+
 def processed_tracks_present(meeting_id: str) -> bool:
     """Whether the Meeting's folder still holds both processed tracks a dual-track
     Re-diarize reads."""
