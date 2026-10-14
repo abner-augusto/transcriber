@@ -29,6 +29,10 @@ class Meeting(Base):
     mic_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     system_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     is_dual_track: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    # Source References to the original recordings, which live outside the app (plan 046):
+    # {"audio" | "mic" | "system": {"path", "name", "size", "hash"}}. NULL for a Meeting that
+    # was uploaded before references existed.
+    source_refs: Mapped[dict] = mapped_column(JSON, nullable=True)
     duration: Mapped[float] = mapped_column(Float, nullable=True)
     # Which Preset to transcribe with. NULL means "whatever the default is" — only an
     # A/B run against a specific Engine needs to pin one.

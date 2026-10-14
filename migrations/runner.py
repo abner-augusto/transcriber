@@ -161,6 +161,11 @@ _MIGRATIONS = (
         "audio paths of deleted files",
         (_audio_paths_of_deleted_files,),
     ),
+    (
+        6,
+        "meeting source_refs",
+        (_add_column("meetings", "source_refs", "JSON"),),
+    ),
 )
 
 
