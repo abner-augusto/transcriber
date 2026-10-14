@@ -185,3 +185,14 @@ def test_ffmpeg_failure_preserves_stderr(monkeypatch, tmp_path):
     with patch("subprocess.run", side_effect=failure):
         with pytest.raises(RuntimeError, match=expected_stderr):
             AudioService().extract_audio("input.wav", "meeting-1")
+
+
+def test_extract_dual_tracks_makes_only_the_two_processed_tracks_and_never_writes_to_the_inputs():
+    run, calls = _fake_run()
+    with patch("subprocess.run", side_effect=run):
+        mic_out, system_out = AudioService().extract_dual_tracks("D:/p/mic.wav", "D:/p/system.wav", "m1")
+
+    assert [Path(mic_out).name, Path(system_out).name] == ["mic_processed.wav", "system_processed.wav"]
+    assert len(calls) == 2  # no mix: audio.wav is already kept
+    assert [c[-1] for c in calls] == [mic_out, system_out]  # ffmpeg writes only to the Meeting folder
+    assert [c[c.index("-i") + 1] for c in calls] == ["D:/p/mic.wav", "D:/p/system.wav"]

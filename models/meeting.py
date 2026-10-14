@@ -8,6 +8,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 
+def _described(refs):
+    # Lazy: importing `services` loads torch, which every Job child process would pay
+    # for at `import models` (plan 046 regression, found by the local job runner tests).
+    from services.source_reference import describe
+
+    return describe(refs)
+
+
 class MeetingStatus(str, enum.Enum):
     UPLOADED = "uploaded"
     PROCESSING = "processing"
@@ -29,6 +37,10 @@ class Meeting(Base):
     mic_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     system_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     is_dual_track: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    # Source References to the original recordings, which live outside the app (plan 046):
+    # {"audio" | "mic" | "system": {"path", "name", "size", "hash"}}. NULL for a Meeting that
+    # was uploaded before references existed.
+    source_refs: Mapped[dict] = mapped_column(JSON, nullable=True)
     duration: Mapped[float] = mapped_column(Float, nullable=True)
     # Which Preset to transcribe with. NULL means "whatever the default is" — only an
     # A/B run against a specific Engine needs to pin one.
@@ -52,6 +64,23 @@ class Meeting(Base):
         order_by="ReviewNote.start_time",
     )
 
+    @property
+    def reprocessable(self) -> bool:
+        """Whether Full reprocess, Re-diarize and Duplicate can run from the audio the app holds.
+
+        A single-track Meeting reruns from its ``audio.wav``. A dual-track one needs its
+        mic and system tracks: the ones the app still holds, or the original recordings its
+        Source References point at (the app drops its own copies once a Meeting is processed).
+        """
+        if not self.is_dual_track:
+            return True
+        if self.mic_audio_filepath and self.system_audio_filepath:
+            return True
+        # The originals live outside the app (plan 046). This only stats them; searching
+        # and hashing happen when an operation needs them.
+        sources = _described(self.source_refs)
+        return bool(sources) and all(source["state"] == "present" for source in sources)
+
     def to_dict(self, include_segments: bool = False, speaker_count: int | None = None, segment_count: int | None = None) -> dict:
         d = {
             "id": self.id,
@@ -61,6 +90,8 @@ class Meeting(Base):
             "mic_audio_filepath": self.mic_audio_filepath,
             "system_audio_filepath": self.system_audio_filepath,
             "is_dual_track": self.is_dual_track,
+            "reprocessable": self.reprocessable,
+            "sources": _described(self.source_refs),
             "duration": self.duration,
             "preset_id": self.preset_id,
             "min_speakers": self.min_speakers,

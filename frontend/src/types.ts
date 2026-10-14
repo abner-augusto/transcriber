@@ -1,8 +1,27 @@
+export interface SourceInfo {
+  track: "audio" | "mic" | "system" | string;
+  name: string;
+  size: number;
+  path: string | null;
+  state: "present" | "missing" | "not saved";
+}
+
+export interface SourcesRequest {
+  source?: string;
+  system_source?: string;
+  adopt: boolean;
+}
+
 export interface Meeting {
   id: string;
   title: string;
   status: "uploaded" | "processing" | "completed" | "failed";
   original_filename: string | null;
+  is_dual_track?: boolean | null;
+  /** False for a dual-track Meeting whose original recordings the app cannot read now. */
+  reprocessable?: boolean;
+  /** The Source References: where each original recording lives outside the app. */
+  sources?: SourceInfo[];
   duration: number | null;
   preset_id: string | null;
   min_speakers: number | null;

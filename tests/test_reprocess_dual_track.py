@@ -16,6 +16,10 @@ def _processed(monkeypatch, tmp_path, *, dual_track):
         harness.write_dual_tracks(meeting_id)
     job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
     assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
+    if dual_track:
+        # Processing drops the tracks (plan 045). A Meeting processed before that still
+        # has them, and these tests are about what the Jobs do with them.
+        harness.write_dual_tracks(meeting_id)
     harness.diarizer.calls.clear()
     return harness, meeting_id
 
@@ -51,7 +55,7 @@ def test_reidentify_keeps_the_host_named_you(monkeypatch, tmp_path):
     assert (host.display_name, host.identified_by) == ("You", "host_track")
 
 
-def test_rediarize_fails_the_job_when_the_processed_tracks_are_gone(monkeypatch, tmp_path):
+def test_rediarize_fails_the_job_when_the_processed_tracks_and_the_original_are_gone(monkeypatch, tmp_path):
     harness, meeting_id = _processed(monkeypatch, tmp_path, dual_track=True)
     (harness.track_dir(meeting_id) / "system_processed.wav").unlink()
 
@@ -61,11 +65,11 @@ def test_rediarize_fails_the_job_when_the_processed_tracks_are_gone(monkeypatch,
     except RuntimeError:
         pass
     else:
-        raise AssertionError("rediarize_task should fail without the system track")
+        raise AssertionError("rediarize_task should fail without the system track or an original")
 
     job = harness.job_row(job_id)
     assert job.status == JobStatus.FAILED
-    assert "system_processed.wav" in job.error
+    assert "no reference to its original recording" in job.error
     assert harness.diarizer.calls == []
 
 

@@ -105,21 +105,27 @@ class AudioService:
         different names from uploaded source files so legacy rows pointing at
         ``mic.wav``/``system.wav`` cannot trigger an in-place FFmpeg conversion.
         """
+        mic_out, system_out = self.extract_dual_tracks(mic_path, system_path, meeting_id)
+        mixed_out = str(get_meeting_path(meeting_id) / "audio.wav")
+        self._mix(mic_out, system_out, mixed_out)
+        return mixed_out
+
+    def extract_dual_tracks(self, mic_path: str, system_path: str, meeting_id: str) -> tuple[str, str]:
+        """Produce only ``mic_processed.wav`` and ``system_processed.wav`` (their paths).
+
+        What a dual-track Re-diarize reads when the app no longer holds them. The inputs
+        are only read: the outputs go into the Meeting's folder.
+        """
         output_dir = get_meeting_path(meeting_id)
         mic_out = str(output_dir / DUAL_MIC_OUTPUT)
         system_out = str(output_dir / DUAL_SYSTEM_OUTPUT)
-        mixed_out = str(output_dir / "audio.wav")
 
-        same_file = Path(mic_path).resolve() == Path(system_path).resolve()
-
-        if same_file:
+        if Path(mic_path).resolve() == Path(system_path).resolve():
             self._split_dual(mic_path, mic_out, system_out)
         else:
             self._extract_mono(mic_path, mic_out)
             self._extract_mono(system_path, system_out)
-
-        self._mix(mic_out, system_out, mixed_out)
-        return mixed_out
+        return mic_out, system_out
 
     def _extract_mono(self, input_path: str, output_path: str) -> None:
         """Extract a single source file as 16kHz mono WAV with loudnorm."""

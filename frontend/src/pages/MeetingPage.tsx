@@ -11,6 +11,9 @@ import AudioPlayer from "../components/AudioPlayer";
 import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
 import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
+import SourcesPanel from "../components/SourcesPanel";
+import { apiErrorMessage } from "../utils/apiError";
+import { reprocessBlockedReason } from "../utils/reprocess";
 import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
 import { RECONNECT_DELAY_MS, meetingSocketAction, shouldReconnectMeetingSocket } from "../utils/meetingSocket";
 import { ActiveView } from "../utils/activeView";
@@ -26,6 +29,7 @@ export default function MeetingPage() {
   const [showExport, setShowExport] = useState(false);
   const [showReprocess, setShowReprocess] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [participants, setParticipants] = useState("");
   const [domainVocab, setDomainVocab] = useState("");
   const [showAdvancedVocab, setShowAdvancedVocab] = useState(false);
@@ -145,7 +149,13 @@ export default function MeetingPage() {
         console.error("Failed to update vocabulary before processing:", err);
       }
     }
-    await startProcessing(id);
+    try {
+      await startProcessing(id);
+    } catch (err) {
+      setActionError(apiErrorMessage(err));
+      return;
+    }
+    setActionError("");
     setProgress({ type: "progress", progress: 0, step: "Starting...", status: "processing" });
     loadMeeting();
   }
@@ -168,7 +178,13 @@ export default function MeetingPage() {
   async function handleRediarize() {
     if (!id) return;
     setShowReprocess(false);
-    await rediarizeMeeting(id);
+    try {
+      await rediarizeMeeting(id);
+    } catch (err) {
+      setActionError(apiErrorMessage(err));
+      return;
+    }
+    setActionError("");
     setProgress({ type: "progress", progress: 0, step: "Re-diarizing...", status: "processing" });
     loadMeeting();
   }
@@ -213,6 +229,7 @@ export default function MeetingPage() {
   }
 
   const isProcessing = currentMeeting.status === "processing";
+  const blockedReason = reprocessBlockedReason(currentMeeting);
   const isCompleted = currentMeeting.status === "completed";
   const isUploaded = currentMeeting.status === "uploaded";
   const isFailed = currentMeeting.status === "failed";
@@ -324,10 +341,11 @@ export default function MeetingPage() {
                   <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-1 z-20 min-w-[220px]">
                     <button
                       onClick={handleRediarize}
-                      className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition"
+                      disabled={!!blockedReason}
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <div className="text-sm text-white font-medium">Re-diarize</div>
-                      <div className="text-xs text-slate-500 mt-0.5">Re-assign speakers without re-transcribing</div>
+                      <div className="text-xs text-slate-500 mt-0.5">{blockedReason || "Re-assign speakers without re-transcribing"}</div>
                     </button>
                     <button
                       onClick={handleReidentify}
@@ -346,17 +364,19 @@ export default function MeetingPage() {
                     <div className="border-t border-slate-700 my-1" />
                     <button
                       onClick={handleProcess}
-                      className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition"
+                      disabled={!!blockedReason}
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <div className="text-sm text-white font-medium">Full reprocess</div>
-                      <div className="text-xs text-slate-500 mt-0.5">Re-transcribe and re-diarize everything</div>
+                      <div className="text-xs text-slate-500 mt-0.5">{blockedReason || "Re-transcribe and re-diarize everything"}</div>
                     </button>
                     <button
                       onClick={() => { setShowReprocess(false); setShowDuplicate(true); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition"
+                      disabled={!!blockedReason}
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <div className="text-sm text-white font-medium">Duplicate &amp; reprocess…</div>
-                      <div className="text-xs text-slate-500 mt-0.5">Copy this meeting and try another backend</div>
+                      <div className="text-xs text-slate-500 mt-0.5">{blockedReason || "Copy this meeting and try another backend"}</div>
                     </button>
                   </div>
                   </>
@@ -377,6 +397,18 @@ export default function MeetingPage() {
           )}
         </div>
       </div>
+
+      {actionError && (
+        <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 mb-6 text-sm text-red-300 flex justify-between gap-4">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError("")} className="text-red-400 hover:text-white">Dismiss</button>
+        </div>
+      )}
+
+      {/* Original recording (kept outside the app) */}
+      {isCompleted && (currentMeeting.is_dual_track || (currentMeeting.sources ?? []).length > 0) && (
+        <SourcesPanel meeting={currentMeeting} onChanged={(updated) => setCurrentMeeting({ ...currentMeeting, ...updated, segments: currentMeeting.segments, speakers: currentMeeting.speakers, review_notes: currentMeeting.review_notes })} />
+      )}
 
       {/* Progress (processing) */}
       {isProcessing && progress && (

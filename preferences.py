@@ -3,6 +3,7 @@
 import json
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any, Literal, get_args
 from uuid import uuid4
@@ -95,6 +96,10 @@ class Preferences(BaseModel):
     vocabulary_correction: VocabularyCorrectionPrefs = Field(
         default_factory=VocabularyCorrectionPrefs
     )
+    # Folders searched for an original recording that moved (plan 046). Empty: no search.
+    source_roots: list[str] = Field(default_factory=list)
+    # How many directory levels below each root that search walks (files in the root: 0).
+    source_search_depth: int = Field(default=3, ge=0)
 
 
 def _preference_path(storage_dir: Path | None = None) -> Path:
@@ -264,6 +269,14 @@ def apply_preferences_request(body: dict) -> Preferences:
         enabled = body["vocabulary_correction"].get("enabled")
         if isinstance(enabled, bool):
             patch["vocabulary_correction"] = {"enabled": enabled}
+    if isinstance(body.get("source_roots"), list):
+        roots = [r.strip() for r in body["source_roots"] if isinstance(r, str)]
+        patch["source_roots"] = list(dict.fromkeys(r for r in roots if os.path.isabs(r)))
+    depth = body.get("source_search_depth")
+    if isinstance(depth, int) and not isinstance(depth, bool) and depth >= 0:
+        patch["source_search_depth"] = depth
+    elif isinstance(depth, str) and depth.strip().isdigit():
+        patch["source_search_depth"] = int(depth)
     if "hf_auth_token" in body:
         value = (body["hf_auth_token"] or "").strip()
         if value and "*" not in value:

@@ -84,7 +84,9 @@ def cmd_upload(api, args):
         "min_speakers": args.min_speakers,
         "max_speakers": args.max_speakers,
     }
-    fields = {"title": args.title}
+    fields = {"title": args.title, "source_path": os.path.abspath(args.file)}
+    if args.system:
+        fields["system_source_path"] = os.path.abspath(args.system)
     fields.update({k: str(v) for k, v in options.items() if v is not None})
     meeting = api.upload("/api/meetings", fields, files)
     emit(args, meeting, [meeting["id"]])
@@ -518,13 +520,30 @@ def cmd_close(api, args):
     return 0
 
 
+def _local_file(path):
+    absolute = os.path.abspath(path)
+    if not os.path.isfile(absolute):
+        raise ApiError(400, f"'{absolute}' is not a file.")
+    return absolute
+
+
 def cmd_set(api, args):
     fields = {"title": args.title, "participants": args.participants, "vocabulary": args.vocabulary}
     fields = {name: value for name, value in fields.items() if value is not None}
-    if not fields:
-        raise ApiError(400, "nothing to set; pass --title, --participants or --vocabulary")
+    sources = {"source": args.source, "system_source": args.system_source}
+    sources = {name: _local_file(value) for name, value in sources.items() if value is not None}
+    if not fields and not sources:
+        raise ApiError(
+            400, "nothing to set; pass --title, --participants, --vocabulary, --source or --system-source"
+        )
     meeting = resolve_meeting(api, args.meeting)
-    updated = api.put(f"/api/meetings/{meeting['id']}", json=fields)
+    updated = meeting
+    if fields:
+        updated = api.put(f"/api/meetings/{meeting['id']}", json=fields)
+    if sources:
+        updated = api.put(
+            f"/api/meetings/{meeting['id']}/sources", json={**sources, "adopt": args.adopt}
+        )
     emit(args, updated, meeting_header(updated))
     return 0
 
@@ -715,8 +734,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("note", metavar="NOTE", help="Note handle: n:<id8>, an id prefix (4+ characters), or the id")
     p.add_argument("--reply", metavar="TEXT", help="a short reply to the user")
 
-    p = command("set", cmd_set,"change the Meeting's title, participants, or vocabulary")
+    p = command("set", cmd_set, "change the Meeting's title, participants, vocabulary, or where its original lives")
     p.add_argument("--title")
+    p.add_argument("--source", metavar="PATH",
+                   help="where the original recording is now (the mic file of a dual-track Meeting); "
+                   "refused unless it is the same recording")
+    p.add_argument("--system-source", metavar="PATH", help="where the system-audio original is now")
+    p.add_argument("--adopt", action="store_true",
+                   help="with --source, accept a file as the recording of a Meeting that has no "
+                   "reference yet (uploaded before references existed)")
     p.add_argument("--participants", help="attendee names, comma-separated")
     p.add_argument("--vocabulary", help="domain terms the Transcriber should spell correctly")
 

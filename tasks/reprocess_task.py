@@ -3,6 +3,9 @@ from jobs import MeetingNotFoundError, RunningJob, running
 from meeting_store import labels_with_segments, rebuild_speakers_and_segments, replace_segments
 from engines import make_diarizer
 from preferences import hf_token
+from services.audio_retention import drop_processed_tracks, processed_tracks_present
+from services.audio_service import AudioService
+from services.source_reference import locate_tracks
 from services.speaker_id_service import SpeakerIdService
 from services.vad_service import VadService
 from transcript.diarization import MeetingDiarization
@@ -29,10 +32,23 @@ def _reprocess_meeting(current: RunningJob, rerun_diarization: bool):
 
     speaker_id_service = SpeakerIdService()
 
+    made_tracks = False
     if rerun_diarization:
         diarizer = make_diarizer(run_config, hf_token=hf_token())
+        if meeting.is_dual_track and not processed_tracks_present(meeting.id):
+            # The app dropped the processed tracks (plan 045): make them again from the
+            # original recordings, and drop them again when this Job ends.
+            current.progress(5, "Extracting the mic and system tracks from the originals...")
+            tracks = locate_tracks(meeting)
+            db.commit()
+            made_tracks = True
+            AudioService().extract_dual_tracks(str(tracks.mic), str(tracks.system), meeting.id)
         current.progress(10, "Running new speaker identification...")
-        diarization = diarize_meeting(meeting, audio_path, diarizer=diarizer, vad_service=VadService())
+        try:
+            diarization = diarize_meeting(meeting, audio_path, diarizer=diarizer, vad_service=VadService())
+        finally:
+            if made_tracks:
+                drop_processed_tracks(meeting.id)
         meeting.raw_diarization = diarization.to_stored()
         db.commit()
         current.progress(50, "Diarization complete")

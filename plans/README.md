@@ -158,6 +158,18 @@ page design follows.
 | 043 | Corrections stand out, and the Review tab lists them all | P2 | S | 042 | DONE |
 | 044 | An edit teaches only term-like phrases, and learned forms wait for confirmation | P1 | M | 014, 041 | DONE (amended: a sentence-initial name qualifies when the Meeting capitalizes it elsewhere; `_looks_like_term` takes `(words, start, end, proper)`, and `known` is checked by `learned_from_edit`; "Faixa 3" learns "Faixa") |
 
+### Recording storage retention (2026-10-14)
+
+Source: `.scratch/recording-storage-retention/issues/01-recording-storage-retention.md`.
+`storage/` reached 33 GB and filled drive C:. The user decided the same day
+that the app keeps no raw recording: the originals live in each meeting's
+project folder.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 045 | The app keeps only the derived `audio.wav` once a Meeting is processed | P1 | M | — | DONE (executor Claude, 2026-10-14; migration 5 written and tested, not run on the real database) |
+| 046 | A Source Reference to the original recording, so reruns can read it back | P1 | L | 045 | DONE (executor Claude, 2026-10-14; migration 6 adds a NULL column and guesses nothing; no Settings screen for `source_roots` yet) |
+
 Decisions (user, 2026-10-10):
 - a mark on the corrected Word, with confirm and undo; the Review tab is not
   used;
