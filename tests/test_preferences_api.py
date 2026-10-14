@@ -117,3 +117,14 @@ def test_settings_payload_lists_both_diarizers(client, monkeypatch):
     payload = client.get("/api/settings").json()
     assert [item["id"] for item in payload["diarizers"]] == ["pyannote", "nemotron-3-diarization"]
     assert all(item["state"] == "ready" for item in payload["diarizers"])
+
+
+def test_source_roots_keep_absolute_folders_and_drop_the_rest(client, tmp_path):
+    folder = str(tmp_path / "projects")
+
+    result = _put(client, {"source_roots": [folder, "relative/dir", "", 7, folder]})
+
+    assert result["source_roots"] == [folder]
+    assert client.stored()["source_roots"] == [folder]
+    assert _put(client, {})["source_roots"] == [folder]  # absent: kept
+    assert _put(client, {"source_roots": []})["source_roots"] == []

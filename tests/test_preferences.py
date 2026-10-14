@@ -194,6 +194,6 @@ def test_public_preferences_mask_secret_and_preserve_settings_wire_shape(tmp_pat
     assert set(result) == {
         "default_vocabulary", "speaker_profiles_enabled", "hf_auth_token",
         "speaker_switch_penalty", "forced_alignment", "whisper_dtw",
-        "diarization", "vocabulary_profiles", "vocabulary_correction",
+        "diarization", "vocabulary_profiles", "vocabulary_correction", "source_roots",
     }
     assert result["diarization"]["engine"] == "pyannote"
