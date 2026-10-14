@@ -16,6 +16,10 @@ def _processed(monkeypatch, tmp_path, *, dual_track):
         harness.write_dual_tracks(meeting_id)
     job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
     assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
+    if dual_track:
+        # Processing drops the tracks (plan 045). A Meeting processed before that still
+        # has them, and these tests are about what the Jobs do with them.
+        harness.write_dual_tracks(meeting_id)
     harness.diarizer.calls.clear()
     return harness, meeting_id
 
