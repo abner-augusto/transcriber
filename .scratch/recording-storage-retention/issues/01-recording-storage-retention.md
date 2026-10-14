@@ -24,7 +24,7 @@ Meetings also keep `original.mov`/`.mp4`. One 3.6 GB Meeting folder held
 
 **Blocked by:** none.
 
-**Status:** needs-exploration
+**Status:** ready-for-agent (direction decided by the user on 2026-10-14; executed as plan 045)
 
 **State left by the manual cleanup (2026-10-13):** in every Meeting older than
 7 days, these were deleted: `mic_source.wav`, `system_source.wav`,
