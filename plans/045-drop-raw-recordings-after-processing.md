@@ -173,6 +173,19 @@ test pattern in `tests/test_database_sqlite.py`; plus the pure function
 - `rg -n "shutil.copyfile" api/meetings.py` appears only inside the link
   fallback.
 
+## Outcome
+
+Executed as written. Two additions found while implementing:
+- Duplicate of a dual-track Meeting whose two paths are the same stereo file
+  now keeps one shared file (`original.<ext>`) in the copy. Before, the copy
+  held two separate files, so the pipeline's same-file check failed and each
+  track was a downmix instead of a channel.
+- The Meeting page disables the three Reprocess actions through
+  `reprocessBlockedReason` (`frontend/src/utils/reprocess.ts`).
+
+Migration 5 was not run against the real database; it runs by itself the next
+time the app starts after this branch is merged.
+
 ## Maintenance note
 
 Deleting files is the point of this plan, so the list of dropped names lives

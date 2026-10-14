@@ -3,6 +3,8 @@ export interface Meeting {
   title: string;
   status: "uploaded" | "processing" | "completed" | "failed";
   original_filename: string | null;
+  /** False for a dual-track Meeting whose tracks the app no longer holds. */
+  reprocessable?: boolean;
   duration: number | null;
   preset_id: string | null;
   min_speakers: number | null;

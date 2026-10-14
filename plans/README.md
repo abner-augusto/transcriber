@@ -167,7 +167,7 @@ project folder.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 045 | The app keeps only the derived `audio.wav` once a Meeting is processed | P1 | M | — | IN PROGRESS |
+| 045 | The app keeps only the derived `audio.wav` once a Meeting is processed | P1 | M | — | DONE (executor Claude, 2026-10-14; migration 5 written and tested, not run on the real database) |
 
 Decisions (user, 2026-10-10):
 - a mark on the corrected Word, with confirm and undo; the Review tab is not

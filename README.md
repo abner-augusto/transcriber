@@ -122,6 +122,8 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 8. Settle **Review Notes** in the sidebar's Review tab: answer the agent's questions, accept or dismiss its suggestions, or leave a note on a segment (hover → Note). Segments with a note are tinted and the audio bar shows one clickable mark per note, amber when it waits for you and blue when it waits for the agent. Below the notes, **Vocabulary Corrections** lists every Word the Vocabulary changed in the Meeting (cyan underline in the transcript until confirmed), with Confirm and Undo per row
 9. **Export** to SRT, WebVTT, TXT, Markdown, JSON, DOCX, or PDF
 
+**Storage.** The app does not archive your recordings: keep the originals in the meeting's project folder. When a Meeting finishes processing, the app deletes the uploaded file(s) and the intermediate tracks and keeps only `audio.wav` (16 kHz mono; a mix for a dual-track Meeting) for playback and re-runs. A Meeting that has not finished processing keeps its upload. A processed dual-track Meeting cannot be re-diarized, fully reprocessed or duplicated, because those need the separate mic and system tracks ([ADR-0011](docs/adr/0011-the-app-keeps-no-original-recordings.md)).
+
 ## Command line
 
 `transcriber_cli` runs and reads Meetings from a terminal, for scripting and for a coding agent that operates the app ([ADR-0010](docs/adr/0010-an-agent-may-operate-the-local-api.md)). It uses only the standard library, talks to the running app over HTTP (`http://127.0.0.1:8000`, or `$TRANSCRIBER_URL`), and prints one compact line per Segment. `--help` lists the commands.
@@ -173,6 +175,7 @@ transcriber/
 │   ├── export.py              # Multi-format export
 │   └── model_settings.py      # Preset API
 ├── services/
+│   ├── audio_retention.py     # Drops the raw sources once a Meeting is processed
 │   ├── audio_service.py       # FFmpeg extraction
 │   ├── embedding_service.py   # SpeechBrain ECAPA-TDNN
 │   └── speaker_id_service.py  # Speaker Namer: Participant N + Voice Profiles
@@ -252,7 +255,7 @@ transcriber/
 | `POST` | `/api/notes/{id}/done` | Close an answered question or an open comment (optional `reply`) |
 | `POST` | `/api/notes/{id}/dismiss` | Dismiss an open suggestion or question, or an answered question |
 | `POST` | `/api/notes/{id}/accept` | Apply an open suggestion through the existing edit routes; `learn: false` teaches no Vocabulary, `save_profile: false` skips the Voice Profile |
-| `POST` | `/api/meetings/{id}/rediarize` | Re-run speaker diarization |
+| `POST` | `/api/meetings/{id}/rediarize` | Re-run speaker diarization (400 for a dual-track Meeting that no longer has its tracks; `GET /api/meetings/{id}` says so with `reprocessable: false`) |
 | `POST` | `/api/meetings/{id}/reidentify` | Re-identify speakers |
 | `POST` | `/api/meetings/{id}/reapply-vocabulary` | Reapply vocabulary corrections |
 | `GET` | `/api/search?q=...` | Search transcript segments |

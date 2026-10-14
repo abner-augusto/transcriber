@@ -9,7 +9,8 @@ speaker-attributed transcript. Everything runs on the user's machine; nothing is
 
 **Meeting**:
 A single recorded conversation brought to the tool as an audio file, together with everything
-derived from it.
+derived from it. The tool keeps only the audio it derived (`audio.wav`); the original recordings
+live outside it (ADR-0011).
 _Avoid_: session, recording, upload, call
 
 **Vocabulary**:

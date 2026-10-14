@@ -89,7 +89,7 @@ Report what you named and what you edited (Segment handles) in a short summary. 
 - `edit` teaches Vocabulary only with `--learn`, and a learned Misheard Form applies to every future Meeting. Pass `--learn` only for corrections the user confirmed.
 - To teach a new term, first `edit --learn` changing only the misheard words, then fix the rest of the sentence in a second `edit` without `--learn`. Only a short phrase that looks like a term is learned: capitalized words, acronyms, or a term from the Meeting's vocabulary or participants. A whole-sentence rewrite or a fix to common words teaches nothing.
 - `revert M #N` undoes a text edit.
-- Names and reassignments survive `reprocess reidentify` and `reprocess reapply-vocabulary`. `reprocess rediarize` carries names by Turn overlap and drops reassignments, so warn the user before suggesting it. A Split survives all three, but `split --speaker` is a reassignment, so `rediarize` drops that Speaker choice and keeps the cut.
+- Names and reassignments survive `reprocess reidentify` and `reprocess reapply-vocabulary`. `reprocess rediarize` carries names by Turn overlap and drops reassignments, so warn the user before suggesting it. A processed dual-track Meeting cannot be re-diarized at all (the API answers 400, `reprocessable` is false): the app keeps only the mixed audio. A Split survives all three, but `split --speaker` is a reassignment, so `rediarize` drops that Speaker choice and keeps the cut.
 
 ## Line markers
 

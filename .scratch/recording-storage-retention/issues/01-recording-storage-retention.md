@@ -24,7 +24,7 @@ Meetings also keep `original.mov`/`.mp4`. One 3.6 GB Meeting folder held
 
 **Blocked by:** none.
 
-**Status:** ready-for-agent (direction decided by the user on 2026-10-14; executed as plan 045)
+**Status:** done for retention (plan 045, 2026-10-14). Follow-ups below stay `needs-exploration`.
 
 **State left by the manual cleanup (2026-10-13):** in every Meeting older than
 7 days, these were deleted: `mic_source.wav`, `system_source.wav`,
@@ -39,7 +39,22 @@ kept, and the user has the originals saved elsewhere. Consequences to handle:
 - reprocessing them from source is impossible until the originals are put
   back.
 
-**Open questions for the exploration session:**
+**Decided 2026-10-14 (plan 045):** the app keeps no original recording; the
+originals live in each meeting's project folder. After processing it keeps
+only `audio.wav`; `mic_audio_filepath`/`system_audio_filepath` become NULL;
+Duplicate shares files by hard link; migration 5 fixes the rows left by the
+manual cleanup. A processed dual-track Meeting can no longer be Re-diarized,
+fully reprocessed or duplicated.
+
+**Follow-ups (not done):**
+- record where the original lives (a `source_path` sent by `transcriber_cli
+  upload`), so a reprocess, or a dual-track Re-diarize, can read it back;
+- keep the processed tracks only for dual-track Meetings (about 115 MB per
+  hour per track) if Re-diarize of those matters;
+- per-Meeting disk usage and a manual "free space" action;
+- compression of `audio.wav` (not needed once sources are dropped).
+
+**Open questions from the original exploration (answered above):**
 - Which reprocessing paths really need the sources (rerun with another preset,
   dual-track reprocessing), and can `audio.wav` serve any of them?
 - Compress, expire, or both? Which retention period?
