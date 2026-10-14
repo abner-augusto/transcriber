@@ -11,6 +11,8 @@ import AudioPlayer from "../components/AudioPlayer";
 import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
 import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
+import SourcesPanel from "../components/SourcesPanel";
+import { apiErrorMessage } from "../utils/apiError";
 import { reprocessBlockedReason } from "../utils/reprocess";
 import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
 import { RECONNECT_DELAY_MS, meetingSocketAction, shouldReconnectMeetingSocket } from "../utils/meetingSocket";
@@ -27,6 +29,7 @@ export default function MeetingPage() {
   const [showExport, setShowExport] = useState(false);
   const [showReprocess, setShowReprocess] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [participants, setParticipants] = useState("");
   const [domainVocab, setDomainVocab] = useState("");
   const [showAdvancedVocab, setShowAdvancedVocab] = useState(false);
@@ -146,7 +149,13 @@ export default function MeetingPage() {
         console.error("Failed to update vocabulary before processing:", err);
       }
     }
-    await startProcessing(id);
+    try {
+      await startProcessing(id);
+    } catch (err) {
+      setActionError(apiErrorMessage(err));
+      return;
+    }
+    setActionError("");
     setProgress({ type: "progress", progress: 0, step: "Starting...", status: "processing" });
     loadMeeting();
   }
@@ -169,7 +178,13 @@ export default function MeetingPage() {
   async function handleRediarize() {
     if (!id) return;
     setShowReprocess(false);
-    await rediarizeMeeting(id);
+    try {
+      await rediarizeMeeting(id);
+    } catch (err) {
+      setActionError(apiErrorMessage(err));
+      return;
+    }
+    setActionError("");
     setProgress({ type: "progress", progress: 0, step: "Re-diarizing...", status: "processing" });
     loadMeeting();
   }
@@ -382,6 +397,18 @@ export default function MeetingPage() {
           )}
         </div>
       </div>
+
+      {actionError && (
+        <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 mb-6 text-sm text-red-300 flex justify-between gap-4">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError("")} className="text-red-400 hover:text-white">Dismiss</button>
+        </div>
+      )}
+
+      {/* Original recording (kept outside the app) */}
+      {isCompleted && (currentMeeting.is_dual_track || (currentMeeting.sources ?? []).length > 0) && (
+        <SourcesPanel meeting={currentMeeting} onChanged={(updated) => setCurrentMeeting({ ...currentMeeting, ...updated, segments: currentMeeting.segments, speakers: currentMeeting.speakers, review_notes: currentMeeting.review_notes })} />
+      )}
 
       {/* Progress (processing) */}
       {isProcessing && progress && (
