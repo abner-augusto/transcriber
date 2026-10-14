@@ -1222,3 +1222,98 @@ def test_piped_stdout_is_line_buffered():
 
     assert pipe.line_buffering is True
     assert pipe.encoding == "utf-8"
+
+
+def test_upload_sends_the_absolute_path_of_each_original(db_session, api, capsys, tmp_path, monkeypatch):
+    monkeypatch.setattr("config.settings.storage_path", str(tmp_path / "storage"))
+    audio = tmp_path / "inbox" / "mic.wav"
+    system = tmp_path / "inbox" / "system.wav"
+    audio.parent.mkdir()
+    audio.write_bytes(b"0123456789")
+    system.write_bytes(b"abcdefghij")
+    monkeypatch.chdir(audio.parent)
+
+    code, _, _ = run(["upload", "mic.wav", "--system", "system.wav", "--title", "Dual"], api, capsys)
+
+    assert code == 0
+    refs = db_session.query(Meeting).one().source_refs
+    assert refs["mic"]["path"] == str(audio)
+    assert refs["system"]["path"] == str(system)
+
+
+def _referenced_meeting(db_session, tmp_path):
+    from services import source_reference as sources
+
+    original = tmp_path / "inbox" / "reuniao.wav"
+    original.parent.mkdir()
+    original.write_bytes(b"0123456789")
+    meeting = seed_meeting(db_session)
+    meeting.source_refs = {"audio": sources.reference(original, path=str(original))}
+    db_session.commit()
+    return meeting, original
+
+
+def test_set_source_points_the_meeting_at_the_moved_original(db_session, api, capsys, tmp_path, monkeypatch):
+    meeting, original = _referenced_meeting(db_session, tmp_path)
+    moved = tmp_path / "project" / "reuniao.wav"
+    moved.parent.mkdir()
+    original.rename(moved)
+    monkeypatch.chdir(moved.parent)
+
+    code, out, _ = run(["set", meeting.id, "--source", "reuniao.wav"], api, capsys)
+
+    assert code == 0
+    db_session.refresh(meeting)
+    assert meeting.source_refs["audio"]["path"] == str(moved)
+    assert "source audio: reuniao.wav" in out
+    assert "present" in out
+
+
+def test_set_source_refuses_another_recording_with_exit_1(db_session, api, capsys, tmp_path):
+    meeting, original = _referenced_meeting(db_session, tmp_path)
+    other = tmp_path / "other.wav"
+    other.write_bytes(b"9876543210")
+
+    code, _, err = run(["set", meeting.id, "--source", str(other)], api, capsys)
+
+    assert code == 1
+    assert "is not the same recording" in err
+    db_session.refresh(meeting)
+    assert meeting.source_refs["audio"]["path"] == str(original)
+
+
+def test_set_source_needs_a_file_on_this_machine(db_session, api, capsys, tmp_path):
+    meeting, _ = _referenced_meeting(db_session, tmp_path)
+
+    code, _, err = run(["set", meeting.id, "--source", str(tmp_path / "absent.wav")], api, capsys)
+
+    assert code == 1
+    assert "is not a file" in err
+
+
+def test_set_source_adopt_attaches_a_file_to_a_meeting_without_a_reference(
+    db_session, api, capsys, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("api.meetings.AudioService.get_duration", lambda self, path: 3725.0)
+    meeting = seed_meeting(db_session)
+    db_session.commit()
+    original = tmp_path / "reuniao.wav"
+    original.write_bytes(b"0123456789")
+
+    code, _, err = run(["set", meeting.id, "--source", str(original)], api, capsys)
+    assert code == 1 and "--adopt" in err
+
+    code, _, _ = run(["set", meeting.id, "--source", str(original), "--adopt"], api, capsys)
+    assert code == 0
+    db_session.refresh(meeting)
+    assert meeting.source_refs["audio"]["path"] == str(original)
+
+
+def test_set_combines_a_title_with_a_source(db_session, api, capsys, tmp_path):
+    meeting, original = _referenced_meeting(db_session, tmp_path)
+
+    code, _, _ = run(["set", meeting.id, "--title", "Novo", "--source", str(original)], api, capsys)
+
+    assert code == 0
+    db_session.refresh(meeting)
+    assert meeting.title == "Novo"

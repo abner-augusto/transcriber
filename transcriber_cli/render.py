@@ -105,7 +105,11 @@ def meeting_header(m: dict) -> list[str]:
         ("participants", m.get("participants")),
         ("vocabulary", m.get("vocabulary")),
     ]
-    return [f"{name}: {value}" for name, value in rows if value]
+    lines = [f"{name}: {value}" for name, value in rows if value]
+    for source in m.get("sources") or []:
+        where = source["path"] or "path not saved"
+        lines.append(f"source {source['track']}: {source['name']} ({source['state']}) {where}")
+    return lines
 
 
 def word_line(word: dict) -> str:
