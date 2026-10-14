@@ -18,6 +18,7 @@ from models import Meeting, MeetingStatus, Speaker, Segment
 from models.job import Job, JobType
 from config import get_meeting_path
 from services import source_reference
+from services.audio_retention import processed_tracks_present
 from services.audio_service import AudioService
 from transcript.words import words_from_stored
 from engines import probe_engine, diarizer_status
@@ -37,15 +38,15 @@ def _require_usable_preset(preset: dict) -> dict:
     return health
 
 
-NO_TRACKS = (
-    "This dual-track Meeting no longer has its mic and system tracks (the app keeps only "
-    "the mixed audio once a Meeting is processed), so it cannot be {action}."
-)
+def _locate_tracks(meeting: Meeting) -> source_reference.Tracks:
+    """Where a dual-track Meeting's mic and system recordings are, or the 4xx saying why not.
 
-
-def _require_tracks(meeting: Meeting, action: str) -> None:
-    if not meeting.reprocessable:
-        raise HTTPException(400, NO_TRACKS.format(action=action))
+    The caller commits: a path found by searching is written back into the references.
+    """
+    try:
+        return source_reference.locate_tracks(meeting)
+    except source_reference.SourceError as error:
+        raise HTTPException(error.status_code, error.message)
 
 
 def _share_file(src: Path, dest: Path) -> None:
@@ -332,7 +333,11 @@ def start_processing(meeting_id: str, db: Session = Depends(get_db)):
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     _reject_processing(meeting)
-    _require_tracks(meeting, "processed again")
+    if meeting.is_dual_track:
+        tracks = _locate_tracks(meeting)
+        # The original is read where it lives; the pipeline never copies or changes it.
+        meeting.mic_audio_filepath, meeting.system_audio_filepath = str(tracks.mic), str(tracks.system)
+        db.commit()
 
     preset = presets.resolve_preset(meeting.preset_id)
     health = _require_usable_preset(preset)
@@ -356,14 +361,13 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
     source = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not source:
         raise HTTPException(404, "Meeting not found")
-    _require_tracks(source, "duplicated")
-    audio = (
-        [source.mic_audio_filepath, source.system_audio_filepath]
-        if source.is_dual_track else [source.audio_filepath]
-    )
-    if not all(audio):
+    tracks = None
+    if source.is_dual_track:
+        tracks = _locate_tracks(source)
+        db.commit()
+    elif not source.audio_filepath:
         raise HTTPException(400, "Meeting has no audio to duplicate")
-    if not all(Path(path).exists() for path in audio):
+    elif not Path(source.audio_filepath).exists():
         raise HTTPException(400, "The Meeting's audio file is missing on disk, so it cannot be duplicated.")
 
     preset = presets.get_preset(req.preset_id)
@@ -380,13 +384,17 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
         vocabulary=source.vocabulary,
         preset_id=preset["id"],
         is_dual_track=source.is_dual_track,
+        source_refs=source.source_refs,
     )
     db.add(copy)
     db.flush()
 
     dest_dir = get_meeting_path(copy.id)
-    if source.is_dual_track:
-        mic_src, system_src = Path(source.mic_audio_filepath), Path(source.system_audio_filepath)
+    if tracks is not None and not tracks.held:
+        # The originals live outside the app: the copy reads them where they are.
+        copy.mic_audio_filepath, copy.system_audio_filepath = str(tracks.mic), str(tracks.system)
+    elif tracks is not None:
+        mic_src, system_src = tracks.mic, tracks.system
         if mic_src.resolve() == system_src.resolve():
             # One stereo or multi-stream file: the pipeline splits it only when both paths
             # are the same file, so the copy keeps it as one file too.
@@ -421,7 +429,9 @@ def rediarize_meeting(meeting_id: str, db: Session = Depends(get_db)):
     _reject_processing(meeting)
     if not meeting.raw_transcription:
         raise HTTPException(400, "No transcription data. Run full processing first.")
-    _require_tracks(meeting, "re-diarized")
+    if meeting.is_dual_track and not processed_tracks_present(meeting.id):
+        _locate_tracks(meeting)  # the Job makes the tracks again from the originals
+        db.commit()
     _require_usable_diarizer()
     job = _enqueue(db, meeting.id, JobType.REDIARIZE)
     return job.to_dict()

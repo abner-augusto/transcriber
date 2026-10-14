@@ -62,11 +62,17 @@ class Meeting(Base):
         """Whether Full reprocess, Re-diarize and Duplicate can run from the audio the app holds.
 
         A single-track Meeting reruns from its ``audio.wav``. A dual-track one needs its
-        mic and system tracks, which the app drops once the Meeting is processed.
+        mic and system tracks: the ones the app still holds, or the original recordings its
+        Source References point at (the app drops its own copies once a Meeting is processed).
         """
         if not self.is_dual_track:
             return True
-        return bool(self.mic_audio_filepath and self.system_audio_filepath)
+        if self.mic_audio_filepath and self.system_audio_filepath:
+            return True
+        # The originals live outside the app (plan 046). This only stats them; searching
+        # and hashing happen when an operation needs them.
+        sources = describe(self.source_refs)
+        return bool(sources) and all(source["state"] == "present" for source in sources)
 
     def to_dict(self, include_segments: bool = False, speaker_count: int | None = None, segment_count: int | None = None) -> dict:
         d = {

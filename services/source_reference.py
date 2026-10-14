@@ -14,6 +14,7 @@ that keeps the size goes unnoticed; originals are not edited in place.
 import hashlib
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -174,3 +175,65 @@ def repoint(meeting, source: str | None, system_source: str | None, *, adopt: bo
         role: reference(file, path=str(file))
         for role, file in zip(roles, files.values())
     }
+
+
+@dataclass(frozen=True)
+class Tracks:
+    """Where a dual-track Meeting's mic and system recordings are now (the same file for a
+    stereo original). ``held`` is true for tracks the app still stores itself."""
+
+    mic: Path
+    system: Path
+    held: bool
+
+
+def _flag(track: str) -> str:
+    return "--system-source" if track == "system" else "--source"
+
+
+def locate_tracks(meeting, roots=None) -> Tracks:
+    """The mic and system recordings of a dual-track Meeting, found or raised as SourceError.
+
+    The tracks the app still holds win. Otherwise each Source Reference is resolved with
+    ``find`` (saved path, then ``roots``, which default to the ``source_roots`` Preference),
+    and a path found by search is written back into ``meeting.source_refs`` for the caller
+    to commit. 400 when the Meeting has no reference, 409 when one cannot be found.
+    """
+    mic, system = meeting.mic_audio_filepath, meeting.system_audio_filepath
+    if mic and system and os.path.exists(mic) and os.path.exists(system):
+        return Tracks(Path(mic), Path(system), held=True)
+
+    refs = meeting.source_refs
+    if not refs:
+        raise SourceError(
+            400,
+            "This dual-track Meeting no longer has its mic and system tracks (the app keeps only "
+            "the mixed audio once a Meeting is processed) and has no reference to its original "
+            "recording, because it was uploaded before references existed. Point it at the "
+            f"original: transcriber_cli set {meeting.id} --source PATH --adopt "
+            "(and --system-source PATH for a second track).",
+        )
+    if roots is None:
+        import preferences
+        roots = preferences.load().source_roots
+
+    found, healed = {}, dict(refs)
+    for track, ref in refs.items():
+        path = find(ref, roots)
+        if path is None:
+            raise SourceError(
+                409,
+                f"The original recording {ref['name']} was not found"
+                + (f" at {ref['path']}" if ref.get("path") else "")
+                + (" or in the search folders" if roots else "")
+                + f". Point the Meeting at it again: transcriber_cli set {meeting.id} "
+                f"{_flag(track)} NEW_PATH (or use Sources on the Meeting page).",
+            )
+        found[track] = path
+        if str(path) != ref.get("path"):
+            healed[track] = {**ref, "path": str(path)}
+    if healed != refs:
+        meeting.source_refs = healed
+    return Tracks(
+        found.get("mic") or found["audio"], found.get("system") or found["audio"], held=False
+    )

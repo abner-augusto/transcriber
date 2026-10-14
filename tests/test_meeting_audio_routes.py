@@ -3,24 +3,9 @@
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 
-from main import app
 from models import Job, Meeting, MeetingStatus
 from models.job import JobType
-
-READY = {"id": "ready", "name": "Ready", "engine": "parakeet.cpp", "model_path": "m"}
-
-
-@pytest.fixture
-def ready_engines(monkeypatch, tmp_path):
-    monkeypatch.setattr("config.settings.storage_path", str(tmp_path / "storage"))
-    monkeypatch.setattr("api.meetings.presets.resolve_preset", lambda _id: READY)
-    monkeypatch.setattr("api.meetings.presets.get_preset", lambda _id: READY)
-    monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: type(
-        "Ready", (), {"to_dict": lambda self: {"state": "ready", "summary": "ready"}})())
-    monkeypatch.setattr("api.meetings._require_usable_diarizer", lambda: {"state": "ready"})
-    return TestClient(app)
 
 
 def _add(db_session, **columns) -> Meeting:
@@ -137,7 +122,9 @@ def test_duplicate_of_a_meeting_whose_file_is_gone_is_a_400_not_a_crash(
     response = _post(ready_engines, meeting, "duplicate")
 
     assert response.status_code == 400
-    assert "audio file is missing" in response.json()["detail"]
+    assert ("no reference to its original" if dual_track else "audio file is missing") in (
+        response.json()["detail"]
+    )
     assert db_session.query(Meeting).count() == 1
     assert db_session.query(Job).count() == 0
 

@@ -138,3 +138,20 @@ def engine_smoke_audio(request):
     if not path.is_file():
         pytest.skip(f"configured local Engine smoke audio does not exist: {path}")
     return path
+
+
+READY_PRESET = {"id": "ready", "name": "Ready", "engine": "parakeet.cpp", "model_path": "m"}
+
+
+@pytest.fixture
+def ready_engines(monkeypatch, tmp_path):
+    """A client whose Preset and Diarizer are usable and whose storage is a temp folder."""
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr("config.settings.storage_path", str(tmp_path / "storage"))
+    monkeypatch.setattr("api.meetings.presets.resolve_preset", lambda _id: READY_PRESET)
+    monkeypatch.setattr("api.meetings.presets.get_preset", lambda _id: READY_PRESET)
+    monkeypatch.setattr("api.meetings.probe_engine", lambda _preset: type(
+        "Ready", (), {"to_dict": lambda self: {"state": "ready", "summary": "ready"}})())
+    monkeypatch.setattr("api.meetings._require_usable_diarizer", lambda: {"state": "ready"})
+    return TestClient(app)

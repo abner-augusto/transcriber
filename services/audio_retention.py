@@ -44,5 +44,12 @@ def drop_raw_audio(meeting) -> None:
     meeting.system_audio_filepath = None
 
 
+def processed_tracks_present(meeting_id: str) -> bool:
+    """Whether the Meeting's folder still holds both processed tracks a dual-track
+    Re-diarize reads."""
+    directory = get_meeting_path(meeting_id)
+    return all((directory / name).exists() for name in DROPPED_NAMES)
+
+
 def _resolved(path: str | None) -> Path | None:
     return Path(path).resolve() if path else None
