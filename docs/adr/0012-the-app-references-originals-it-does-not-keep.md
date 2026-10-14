@@ -25,8 +25,9 @@ the original from there.
   and is not backfilled; `--adopt` attaches a file to it on the user's word,
   checked only by duration.
 - When a rerun needs the originals: the stored path if it still matches, else a
-  search of the folders in the `source_roots` Preference (empty by default) for
-  a file with the same size and hash, else a 409 that names the command to
+  search of the folders in the `source_roots` Preference (empty by default),
+  down to `source_search_depth` levels (default 3), for a file with the same
+  size and hash, else a 409 that names the command to
   re-point.
 - The app only reads an original. It never moves, modifies or deletes it. The
   working files a Job makes live in the Meeting's folder and are dropped again

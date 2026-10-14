@@ -102,7 +102,11 @@ refuse politely when they are gone.
    2. Otherwise each reference's stored `path` is used when the file exists
       and the fingerprint matches.
    3. Otherwise each folder in the new Preference `source_roots` (default
-      empty) is walked for a file with the same size, then the same hash; the
+      empty) is walked, down to `source_search_depth` levels below the root
+      (default 3; a file directly in the root is depth 0, `root/a/b/c/file`
+      is depth 3, and deeper folders are not entered, because in the user's
+      container recordings live at most at `<praca>/<terreno>/5-BRIEFING_REUNIÕES/file`
+      and deeper folders are project media that slow the walk), for a file with the same size, then the same hash; the
       found path is written back to the reference so the next check is cheap.
       Names are not compared: the user may rename.
    4. Otherwise the operation fails: 400 when the Meeting has no reference at
@@ -134,9 +138,10 @@ refuse politely when they are gone.
    stay disabled only when the Meeting has neither held tracks nor a reference;
    when a reference is stale, they run, search, and show the 409 text.
 
-8. **Setting.** `source_roots: list[str]` in Preferences, default `[]`,
-   accepted by `PUT /api/settings/preferences` (absolute paths only; others are
-   dropped). There is no Settings screen for it yet; it is a follow-up.
+8. **Settings.** `source_roots: list[str]` in Preferences, default `[]`,
+   and `source_search_depth: int`, default 3, minimum 0, both accepted by
+   `PUT /api/settings/preferences` (absolute paths only; others are dropped;
+   an invalid depth is ignored). There is no Settings screen for it yet; it is a follow-up.
 
 ## Steps
 

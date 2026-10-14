@@ -128,3 +128,14 @@ def test_source_roots_keep_absolute_folders_and_drop_the_rest(client, tmp_path):
     assert client.stored()["source_roots"] == [folder]
     assert _put(client, {})["source_roots"] == [folder]  # absent: kept
     assert _put(client, {"source_roots": []})["source_roots"] == []
+
+
+def test_source_search_depth_keeps_a_non_negative_integer(client):
+    assert _put(client, {})["source_search_depth"] == 3
+    assert _put(client, {"source_search_depth": 5})["source_search_depth"] == 5
+    assert _put(client, {"source_search_depth": "2"})["source_search_depth"] == 2
+    assert _put(client, {"source_search_depth": 0})["source_search_depth"] == 0
+    _put(client, {"source_search_depth": 4})
+    for invalid in (-1, 2.5, "deep", True, None):  # ignored: the stored value stays
+        assert _put(client, {"source_search_depth": invalid})["source_search_depth"] == 4
+    assert client.stored()["source_search_depth"] == 4

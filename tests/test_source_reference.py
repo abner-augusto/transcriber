@@ -81,3 +81,29 @@ def test_find_survives_a_missing_root(tmp_path):
     ref = sources.reference(_write(tmp_path / "mic.wav"))
 
     assert sources.find(ref, roots=[str(tmp_path / "unmounted")]) is None
+
+
+def test_find_walks_only_as_deep_as_the_search_depth(tmp_path):
+    original = _write(tmp_path / "inbox" / "mic.wav")
+    ref = sources.reference(original, path=str(original))
+    original.unlink()
+    root = tmp_path / "projects"
+    directly = _write(root / "direct.wav")
+    deep = _write(root / "a" / "b" / "c" / "d" / "file.wav")  # depth 4
+    roots = [str(root)]
+
+    assert sources.find(ref, roots) == directly  # depth 0 counts
+    directly.unlink()
+    assert sources.find(ref, roots) is None  # default depth 3 stops above depth 4
+    assert sources.find(ref, roots, depth=3) is None
+    assert sources.find(ref, roots, depth=4) == deep
+
+
+def test_depth_three_reaches_the_briefing_folder_of_a_terrain(tmp_path):
+    original = _write(tmp_path / "inbox" / "mic.wav")
+    ref = sources.reference(original, path=str(original))
+    original.unlink()
+    moved = _write(tmp_path / "root" / "Bauru" / "Terreno 1" / "5-BRIEFING" / "mic.wav")
+
+    assert sources.find(ref, [str(tmp_path / "root")]) == moved
+    assert sources.find(ref, [str(tmp_path / "root")], depth=2) is None

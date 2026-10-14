@@ -58,15 +58,23 @@ def matches(file, ref: dict) -> bool:
         return False
 
 
-def find(ref: dict, roots) -> Path | None:
+DEFAULT_SEARCH_DEPTH = 3
+
+
+def find(ref: dict, roots, depth: int = DEFAULT_SEARCH_DEPTH) -> Path | None:
     """Where the recording is now: its saved path, else a file under one of ``roots``.
 
-    A candidate under a root needs the same size and hash; its name does not matter.
+    A candidate under a root needs the same size and hash; its name does not matter. Only
+    ``depth`` directory levels below a root are walked: a file directly in the root is at
+    depth 0, root/a/b/c/file at depth 3. Deeper folders (project media) are not entered.
     """
     if ref.get("path") and matches(ref["path"], ref):
         return Path(ref["path"])
     for root in roots:
-        for directory, _names, files in os.walk(root, onerror=lambda error: None):
+        for directory, names, files in os.walk(root, onerror=lambda error: None):
+            level = len(Path(directory).relative_to(root).parts)
+            if level >= depth:
+                names.clear()
             for name in files:
                 candidate = Path(directory) / name
                 try:
@@ -191,11 +199,12 @@ def _flag(track: str) -> str:
     return "--system-source" if track == "system" else "--source"
 
 
-def locate_tracks(meeting, roots=None) -> Tracks:
+def locate_tracks(meeting, roots=None, depth=None) -> Tracks:
     """The mic and system recordings of a dual-track Meeting, found or raised as SourceError.
 
     The tracks the app still holds win. Otherwise each Source Reference is resolved with
-    ``find`` (saved path, then ``roots``, which default to the ``source_roots`` Preference),
+    ``find`` (saved path, then ``roots`` and ``depth``, which default to the ``source_roots``
+    and ``source_search_depth`` Preferences),
     and a path found by search is written back into ``meeting.source_refs`` for the caller
     to commit. 400 when the Meeting has no reference, 409 when one cannot be found.
     """
@@ -213,13 +222,15 @@ def locate_tracks(meeting, roots=None) -> Tracks:
             f"original: transcriber_cli set {meeting.id} --source PATH --adopt "
             "(and --system-source PATH for a second track).",
         )
-    if roots is None:
+    if roots is None or depth is None:
         import preferences
-        roots = preferences.load().source_roots
+        prefs = preferences.load()
+        roots = prefs.source_roots if roots is None else roots
+        depth = prefs.source_search_depth if depth is None else depth
 
     found, healed = {}, dict(refs)
     for track, ref in refs.items():
-        path = find(ref, roots)
+        path = find(ref, roots, depth)
         if path is None:
             raise SourceError(
                 409,
