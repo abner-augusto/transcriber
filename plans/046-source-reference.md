@@ -181,6 +181,18 @@ the migration through the existing pattern. One test, one change, per slice.
 - `uv run --extra dev pytest -q`: all pass.
 - `cd frontend && npm test`: all pass.
 
+## Outcome
+
+Executed as written. Deviations and additions:
+- `SourceError` subclasses `RuntimeError`, so a Job that cannot find an original fails with the
+  re-point message as its error.
+- Duplicate of a dual-track Meeting that no longer holds its tracks points the copy at the
+  originals (no link, no copy); tracks the app still holds are hard-linked as in plan 045.
+- `tests/task_harness.py` now creates the empty source files a dual-track harness Meeting names,
+  and `ready_engines` moved to `tests/conftest.py` so two test files share it.
+- Existing Meetings keep `source_refs` NULL; the migration guesses nothing.
+- Not done: a Settings screen for `source_roots` (set it through `PUT /api/settings/preferences`).
+
 ## Maintenance note
 
 A new operation that needs the originals must go through

@@ -47,8 +47,7 @@ manual cleanup. A processed dual-track Meeting can no longer be Re-diarized,
 fully reprocessed or duplicated.
 
 **Follow-ups (not done):**
-- record where the original lives (a `source_path` sent by `transcriber_cli
-  upload`), so a reprocess, or a dual-track Re-diarize, can read it back;
+- ~~record where the original lives~~ done in plan 046 (Source Reference);
 - keep the processed tracks only for dual-track Meetings (about 115 MB per
   hour per track) if Re-diarize of those matters;
 - per-Meeting disk usage and a manual "free space" action;

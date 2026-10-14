@@ -13,6 +13,14 @@ derived from it. The tool keeps only the audio it derived (`audio.wav`); the ori
 live outside it (ADR-0011).
 _Avoid_: session, recording, upload, call
 
+**Source Reference**:
+What the tool keeps of a Meeting's original recording, which lives outside it: the file's name, size
+and a fast hash, plus the absolute path it was last seen at when the client knew it. A rerun that
+needs the original (a dual-track Re-diarize, a Full reprocess, a Duplicate) reads it from that path,
+or from a folder the user listed for searching; a moved file is pointed at again, and must match the
+hash. One per track: `mic` and `system`, or `audio` for a single file.
+_Avoid_: source file, attachment, link
+
 **Vocabulary**:
 Domain-specific words and names — supplied by the user or learned from their corrections — that
 are given to the Transcriber so it spells them correctly. Vocabulary Correction also applies

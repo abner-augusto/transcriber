@@ -1,6 +1,6 @@
 # The app keeps no original recording
 
-**Status**: accepted (2026-10-14, plan 045)
+**Status**: accepted (2026-10-14, plan 045). Amended by ADR-0012.
 
 The originals of every Meeting live outside the app, in the project folder of
 that meeting. The app is not their archive. Once a Meeting finishes processing
@@ -14,14 +14,13 @@ Uncompressed WAV kept forever had filled the disk: 33 GB over 56 Meetings.
   vocabulary, Re-diarize and Full reprocess of a single-track Meeting all run
   from `audio.wav`.
 - A dual-track Meeting cannot be Re-diarized, fully reprocessed or duplicated
-  once processed: the host/remote split needs the two tracks, and the mix
-  cannot give them back. The API answers 400 and the page disables the actions
-  (`Meeting.reprocessable`). Keeping the processed tracks would restore
-  Re-diarize at about 115 MB per hour per track; revisit if that is wanted.
+  from `audio.wav`: the host/remote split needs the two tracks, and the mix
+  cannot give them back. ADR-0012 answers that with a Source Reference to the
+  originals, which those actions read from where they live. Without a reference
+  the API answers 400 (`Meeting.reprocessable` is false).
 - A Meeting that has not been processed, or whose Job failed, keeps its sources
   so a retry works.
 - Duplicate & reprocess shares files with hard links instead of copying them.
 - Database paths follow the files: `mic_audio_filepath` and
   `system_audio_filepath` are NULL once the sources are dropped.
-- Recording where the original lives (so a reprocess could read it back) is a
-  later step, not part of this decision.
+- Where the original lives is recorded as a Source Reference (ADR-0012).

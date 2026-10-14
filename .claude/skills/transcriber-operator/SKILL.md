@@ -31,6 +31,8 @@ Ask for the participants and the domain terms first; they are the best evidence 
 
 **Done** when `wait` exits 0 (1 failed: show the error; 3 timed out). An existing Meeting skips this phase. Use `set M --participants ... --vocabulary ...` to add what you learn later.
 
+**Originals.** The app does not keep the recording; it keeps a reference to where it lives. `upload` records the path of the file you pass, so upload from the place the file will stay. **After the user's workflow moves an original (inbox to project folder), run `set M --source NEWPATH`** (`--system-source NEWPATH` for the system track of a dual-track Meeting); it refuses a file that is not the same recording. A Meeting uploaded before references existed needs `--adopt` once. Never move, rename or delete the user's original yourself.
+
 ## 3. Name Speakers
 
 `speakers M --unnamed` lists the Speakers no Voice Profile matched and no person named, each with sample lines. It includes the dual-track HOST, which starts as "You".
@@ -89,7 +91,7 @@ Report what you named and what you edited (Segment handles) in a short summary. 
 - `edit` teaches Vocabulary only with `--learn`, and a learned Misheard Form applies to every future Meeting. Pass `--learn` only for corrections the user confirmed.
 - To teach a new term, first `edit --learn` changing only the misheard words, then fix the rest of the sentence in a second `edit` without `--learn`. Only a short phrase that looks like a term is learned: capitalized words, acronyms, or a term from the Meeting's vocabulary or participants. A whole-sentence rewrite or a fix to common words teaches nothing.
 - `revert M #N` undoes a text edit.
-- Names and reassignments survive `reprocess reidentify` and `reprocess reapply-vocabulary`. `reprocess rediarize` carries names by Turn overlap and drops reassignments, so warn the user before suggesting it. A processed dual-track Meeting cannot be re-diarized at all (the API answers 400, `reprocessable` is false): the app keeps only the mixed audio. A Split survives all three, but `split --speaker` is a reassignment, so `rediarize` drops that Speaker choice and keeps the cut.
+- Names and reassignments survive `reprocess reidentify` and `reprocess reapply-vocabulary`. `reprocess rediarize` carries names by Turn overlap and drops reassignments, so warn the user before suggesting it. A dual-track Meeting reads its original recordings again for this (the app keeps only the mixed audio): if the Job or the command answers that the original was not found, run `set M --source NEWPATH` (and `--system-source NEWPATH`) and retry. A Split survives all three, but `split --speaker` is a reassignment, so `rediarize` drops that Speaker choice and keeps the cut.
 
 ## Line markers
 

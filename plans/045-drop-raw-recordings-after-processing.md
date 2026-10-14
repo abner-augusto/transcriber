@@ -183,7 +183,8 @@ Executed as written. Two additions found while implementing:
 - The Meeting page disables the three Reprocess actions through
   `reprocessBlockedReason` (`frontend/src/utils/reprocess.ts`).
 
-Migration 5 was not run against the real database; it runs by itself the next
+Plan 046 later gave dual-track Meetings a Source Reference to the originals, so the three
+actions above read them from there instead of being refused outright. Migration 5 was not run against the real database; it runs by itself the next
 time the app starts after this branch is merged.
 
 ## Maintenance note
