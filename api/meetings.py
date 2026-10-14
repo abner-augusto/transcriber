@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 from pathlib import Path
@@ -33,6 +34,29 @@ def _require_usable_preset(preset: dict) -> dict:
     if health["state"] == "blocked":
         raise HTTPException(409, {"message": health["summary"], "health": health})
     return health
+
+
+NO_TRACKS = (
+    "This dual-track Meeting no longer has its mic and system tracks (the app keeps only "
+    "the mixed audio once a Meeting is processed), so it cannot be {action}."
+)
+
+
+def _require_tracks(meeting: Meeting, action: str) -> None:
+    if not meeting.reprocessable:
+        raise HTTPException(400, NO_TRACKS.format(action=action))
+
+
+def _share_file(src: Path, dest: Path) -> None:
+    """Give ``dest`` the content of ``src`` without storing it twice.
+
+    A hard link, so deleting either Meeting leaves the other intact; a copy where the
+    filesystem cannot link.
+    """
+    try:
+        os.link(src, dest)
+    except OSError:
+        shutil.copyfile(src, dest)
 
 
 @router.get("")
@@ -262,6 +286,7 @@ def start_processing(meeting_id: str, db: Session = Depends(get_db)):
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     _reject_processing(meeting)
+    _require_tracks(meeting, "processed again")
 
     preset = presets.resolve_preset(meeting.preset_id)
     health = _require_usable_preset(preset)
@@ -277,7 +302,7 @@ class DuplicateMeetingRequest(BaseModel):
 
 @router.post("/{meeting_id}/duplicate")
 def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session = Depends(get_db)):
-    """Copy a Meeting's audio into a new Meeting pinned to a different Preset, and process it.
+    """Give a new Meeting this Meeting's audio pinned to a different Preset, and process it.
 
     Lets an A/B comparison run without touching the original — the source Meeting keeps
     its own results untouched.
@@ -285,8 +310,15 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
     source = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not source:
         raise HTTPException(404, "Meeting not found")
-    if not source.audio_filepath and not source.is_dual_track:
+    _require_tracks(source, "duplicated")
+    audio = (
+        [source.mic_audio_filepath, source.system_audio_filepath]
+        if source.is_dual_track else [source.audio_filepath]
+    )
+    if not all(audio):
         raise HTTPException(400, "Meeting has no audio to duplicate")
+    if not all(Path(path).exists() for path in audio):
+        raise HTTPException(400, "The Meeting's audio file is missing on disk, so it cannot be duplicated.")
 
     preset = presets.get_preset(req.preset_id)
     if not preset:
@@ -308,18 +340,25 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
 
     dest_dir = get_meeting_path(copy.id)
     if source.is_dual_track:
-        for attr, prefix in (
-            ("mic_audio_filepath", "mic_source"),
-            ("system_audio_filepath", "system_source"),
-        ):
-            src = Path(getattr(source, attr))
-            dest = dest_dir / f"{prefix}{src.suffix}"
-            shutil.copyfile(src, dest)
-            setattr(copy, attr, str(dest))
+        mic_src, system_src = Path(source.mic_audio_filepath), Path(source.system_audio_filepath)
+        if mic_src.resolve() == system_src.resolve():
+            # One stereo or multi-stream file: the pipeline splits it only when both paths
+            # are the same file, so the copy keeps it as one file too.
+            dest = dest_dir / f"original{mic_src.suffix}"
+            _share_file(mic_src, dest)
+            copy.mic_audio_filepath = copy.system_audio_filepath = str(dest)
+        else:
+            for attr, prefix, src in (
+                ("mic_audio_filepath", "mic_source", mic_src),
+                ("system_audio_filepath", "system_source", system_src),
+            ):
+                dest = dest_dir / f"{prefix}{src.suffix}"
+                _share_file(src, dest)
+                setattr(copy, attr, str(dest))
     else:
         src_path = Path(source.audio_filepath)
         dest_path = dest_dir / f"original{src_path.suffix}"
-        shutil.copyfile(src_path, dest_path)
+        _share_file(src_path, dest_path)
         copy.audio_filepath = str(dest_path)
     db.commit()
 
@@ -336,6 +375,7 @@ def rediarize_meeting(meeting_id: str, db: Session = Depends(get_db)):
     _reject_processing(meeting)
     if not meeting.raw_transcription:
         raise HTTPException(400, "No transcription data. Run full processing first.")
+    _require_tracks(meeting, "re-diarized")
     _require_usable_diarizer()
     job = _enqueue(db, meeting.id, JobType.REDIARIZE)
     return job.to_dict()

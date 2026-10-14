@@ -52,6 +52,17 @@ class Meeting(Base):
         order_by="ReviewNote.start_time",
     )
 
+    @property
+    def reprocessable(self) -> bool:
+        """Whether Full reprocess, Re-diarize and Duplicate can run from the audio the app holds.
+
+        A single-track Meeting reruns from its ``audio.wav``. A dual-track one needs its
+        mic and system tracks, which the app drops once the Meeting is processed.
+        """
+        if not self.is_dual_track:
+            return True
+        return bool(self.mic_audio_filepath and self.system_audio_filepath)
+
     def to_dict(self, include_segments: bool = False, speaker_count: int | None = None, segment_count: int | None = None) -> dict:
         d = {
             "id": self.id,
@@ -61,6 +72,7 @@ class Meeting(Base):
             "mic_audio_filepath": self.mic_audio_filepath,
             "system_audio_filepath": self.system_audio_filepath,
             "is_dual_track": self.is_dual_track,
+            "reprocessable": self.reprocessable,
             "duration": self.duration,
             "preset_id": self.preset_id,
             "min_speakers": self.min_speakers,
