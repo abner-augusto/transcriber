@@ -6,7 +6,14 @@ from sqlalchemy import String, Float, Integer, DateTime, JSON, Enum, Text, Boole
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
-from services.source_reference import describe
+
+
+def _described(refs):
+    # Lazy: importing `services` loads torch, which every Job child process would pay
+    # for at `import models` (plan 046 regression, found by the local job runner tests).
+    from services.source_reference import describe
+
+    return describe(refs)
 
 
 class MeetingStatus(str, enum.Enum):
@@ -71,7 +78,7 @@ class Meeting(Base):
             return True
         # The originals live outside the app (plan 046). This only stats them; searching
         # and hashing happen when an operation needs them.
-        sources = describe(self.source_refs)
+        sources = _described(self.source_refs)
         return bool(sources) and all(source["state"] == "present" for source in sources)
 
     def to_dict(self, include_segments: bool = False, speaker_count: int | None = None, segment_count: int | None = None) -> dict:
@@ -84,7 +91,7 @@ class Meeting(Base):
             "system_audio_filepath": self.system_audio_filepath,
             "is_dual_track": self.is_dual_track,
             "reprocessable": self.reprocessable,
-            "sources": describe(self.source_refs),
+            "sources": _described(self.source_refs),
             "duration": self.duration,
             "preset_id": self.preset_id,
             "min_speakers": self.min_speakers,
