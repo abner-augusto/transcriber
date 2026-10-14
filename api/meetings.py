@@ -17,6 +17,7 @@ from jobs import JobAlreadyRunning, MeetingNotFoundError
 from models import Meeting, MeetingStatus, Speaker, Segment
 from models.job import Job, JobType
 from config import get_meeting_path
+from services import source_reference
 from services.audio_service import AudioService
 from transcript.words import words_from_stored
 from engines import probe_engine, diarizer_status
@@ -101,8 +102,15 @@ async def create_meeting(
     vocabulary: str = Form(None),
     participants: str = Form(None),
     preset_id: str = Form(None),
+    source_path: str = Form(None),
+    system_source_path: str = Form(None),
     db: Session = Depends(get_db),
 ):
+    # Where the user keeps the originals (the CLI sends it; a browser cannot).
+    for field in (source_path, system_source_path):
+        if field and not os.path.isabs(field):
+            raise HTTPException(400, f"source_path must be an absolute path, got '{field}'")
+
     # Validate title
     title = title.strip()[:MAX_TITLE_LENGTH]
     if not title:
@@ -165,9 +173,19 @@ async def create_meeting(
         meeting.mic_audio_filepath = mic_path
         meeting.system_audio_filepath = system_path
         meeting.is_dual_track = True
+        meeting.source_refs = {
+            "mic": source_reference.reference(mic_path, path=source_path or None, name=safe_filename),
+            "system": source_reference.reference(
+                system_path, path=system_source_path or None,
+                name=re.sub(r'[^\w.\-]', '_', Path(system_file.filename or "system").name),
+            ),
+        }
     else:
         # Single file: probe for stereo / multi-stream and split into dual-track if found.
         upload_path = await _save_upload(file, str(meeting_dir / f"original{ext}"))
+        meeting.source_refs = {
+            "audio": source_reference.reference(upload_path, path=source_path or None, name=safe_filename)
+        }
         probe = AudioService().probe_audio(upload_path)
         if probe["stream_count"] >= 2 or probe["channels"] >= 2:
             meeting.mic_audio_filepath = upload_path
