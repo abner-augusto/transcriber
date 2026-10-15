@@ -63,6 +63,13 @@ def test_a_stereo_original_is_one_reference_for_both_tracks(client, db_session, 
         "api.meetings.AudioService.probe_audio",
         lambda self, path: {"stream_count": 1, "channels": 2, "streams": []},
     )
+    monkeypatch.setattr(
+        "api.meetings.AudioService.analyze_tracks",
+        lambda self, path: {
+            "tracks": [], "audio": None, "manual": False,
+            "mic": {"stream": 0, "channel": 0}, "system": {"stream": 0, "channel": 1},
+        },
+    )
 
     response = _upload(client)
 

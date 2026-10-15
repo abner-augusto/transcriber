@@ -63,7 +63,7 @@ def test_single_track_meeting_keeps_only_audio(monkeypatch, tmp_path):
     import services.audio_service as audio_service
     monkeypatch.setattr(
         audio_service.AudioService, "extract_audio",
-        lambda self, fp, mid: str(directory / "audio.wav"),
+        lambda self, fp, mid, track=None: str(directory / "audio.wav"),
     )
 
     job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)

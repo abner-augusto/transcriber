@@ -47,7 +47,7 @@ def test_full_processing_extracts_from_the_original_where_it_lives(monkeypatch, 
     meeting_id = _referenced(harness, tmp_path, mic, system)
     inputs = []
 
-    def extract(self, mic_path, system_path, mid):
+    def extract(self, mic_path, system_path, mid, layout=None):
         inputs.append((mic_path, system_path))
         harness.write_dual_tracks(mid)
         return str(harness.storage / mid / "mixed.wav")
@@ -86,7 +86,7 @@ def test_full_processing_fails_the_job_with_the_repoint_message_when_the_origina
 def _tracks_recorder(monkeypatch, harness):
     made = []
 
-    def extract_tracks(self, mic_path, system_path, mid):
+    def extract_tracks(self, mic_path, system_path, mid, layout=None):
         made.append((mic_path, system_path))
         harness.write_dual_tracks(mid)
 
@@ -184,3 +184,85 @@ def test_rediarize_without_tracks_or_original_fails_with_the_repoint_message(mon
     assert job.status == JobStatus.FAILED
     assert "--system-source NEW_PATH" in job.error
     assert harness.diarizer.calls == []
+
+
+OBS_LAYOUT = {
+    "tracks": [], "mic": {"stream": 1, "channel": None}, "system": {"stream": 2, "channel": None},
+    "audio": None, "manual": False,
+}
+
+
+def _one_file_with_tracks(harness, tmp_path, layout):
+    """A dual-track Meeting whose mic and system are two tracks of one original."""
+    original = tmp_path / "project" / "obs.mkv"
+    original.parent.mkdir()
+    original.write_bytes(b"o" * 100)
+    meeting_id = harness.meeting(dual_track=True)
+    with harness.session_factory() as db:
+        meeting = db.get(h.Meeting, meeting_id)
+        meeting.audio_filepath = None
+        meeting.mic_audio_filepath = meeting.system_audio_filepath = None
+        meeting.source_refs = {"audio": sources.reference(original, path=str(original))}
+        meeting.track_layout = layout
+        db.commit()
+    return meeting_id, original
+
+
+def test_full_processing_extracts_the_tracks_the_layout_names(monkeypatch, tmp_path):
+    harness = _install(monkeypatch, tmp_path)
+    meeting_id, original = _one_file_with_tracks(harness, tmp_path, OBS_LAYOUT)
+    layouts = []
+
+    def extract(self, mic_path, system_path, mid, layout=None):
+        layouts.append((mic_path, system_path, layout))
+        harness.write_dual_tracks(mid)
+        return str(harness.storage / mid / "mixed.wav")
+
+    monkeypatch.setattr(audio_service.AudioService, "extract_dual_audio", extract)
+
+    job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
+    assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
+
+    assert layouts == [(str(original), str(original), OBS_LAYOUT)]
+
+
+def test_rediarize_makes_the_tracks_by_the_same_layout(monkeypatch, tmp_path):
+    harness = _install(monkeypatch, tmp_path)
+    meeting_id, original = _one_file_with_tracks(harness, tmp_path, OBS_LAYOUT)
+    _processed_without_tracks(harness, meeting_id)
+    layouts = []
+
+    def extract_tracks(self, mic_path, system_path, mid, layout=None):
+        layouts.append(layout)
+        harness.write_dual_tracks(mid)
+
+    monkeypatch.setattr(audio_service.AudioService, "extract_dual_tracks", extract_tracks)
+    with harness.session_factory() as db:
+        db.get(h.Meeting, meeting_id).audio_filepath = str(harness.storage / meeting_id / "audio.wav")
+        db.commit()
+
+    job_id = harness.job(meeting_id, JobType.REDIARIZE)
+    assert rediarize_task(meeting_id, job_id)["status"] == "completed"
+
+    assert layouts == [OBS_LAYOUT]
+
+
+def test_a_single_track_meeting_extracts_the_one_track_the_layout_picked(monkeypatch, tmp_path):
+    harness = _install(monkeypatch, tmp_path)
+    meeting_id = harness.meeting()
+    picked = []
+    monkeypatch.setattr(
+        audio_service.AudioService, "extract_audio",
+        lambda self, fp, mid, track=None: picked.append(track) or fp,
+    )
+    with harness.session_factory() as db:
+        db.get(h.Meeting, meeting_id).track_layout = {
+            "tracks": [], "mic": None, "system": None,
+            "audio": {"stream": 1, "channel": None}, "manual": False,
+        }
+        db.commit()
+
+    job_id = harness.job(meeting_id, JobType.PROCESS_MEETING)
+    assert process_meeting_task(meeting_id, job_id)["status"] == "completed"
+
+    assert picked == [{"stream": 1, "channel": None}]

@@ -30,41 +30,60 @@ def _fake_run(probe_stdout: str = ""):
     return run, calls
 
 
+def _ffprobe(*streams: dict) -> str:
+    """What `ffprobe -print_format json -show_streams` prints: `codec_name` and `codec_type`
+    on every stream, `channels` only on audio (captured from ffmpeg 2026-10-15)."""
+    return json.dumps({"streams": list(streams)})
+
+
+def _audio(index: int, channels: int, codec: str = "aac", title: str | None = None) -> dict:
+    stream = {"index": index, "codec_name": codec, "codec_type": "audio", "channels": channels}
+    if title:
+        stream["tags"] = {"title": title}
+    return stream
+
+
+VIDEO = {"index": 0, "codec_name": "h264", "codec_type": "video", "width": 1920, "height": 1080}
+
+
 def test_probe_audio_stereo_single_stream():
-    stdout = json.dumps({
-        "streams": [
-            {"codec": "pcm_s16le", "channels": 2, "index": 0},
-        ]
-    })
+    stdout = _ffprobe(_audio(0, 2, "pcm_s16le"))
     with patch("subprocess.run", side_effect=_fake_run(stdout)[0]):
         probe = AudioService().probe_audio("stereo.wav")
 
     assert probe["stream_count"] == 1
     assert probe["channels"] == 2
-    assert probe["streams"] == [{"index": 0, "channels": 2}]
+    assert probe["streams"] == [{"stream": 0, "channels": 2, "title": None}]
 
 
 def test_probe_audio_multi_stream_two_mono():
-    stdout = json.dumps({
-        "streams": [
-            {"codec": "aac", "channels": 1, "index": 0},
-            {"codec": "aac", "channels": 1, "index": 1},
-        ]
-    })
+    stdout = _ffprobe(_audio(0, 1), _audio(1, 1))
     with patch("subprocess.run", side_effect=_fake_run(stdout)[0]):
-        probe = AudioService().probe_audio("multi.wav")
+        probe = AudioService().probe_audio("multi.mkv")
 
     assert probe["stream_count"] == 2
     assert probe["channels"] == 1
-    assert probe["streams"] == [{"index": 0, "channels": 1}, {"index": 1, "channels": 1}]
+    assert probe["streams"] == [
+        {"stream": 0, "channels": 1, "title": None},
+        {"stream": 1, "channels": 1, "title": None},
+    ]
+
+
+def test_probe_audio_numbers_audio_streams_apart_from_the_video_stream():
+    """`-map 0:a:N` counts audio streams only: an OBS .mkv has the video first."""
+    stdout = _ffprobe(VIDEO, _audio(1, 1, title="Mic"), _audio(2, 1, title="Desktop"))
+    with patch("subprocess.run", side_effect=_fake_run(stdout)[0]):
+        probe = AudioService().probe_audio("obs.mkv")
+
+    assert probe["stream_count"] == 2
+    assert probe["streams"] == [
+        {"stream": 0, "channels": 1, "title": "Mic"},
+        {"stream": 1, "channels": 1, "title": "Desktop"},
+    ]
 
 
 def test_probe_audio_single_mono():
-    stdout = json.dumps({
-        "streams": [
-            {"codec": "mp3", "channels": 1, "index": 0},
-        ]
-    })
+    stdout = _ffprobe(_audio(0, 1, "mp3"))
     with patch("subprocess.run", side_effect=_fake_run(stdout)[0]):
         probe = AudioService().probe_audio("mono.mp3")
 
@@ -73,7 +92,7 @@ def test_probe_audio_single_mono():
 
 
 def test_probe_audio_no_audio_streams_defaults_to_mono():
-    stdout = json.dumps({"streams": [{"codec": "h264", "index": 0}]})
+    stdout = _ffprobe(VIDEO)
     with patch("subprocess.run", side_effect=_fake_run(stdout)[0]):
         probe = AudioService().probe_audio("video.mp4")
 
@@ -81,40 +100,72 @@ def test_probe_audio_no_audio_streams_defaults_to_mono():
     assert probe["channels"] == 1
 
 
-def test_extract_dual_audio_splits_stereo_when_same_file():
-    # Probe reports a single stereo stream (1 stream, 2 channels).
-    probe = json.dumps({"streams": [{"codec": "pcm_s16le", "channels": 2, "index": 0}]})
-    run, calls = _fake_run(probe_stdout=probe)
-    with patch("subprocess.run", side_effect=run):
-        out = AudioService().extract_dual_audio("same.wav", "same.wav", "m1")
+def _after(cmd: list[str], flag: str) -> str:
+    return cmd[cmd.index(flag) + 1]
 
-    # 4 calls: probe (ffprobe), split mic, split system, mix.
-    assert len(calls) == 4
-    # The split commands use the pan filter to extract channel 0 and channel 1.
-    assert any("pan=mono|c0=1:c1=0" in c for c in calls[1])
-    assert any("pan=mono|c0=0:c1=1" in c for c in calls[2])
-    # The mix uses amix with normalize.
-    assert any("amix=inputs=2:normalize=1" in c for c in calls[3])
-    # Output is the mixed audio.wav.
+
+def test_extract_dual_audio_splits_stereo_channels_by_the_layout():
+    layout = {
+        "mic": {"stream": 0, "channel": 0},
+        "system": {"stream": 0, "channel": 1},
+    }
+    run, calls = _fake_run()
+    with patch("subprocess.run", side_effect=run):
+        out = AudioService().extract_dual_audio("same.wav", "same.wav", "m1", layout=layout)
+
+    # 3 calls, no probe: split mic, split system, mix.
+    assert len(calls) == 3
+    assert _after(calls[0], "-map") == "0:a:0" and "pan=mono|c0=c0" in _after(calls[0], "-af")
+    assert _after(calls[1], "-map") == "0:a:0" and "pan=mono|c0=c1" in _after(calls[1], "-af")
+    assert all("loudnorm" in _after(c, "-af") for c in calls[:2])
+    assert "amix=inputs=2:normalize=1" in _after(calls[2], "-filter_complex")
     assert out.endswith("audio.wav")
 
 
-def test_extract_dual_audio_splits_multi_stream_when_same_file():
-    # Probe reports two mono streams (OBS-style multi-stream).
-    probe = json.dumps({"streams": [
-        {"codec": "aac", "channels": 1, "index": 0},
-        {"codec": "aac", "channels": 1, "index": 1},
-    ]})
+def test_extract_dual_audio_maps_the_streams_the_layout_names():
+    """An OBS file with a mix on track 1: the mic and the system are tracks 2 and 3."""
+    layout = {
+        "mic": {"stream": 1, "channel": None},
+        "system": {"stream": 2, "channel": None},
+    }
+    run, calls = _fake_run()
+    with patch("subprocess.run", side_effect=run):
+        AudioService().extract_dual_audio("obs.mkv", "obs.mkv", "m1", layout=layout)
+
+    assert [_after(c, "-map") for c in calls[:2]] == ["0:a:1", "0:a:2"]
+    # Each stream is one track: a stereo stream is mixed down, not split.
+    assert not any("pan=" in _after(c, "-af") for c in calls[:2])
+    assert all(_after(c, "-ac") == "1" for c in calls[:2])
+
+
+def test_extract_dual_audio_without_a_layout_falls_back_to_the_first_two_streams():
+    """A Meeting made with the same file as mic and system, before layouts existed."""
+    probe = _ffprobe(_audio(0, 1), _audio(1, 1))
     run, calls = _fake_run(probe_stdout=probe)
     with patch("subprocess.run", side_effect=run):
-        out = AudioService().extract_dual_audio("same.wav", "same.wav", "m1")
+        AudioService().extract_dual_audio("same.mkv", "same.mkv", "m1")
 
-    # 4 calls: probe (ffprobe), split mic, split system, mix.
-    assert len(calls) == 4
-    # The split commands map stream 0 and stream 1.
-    assert "-map" in calls[1] and "0:a:0" in calls[1]
-    assert "-map" in calls[2] and "0:a:1" in calls[2]
-    assert out.endswith("audio.wav")
+    assert len(calls) == 4  # probe, mic, system, mix
+    assert [_after(c, "-map") for c in calls[1:3]] == ["0:a:0", "0:a:1"]
+
+
+def test_extract_dual_audio_without_a_layout_falls_back_to_the_two_channels_of_a_stereo_file():
+    probe = _ffprobe(_audio(0, 2, "pcm_s16le"))
+    run, calls = _fake_run(probe_stdout=probe)
+    with patch("subprocess.run", side_effect=run):
+        AudioService().extract_dual_audio("same.wav", "same.wav", "m1")
+
+    assert "pan=mono|c0=c0" in _after(calls[1], "-af")
+    assert "pan=mono|c0=c1" in _after(calls[2], "-af")
+
+
+def test_extract_audio_reads_the_one_track_the_layout_picked():
+    run, calls = _fake_run()
+    with patch("subprocess.run", side_effect=run):
+        AudioService().extract_audio("obs.mkv", "m1", track={"stream": 1, "channel": None})
+
+    assert _after(calls[0], "-map") == "0:a:1"
+    assert _after(calls[0], "-ac") == "1"
 
 
 def test_extract_dual_audio_extracts_separate_files_when_different():

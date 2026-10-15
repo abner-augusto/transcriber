@@ -32,11 +32,17 @@ class Meeting(Base):
     original_filename: Mapped[str] = mapped_column(String, nullable=True)
     audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     # Dual-track sources. When a Meeting is dual-track (mic + system), these point
-    # to the raw source files. For a stereo file both point to the same file and
-    # the pipeline splits it into the two mono tracks. NULL for single-track Meetings.
+    # to the raw source files. For one file carrying both (a stereo file, an OBS file with
+    # several tracks) both point to the same file and the pipeline reads the two tracks
+    # `track_layout` names. NULL for single-track Meetings.
     mic_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     system_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     is_dual_track: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    # The tracks found in a single uploaded file with more than one (plan 047):
+    # {"tracks": [{"stream", "channel", "title", "status", "level_db"}], "mic", "system",
+    # "audio", "manual"}. mic/system are {"stream", "channel"} selectors; "audio" is the one
+    # track a single-track Meeting reads. NULL for a mono file or two separate files.
+    track_layout: Mapped[dict] = mapped_column(JSON, nullable=True)
     # Source References to the original recordings, which live outside the app (plan 046):
     # {"audio" | "mic" | "system": {"path", "name", "size", "hash"}}. NULL for a Meeting that
     # was uploaded before references existed.
@@ -90,6 +96,7 @@ class Meeting(Base):
             "mic_audio_filepath": self.mic_audio_filepath,
             "system_audio_filepath": self.system_audio_filepath,
             "is_dual_track": self.is_dual_track,
+            "track_layout": self.track_layout,
             "reprocessable": self.reprocessable,
             "sources": _described(self.source_refs),
             "duration": self.duration,

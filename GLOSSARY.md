@@ -21,6 +21,16 @@ or from a folder the user listed for searching (a few levels deep); a moved file
 hash. One per track: `mic` and `system`, or `audio` for a single file.
 _Avoid_: source file, attachment, link
 
+**Track Layout**:
+What the tool found in a single uploaded file that carries more than one track, and which of them it
+reads as the mic and the system. A track is a stream of the file (a stereo stream counts as one) or,
+when the file's only stream is multi-channel, one of its channels. Each is sampled and judged
+`speech`, `silent` (nothing recorded), `duplicate` (a copy of an earlier track, as in a fake stereo)
+or `mix` (the sum of the others, as OBS track 1 can be). The mic and the system are chosen among
+the `speech` tracks by the names the recorder gave them ("Microfone", "Computador"), else by file
+order. The user can overrule the choice until the Meeting is processed.
+_Avoid_: channel layout, stream map
+
 **Vocabulary**:
 Domain-specific words and names — supplied by the user or learned from their corrections — that
 are given to the Transcriber so it spells them correctly. Vocabulary Correction also applies

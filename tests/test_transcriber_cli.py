@@ -1317,3 +1317,110 @@ def test_set_combines_a_title_with_a_source(db_session, api, capsys, tmp_path):
     assert code == 0
     db_session.refresh(meeting)
     assert meeting.title == "Novo"
+
+
+OBS_TRACKS = {
+    "tracks": [
+        {"stream": 0, "channel": None, "title": None, "status": "mix", "level_db": -18.0},
+        {"stream": 1, "channel": None, "title": "Mic", "status": "speech", "level_db": -24.0},
+        {"stream": 2, "channel": None, "title": "Desktop", "status": "speech", "level_db": -27.0},
+    ],
+    "mic": {"stream": 1, "channel": None}, "system": {"stream": 2, "channel": None},
+    "audio": None, "manual": False,
+}
+
+
+def _meeting_with_tracks(db_session, layout=OBS_TRACKS):
+    meeting = seed_meeting(db_session, status=MeetingStatus.UPLOADED)
+    meeting.is_dual_track = True
+    meeting.mic_audio_filepath = meeting.system_audio_filepath = "original.mkv"
+    meeting.track_layout = layout
+    db_session.commit()
+    return meeting
+
+
+def test_show_lists_the_tracks_the_file_was_found_to_have(db_session, api, capsys):
+    meeting = _meeting_with_tracks(db_session)
+
+    _, out, _ = run(["show", meeting.id], api, capsys)
+
+    assert 'track 0 mix -18.0 dB' in out
+    assert 'track 1 "Mic" speech -24.0 dB -> mic' in out
+    assert 'track 2 "Desktop" speech -27.0 dB -> system' in out
+
+
+def test_set_picks_the_mic_and_the_system_track(db_session, api, capsys):
+    meeting = _meeting_with_tracks(db_session)
+
+    code, out, _ = run(["set", meeting.id, "--mic-track", "2", "--system-track", "1"], api, capsys)
+
+    assert code == 0
+    db_session.refresh(meeting)
+    assert meeting.track_layout["mic"] == {"stream": 2, "channel": None}
+    assert meeting.track_layout["system"] == {"stream": 1, "channel": None}
+    assert 'track 2 "Desktop" speech -27.0 dB -> mic' in out
+
+
+def test_set_names_a_channel_of_a_stereo_stream_as_stream_colon_channel(db_session, api, capsys):
+    layout = {
+        "tracks": [
+            {"stream": 0, "channel": 0, "title": None, "status": "speech", "level_db": -20.0},
+            {"stream": 0, "channel": 1, "title": None, "status": "speech", "level_db": -22.0},
+        ],
+        "mic": {"stream": 0, "channel": 0}, "system": {"stream": 0, "channel": 1},
+        "audio": None, "manual": False,
+    }
+    meeting = _meeting_with_tracks(db_session, layout)
+
+    code, _, _ = run(["set", meeting.id, "--mic-track", "0:1", "--system-track", "0:0"], api, capsys)
+
+    assert code == 0
+    db_session.refresh(meeting)
+    assert meeting.track_layout["mic"] == {"stream": 0, "channel": 1}
+
+
+def test_set_system_track_none_reads_the_file_as_one_track(db_session, api, capsys):
+    meeting = _meeting_with_tracks(db_session)
+
+    code, _, _ = run(["set", meeting.id, "--mic-track", "1", "--system-track", "none"], api, capsys)
+
+    assert code == 0
+    db_session.refresh(meeting)
+    assert not meeting.is_dual_track
+    assert meeting.track_layout["audio"] == {"stream": 1, "channel": None}
+
+
+def test_set_refuses_a_track_the_file_does_not_have_with_exit_1(db_session, api, capsys):
+    meeting = _meeting_with_tracks(db_session)
+
+    code, _, err = run(["set", meeting.id, "--mic-track", "7"], api, capsys)
+
+    assert code == 1
+    assert "no track" in err
+
+
+def test_set_refuses_a_malformed_track(db_session, api, capsys):
+    meeting = _meeting_with_tracks(db_session)
+
+    code, _, err = run(["set", meeting.id, "--mic-track", "two"], api, capsys)
+
+    assert code == 1
+    assert "STREAM" in err
+
+
+def test_upload_prints_the_tracks_it_found_so_the_guess_can_be_checked(
+    db_session, api, capsys, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("config.settings.storage_path", str(tmp_path / "storage"))
+    monkeypatch.setattr(
+        "api.meetings.AudioService.probe_audio",
+        lambda self, path: {"stream_count": 3, "channels": 1, "streams": []},
+    )
+    monkeypatch.setattr("api.meetings.AudioService.analyze_tracks", lambda self, path: OBS_TRACKS)
+    audio = tmp_path / "obs.mkv"
+    audio.write_bytes(b"0123456789")
+
+    code, out, _ = run(["upload", str(audio), "--title", "OBS"], api, capsys)
+
+    assert code == 0
+    assert 'track 1 "Mic" speech -24.0 dB -> mic' in out

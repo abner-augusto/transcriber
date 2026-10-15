@@ -43,11 +43,12 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 tracks = locate_tracks(meeting)
                 db.commit()  # a path found by searching is remembered
                 audio_path = audio_service.extract_dual_audio(
-                    str(tracks.mic), str(tracks.system), meeting.id
+                    str(tracks.mic), str(tracks.system), meeting.id, layout=meeting.track_layout
                 )
             else:
                 audio_path = audio_service.extract_audio(
-                    meeting.audio_filepath, meeting.id
+                    meeting.audio_filepath, meeting.id,
+                    track=(meeting.track_layout or {}).get("audio"),
                 )
             duration = audio_service.get_duration(audio_path)
             meeting.duration = duration

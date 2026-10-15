@@ -38,4 +38,5 @@ Enable dual-track audio ingestion and processing for meeting recordings, specifi
 - Remote speakers are isolated by running the Diarizer exclusively on `system.wav`, bounded by VAD on that track.
 - Host and remote turns are merged into one `DiarizationResult`; crosstalk overlaps are preserved and exclusive turns are computed for unambiguous attribution.
 - Stereo / multi-stream single files are auto-detected via `ffprobe` at upload and split at processing (channel 0 = mic, channel 1 = system).
+- **Correction (2026-10-15, plan 047):** this never worked. `probe_audio` read a `codec` key ffprobe does not print and the `pan` filter was rejected by ffmpeg; the tests mocked an invented schema. Plan 047 fixes both, ignores fake stereo, silent and mix tracks, picks mic/system by track name, and lets the user overrule.
 - Migration `0003_dual_track.sql` adds the three new columns; `duplicate_meeting` copies dual-track sources.

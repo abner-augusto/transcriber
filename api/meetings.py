@@ -1,9 +1,11 @@
+import logging
 import os
 import re
 import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session, defer
 
 from pydantic import BaseModel
@@ -22,6 +24,8 @@ from services.audio_retention import processed_tracks_present
 from services.audio_service import AudioService
 from transcript.words import words_from_stored
 from engines import probe_engine, diarizer_status
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -182,13 +186,16 @@ async def create_meeting(
             ),
         }
     else:
-        # Single file: probe for stereo / multi-stream and split into dual-track if found.
+        # Single file: a file with several tracks (a stereo file, an OBS recording) is read
+        # for which of them is the mic and which the system. One that turns out to carry a
+        # single source (a fake stereo, a muted desktop track) stays a single-track Meeting.
         upload_path = await _save_upload(file, str(meeting_dir / f"original{ext}"))
         meeting.source_refs = {
             "audio": source_reference.reference(upload_path, path=source_path or None, name=safe_filename)
         }
-        probe = AudioService().probe_audio(upload_path)
-        if probe["stream_count"] >= 2 or probe["channels"] >= 2:
+        layout = await run_in_threadpool(_find_tracks, upload_path)
+        meeting.track_layout = layout
+        if layout and layout["mic"] and layout["system"]:
             meeting.mic_audio_filepath = upload_path
             meeting.system_audio_filepath = upload_path
             meeting.is_dual_track = True
@@ -198,6 +205,23 @@ async def create_meeting(
     db.commit()
 
     return meeting.to_dict()
+
+
+def _find_tracks(path: str) -> dict | None:
+    """The track layout of a file with more than one track, or None.
+
+    A mono file has nothing to choose from. A file ffmpeg cannot analyze is processed as
+    one mixed track, as before: the upload does not fail for it.
+    """
+    service = AudioService()
+    try:
+        probe = service.probe_audio(path)
+        if probe["stream_count"] < 2 and probe["channels"] < 2:
+            return None
+        return service.analyze_tracks(path)
+    except Exception:
+        log.exception("Could not analyze the tracks of %s", path)
+        return None
 
 
 async def _save_upload(file: UploadFile, path: str) -> str:
@@ -279,6 +303,63 @@ def point_sources(meeting_id: str, req: SourcesRequest, db: Session = Depends(ge
         )
     except source_reference.SourceError as error:
         raise HTTPException(error.status_code, error.message)
+    db.commit()
+    jobs.notify_meeting_changed(meeting.id)
+    return meeting.to_dict()
+
+
+class TrackSelector(BaseModel):
+    stream: int
+    channel: int | None = None
+
+
+class TracksRequest(BaseModel):
+    mic: TrackSelector | None = None
+    system: TrackSelector | None = None
+
+
+@router.put("/{meeting_id}/tracks")
+def set_tracks(meeting_id: str, req: TracksRequest, db: Session = Depends(get_db)):
+    """Choose which track of the uploaded file is the mic and which the system.
+
+    ``system`` null reads the file as one track (``mic``). Only a track the analysis found
+    in the file can be chosen, and only before the Meeting is processed: it decides what
+    audio the Meeting is made from.
+    """
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    layout = meeting.track_layout
+    if meeting.status != MeetingStatus.UPLOADED or not layout:
+        raise HTTPException(409, "Only a Meeting not yet processed, made from a file with several tracks, has tracks to choose")
+
+    mic = req.mic.model_dump() if req.mic else None
+    system = req.system.model_dump() if req.system else None
+    if mic is None:
+        raise HTTPException(400, "A mic track is required")
+    if mic == system:
+        raise HTTPException(400, "The mic and the system cannot be the same track")
+    found = [{"stream": t["stream"], "channel": t["channel"]} for t in layout["tracks"]]
+    for chosen in (mic, system):
+        if chosen is not None and chosen not in found:
+            raise HTTPException(400, f"The file has no track {chosen}")
+
+    original = meeting.mic_audio_filepath or meeting.audio_filepath
+    if system:
+        meeting.mic_audio_filepath = meeting.system_audio_filepath = original
+        meeting.audio_filepath = None
+        meeting.is_dual_track = True
+    else:
+        meeting.audio_filepath = original
+        meeting.mic_audio_filepath = meeting.system_audio_filepath = None
+        meeting.is_dual_track = False
+    meeting.track_layout = {
+        **layout,
+        "mic": mic if system else None,
+        "system": system,
+        "audio": None if system else mic,
+        "manual": True,
+    }
     db.commit()
     jobs.notify_meeting_changed(meeting.id)
     return meeting.to_dict()
@@ -385,6 +466,8 @@ def duplicate_meeting(meeting_id: str, req: DuplicateMeetingRequest, db: Session
         preset_id=preset["id"],
         is_dual_track=source.is_dual_track,
         source_refs=source.source_refs,
+        # A single-track copy reads the kept audio.wav, already the one track that was picked.
+        track_layout=source.track_layout if source.is_dual_track else None,
     )
     db.add(copy)
     db.flush()

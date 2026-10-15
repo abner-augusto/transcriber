@@ -169,6 +169,7 @@ project folder.
 |------|-------|----------|--------|------------|--------|
 | 045 | The app keeps only the derived `audio.wav` once a Meeting is processed | P1 | M | — | DONE (executor Claude, 2026-10-14; migration 5 written and tested, not run on the real database) |
 | 046 | A Source Reference to the original recording, so reruns can read it back | P1 | L | 045 | DONE (executor Claude, 2026-10-14; migration 6 adds a NULL column and guesses nothing; no Settings screen for `source_roots` yet) |
+| 047 | Detect the tracks of a single file (fix the probe and the pan filter that never worked), ignore a fake stereo and a mix track, and let the user overrule | P1 | L | 046 | DONE (executor Claude, 2026-10-15; migration 7 adds a NULL column; verified on two real OBS `.mkv` files; the near-silent desktop track is kept when its peak is above -50 dBFS) |
 
 Decisions (user, 2026-10-10):
 - a mark on the corrected Word, with confirm and undo; the Review tab is not

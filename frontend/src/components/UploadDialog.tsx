@@ -189,7 +189,7 @@ export default function UploadDialog({ onClose, onCreated }: Props) {
               ) : (
                 <div>
                   <p className="text-slate-300 font-medium">Microphone track</p>
-                  <p className="text-slate-500 text-sm mt-1">Drop or click — a stereo file is split into mic + system</p>
+                  <p className="text-slate-500 text-sm mt-1">Drop or click — a file with several tracks is split into mic + system</p>
                 </div>
               )}
             </div>
@@ -227,7 +227,7 @@ export default function UploadDialog({ onClose, onCreated }: Props) {
               ) : (
                 <div>
                   <p className="text-slate-300 font-medium">System audio track (optional)</p>
-                  <p className="text-slate-500 text-sm mt-1">Meeting / desktop audio. Leave empty to split a stereo mic file.</p>
+                  <p className="text-slate-500 text-sm mt-1">Meeting / desktop audio. Leave empty to split a file that has both tracks.</p>
                 </div>
               )}
             </div>

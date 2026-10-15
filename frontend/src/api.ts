@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { EngineCheck, Meeting, SourcesRequest, ReviewNote, Segment, Speaker, Job, ModelSettings, Preset, VocabularyProfile } from "./types";
+import type { EngineCheck, Meeting, SourcesRequest, TracksRequest, ReviewNote, Segment, Speaker, Job, ModelSettings, Preset, VocabularyProfile } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -56,6 +56,11 @@ export async function reapplyVocabulary(id: string): Promise<Job> {
 
 export async function pointSources(id: string, body: SourcesRequest): Promise<Meeting> {
   const { data } = await api.put(`/meetings/${id}/sources`, body);
+  return data;
+}
+
+export async function setTracks(id: string, body: TracksRequest): Promise<Meeting> {
+  const { data } = await api.put(`/meetings/${id}/tracks`, body);
   return data;
 }
 

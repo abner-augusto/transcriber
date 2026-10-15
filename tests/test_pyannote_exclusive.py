@@ -314,7 +314,7 @@ def test_process_meeting_and_rediarize_tasks_with_exclusive_turns(monkeypatch, t
     monkeypatch.setattr("tasks.process_meeting.make_transcriber", lambda run_config: FakeTranscriber(words))
     monkeypatch.setattr("tasks.process_meeting.make_diarizer", lambda run_config, **kwargs: FakeDiarizer(diar_result))
     monkeypatch.setattr("tasks.reprocess_task.make_diarizer", lambda run_config, **kwargs: FakeDiarizer(diar_result))
-    monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid: fp)
+    monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid, track=None: fp)
     monkeypatch.setattr("services.audio_service.AudioService.get_duration", lambda self, fp: 10.0)
     monkeypatch.setattr("services.vad_service.VadService.compute_vad_segments", lambda self, fp: [(0.0, 4.0)])
 

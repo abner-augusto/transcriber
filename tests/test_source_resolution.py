@@ -181,3 +181,34 @@ def test_duplicate_of_a_single_track_meeting_copies_its_reference(db_session, re
 
     assert response.status_code == 200
     assert db_session.get(Meeting, response.json()["id"]).source_refs == {"audio": ref}
+
+
+def test_duplicate_of_a_dual_track_meeting_keeps_the_layout_of_its_tracks(
+    db_session, ready_engines, tmp_path
+):
+    meeting, _mic, _system = _dual(db_session, tmp_path)
+    layout = {"tracks": [], "mic": {"stream": 1, "channel": None},
+              "system": {"stream": 2, "channel": None}, "audio": None, "manual": True}
+    meeting.track_layout = layout
+    db_session.commit()
+
+    response = _post(ready_engines, meeting, "duplicate")
+
+    assert db_session.get(Meeting, response.json()["id"]).track_layout == layout
+
+
+def test_duplicate_of_a_single_track_meeting_reads_its_audio_whole(db_session, ready_engines, tmp_path):
+    """The kept audio.wav is already the one track the layout picked: picking again would fail."""
+    audio = _recording(tmp_path, "storage/x", "audio.wav", b"a")
+    meeting = Meeting(
+        title="Single", status=MeetingStatus.COMPLETED, audio_filepath=str(audio),
+        raw_transcription={"words": []},
+        track_layout={"tracks": [], "mic": None, "system": None,
+                      "audio": {"stream": 1, "channel": None}, "manual": False},
+    )
+    db_session.add(meeting)
+    db_session.commit()
+
+    response = _post(ready_engines, meeting, "duplicate")
+
+    assert db_session.get(Meeting, response.json()["id"]).track_layout is None

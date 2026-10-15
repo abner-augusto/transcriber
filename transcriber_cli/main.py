@@ -11,7 +11,8 @@ from . import suspects
 from .client import Api, ApiError
 from .handles import resolve_meeting, resolve_note, resolve_segment, resolve_speaker
 from .render import (
-    clock, meeting_header, note_line, parse_clock, segment_line, speaker_line, word_line,
+    clock, meeting_header, note_line, parse_clock, parse_track, segment_line, speaker_line,
+    track_lines, word_line,
 )
 
 REPROCESS_KINDS = ("rediarize", "reidentify", "reapply-vocabulary")
@@ -89,7 +90,7 @@ def cmd_upload(api, args):
         fields["system_source_path"] = os.path.abspath(args.system)
     fields.update({k: str(v) for k, v in options.items() if v is not None})
     meeting = api.upload("/api/meetings", fields, files)
-    emit(args, meeting, [meeting["id"]])
+    emit(args, meeting, [meeting["id"], *track_lines(meeting.get("track_layout"))])
     if args.process:
         _queued(api, args, meeting["id"], "process")
         if args.wait:
@@ -532,9 +533,12 @@ def cmd_set(api, args):
     fields = {name: value for name, value in fields.items() if value is not None}
     sources = {"source": args.source, "system_source": args.system_source}
     sources = {name: _local_file(value) for name, value in sources.items() if value is not None}
-    if not fields and not sources:
+    picking_tracks = args.mic_track is not None or args.system_track is not None
+    if not fields and not sources and not picking_tracks:
         raise ApiError(
-            400, "nothing to set; pass --title, --participants, --vocabulary, --source or --system-source"
+            400,
+            "nothing to set; pass --title, --participants, --vocabulary, --source, --system-source, "
+            "--mic-track or --system-track",
         )
     meeting = resolve_meeting(api, args.meeting)
     updated = meeting
@@ -544,8 +548,26 @@ def cmd_set(api, args):
         updated = api.put(
             f"/api/meetings/{meeting['id']}/sources", json={**sources, "adopt": args.adopt}
         )
+    if picking_tracks:
+        updated = api.put(f"/api/meetings/{meeting['id']}/tracks", json=_chosen_tracks(updated, args))
     emit(args, updated, meeting_header(updated))
     return 0
+
+
+def _chosen_tracks(meeting: dict, args) -> dict:
+    """The mic and system to send: what was named, else what the Meeting has now."""
+    layout = meeting.get("track_layout") or {}
+    try:
+        mic = parse_track(args.mic_track) if args.mic_track is not None else layout.get("mic") or layout.get("audio")
+        if args.system_track is None:
+            system = layout.get("system")
+        elif args.system_track.lower() == "none":
+            system = None
+        else:
+            system = parse_track(args.system_track)
+    except ValueError as error:
+        raise ApiError(400, str(error))
+    return {"mic": mic, "system": system}
 
 
 def cmd_export(api, args):
@@ -734,12 +756,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("note", metavar="NOTE", help="Note handle: n:<id8>, an id prefix (4+ characters), or the id")
     p.add_argument("--reply", metavar="TEXT", help="a short reply to the user")
 
-    p = command("set", cmd_set, "change the Meeting's title, participants, vocabulary, or where its original lives")
+    p = command("set", cmd_set, "change the Meeting's title, participants, vocabulary, where its original lives, or which tracks of its file are the mic and the system")
     p.add_argument("--title")
     p.add_argument("--source", metavar="PATH",
                    help="where the original recording is now (the mic file of a dual-track Meeting); "
                    "refused unless it is the same recording")
     p.add_argument("--system-source", metavar="PATH", help="where the system-audio original is now")
+    p.add_argument("--mic-track", metavar="STREAM[:CHANNEL]",
+                   help="which track of the uploaded file is the microphone (see the `track` lines of "
+                   "`show`); only before the Meeting is processed")
+    p.add_argument("--system-track", metavar="STREAM[:CHANNEL]|none",
+                   help="which track is the system audio; 'none' reads the file as one track")
     p.add_argument("--adopt", action="store_true",
                    help="with --source, accept a file as the recording of a Meeting that has no "
                    "reference yet (uploaded before references existed)")
