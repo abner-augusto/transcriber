@@ -20,6 +20,7 @@ class JobStatus(str, enum.Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class Job(Base):
@@ -35,6 +36,9 @@ class Job(Base):
     result: Mapped[dict] = mapped_column(JSON, nullable=True)
     run_config: Mapped[dict] = mapped_column(JSON, nullable=True)
     error: Mapped[str] = mapped_column(Text, nullable=True)
+    # The user asked to stop this Job. Only an intention: the local runner's loop alone
+    # stops the child process and moves the Job to CANCELLED (plan 048).
+    cancel_requested_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -51,6 +55,7 @@ class Job(Base):
             "current_step": self.current_step,
             "error": self.error,
             "run_config": self.run_config,
+            "cancel_requested_at": self.cancel_requested_at.isoformat() if self.cancel_requested_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,

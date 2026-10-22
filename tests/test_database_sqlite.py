@@ -24,7 +24,7 @@ def test_fresh_sqlite_database_initializes_without_legacy_database(tmp_path, mon
         assert connection.execute(text("PRAGMA journal_mode")).scalar_one() == "wal"
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
         assert connection.execute(text("PRAGMA busy_timeout")).scalar_one() == 5000
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 7
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 8
     reflected = set(inspect(engine).get_table_names())
     assert set(Base.metadata.tables).issubset(reflected)
     assert {"segments_fts", "segments_fts_data", "segments_fts_idx"}.issubset(reflected)
@@ -69,7 +69,7 @@ def test_migration_2_adds_speaker_edited_to_an_existing_segments_table(tmp_path)
     with engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(segments)")}
         assert "speaker_edited" in columns
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 7
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 8
     engine.dispose()
 
 
@@ -87,7 +87,7 @@ def test_migration_3_adds_split_times_to_an_existing_meetings_table(tmp_path):
     with engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(meetings)")}
         assert "split_times" in columns
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 7
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 8
     engine.dispose()
 
 
@@ -234,7 +234,7 @@ def test_migration_5_leaves_a_database_without_audio_columns_alone(tmp_path):
     upgrade(engine)
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 7
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar_one() == 8
     engine.dispose()
 
 
@@ -265,4 +265,27 @@ def test_migration_7_adds_track_layout_and_guesses_nothing(tmp_path):
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(meetings)")}
         assert "track_layout" in columns
         assert connection.execute(text("SELECT track_layout FROM meetings")).scalar_one() is None
+    engine.dispose()
+
+
+def test_migration_8_adds_cancel_requested_at_to_existing_jobs(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'jobs.db'}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL)")
+        connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
+        connection.exec_driver_sql(
+            "CREATE TABLE jobs (id TEXT PRIMARY KEY, status VARCHAR(9) NOT NULL)"
+        )
+        connection.exec_driver_sql("INSERT INTO jobs VALUES ('old', 'PENDING')")
+
+    upgrade(engine)
+    upgrade(engine)
+
+    with engine.connect() as connection:
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(jobs)")}
+        assert "cancel_requested_at" in columns
+        assert connection.execute(text("SELECT cancel_requested_at FROM jobs")).scalar_one() is None
+        # CANCELLED fits the column the Enum created for the longest older name (COMPLETED).
+        connection.exec_driver_sql("UPDATE jobs SET status = 'CANCELLED'")
+        assert connection.execute(text("SELECT status FROM jobs")).scalar_one() == "CANCELLED"
     engine.dispose()

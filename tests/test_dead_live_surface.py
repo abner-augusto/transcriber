@@ -1,7 +1,8 @@
 """Status values are stored in the database and mirrored by the frontend types.
 
-They also lock out the removed live-recording and CANCELLED states: bringing one
-back is a deliberate change to these sets (see ticket 09).
+They also lock out the removed live-recording states: bringing one back is a
+deliberate change to these sets. CANCELLED came back on purpose with plan 048
+(ticket 09), which gave it a producer.
 """
 
 from pathlib import Path
@@ -13,7 +14,7 @@ from models.job import JobStatus
 ROOT = Path(__file__).resolve().parent.parent
 
 ALLOWED_MEETING_STATUSES = {"uploaded", "processing", "completed", "failed"}
-ALLOWED_JOB_STATUSES = {"pending", "running", "completed", "failed"}
+ALLOWED_JOB_STATUSES = {"pending", "running", "completed", "failed", "cancelled"}
 
 
 def test_meeting_status_enum_has_no_live_or_upload_placeholders():
@@ -21,9 +22,8 @@ def test_meeting_status_enum_has_no_live_or_upload_placeholders():
     assert not hasattr(MeetingStatus, "UPLOADING")
 
 
-def test_job_status_enum_has_no_cancelled():
+def test_job_status_enum_is_the_allowed_set():
     assert {status.value for status in JobStatus} == ALLOWED_JOB_STATUSES
-    assert not hasattr(JobStatus, "CANCELLED")
 
 
 def test_frontend_meeting_type_matches_backend_statuses():
