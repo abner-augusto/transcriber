@@ -28,6 +28,12 @@ def _meeting(directory, **columns):
     return SimpleNamespace(**values)
 
 
+def _drop(meeting):
+    """What a finished Job does: forget the paths in its transaction, delete once committed."""
+    audio_retention.forget_raw_audio(meeting)
+    audio_retention.delete_raw_audio(meeting.id, meeting.audio_filepath)
+
+
 def test_dual_track_sources_and_processed_tracks_go_and_the_mix_stays(monkeypatch, tmp_path):
     directory = _meeting_dir(monkeypatch, tmp_path)
     _write(
@@ -40,7 +46,7 @@ def test_dual_track_sources_and_processed_tracks_go_and_the_mix_stays(monkeypatc
         system_audio_filepath=str(directory / "system_source.wav"),
     )
 
-    audio_retention.drop_raw_audio(meeting)
+    _drop(meeting)
 
     assert sorted(p.name for p in directory.iterdir()) == ["audio.wav", "audio.wav.json"]
     assert meeting.mic_audio_filepath is None
@@ -52,7 +58,7 @@ def test_single_track_original_of_any_container_goes(monkeypatch, tmp_path):
     directory = _meeting_dir(monkeypatch, tmp_path)
     _write(directory, "original.mov", "original.mp4", "original.wav", "audio.wav")
 
-    audio_retention.drop_raw_audio(_meeting(directory))
+    _drop(_meeting(directory))
 
     assert [p.name for p in directory.iterdir()] == ["audio.wav"]
 
@@ -63,7 +69,7 @@ def test_a_stereo_original_shared_by_both_paths_goes_once(monkeypatch, tmp_path)
     shared = str(directory / "original.mov")
     meeting = _meeting(directory, mic_audio_filepath=shared, system_audio_filepath=shared)
 
-    audio_retention.drop_raw_audio(meeting)
+    _drop(meeting)
 
     assert [p.name for p in directory.iterdir()] == ["audio.wav"]
     assert (meeting.mic_audio_filepath, meeting.system_audio_filepath) == (None, None)
@@ -73,7 +79,7 @@ def test_never_deletes_the_file_the_meeting_plays(monkeypatch, tmp_path):
     directory = _meeting_dir(monkeypatch, tmp_path)
     _write(directory, "original.wav")
 
-    audio_retention.drop_raw_audio(_meeting(directory, audio_filepath=str(directory / "original.wav")))
+    _drop(_meeting(directory, audio_filepath=str(directory / "original.wav")))
 
     assert (directory / "original.wav").exists()
 
@@ -86,7 +92,7 @@ def test_nothing_outside_the_meeting_folder_is_touched(monkeypatch, tmp_path):
     _write(directory, "audio.wav", "notes.txt")
     meeting = _meeting(directory, mic_audio_filepath=str(outside / "mic_source.wav"))
 
-    audio_retention.drop_raw_audio(meeting)
+    _drop(meeting)
 
     assert (outside / "mic_source.wav").exists()
     assert (directory / "notes.txt").exists()
@@ -110,7 +116,7 @@ def test_missing_files_and_an_undeletable_file_do_not_stop_the_step(monkeypatch,
         system_audio_filepath=str(directory / "system_source.wav"),
     )
 
-    audio_retention.drop_raw_audio(meeting)
+    _drop(meeting)
 
     assert sorted(p.name for p in directory.iterdir()) == ["audio.wav", "mic_source.wav"]
     assert (meeting.mic_audio_filepath, meeting.system_audio_filepath) == (None, None)

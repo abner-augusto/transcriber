@@ -47,7 +47,7 @@ def test_full_processing_extracts_from_the_original_where_it_lives(monkeypatch, 
     meeting_id = _referenced(harness, tmp_path, mic, system)
     inputs = []
 
-    def extract(self, mic_path, system_path, mid, layout=None):
+    def extract(self, mic_path, system_path, mid, layout=None, defer_mix=False):
         inputs.append((mic_path, system_path))
         harness.write_dual_tracks(mid)
         return str(harness.storage / mid / "mixed.wav")
@@ -213,7 +213,7 @@ def test_full_processing_extracts_the_tracks_the_layout_names(monkeypatch, tmp_p
     meeting_id, original = _one_file_with_tracks(harness, tmp_path, OBS_LAYOUT)
     layouts = []
 
-    def extract(self, mic_path, system_path, mid, layout=None):
+    def extract(self, mic_path, system_path, mid, layout=None, defer_mix=False):
         layouts.append((mic_path, system_path, layout))
         harness.write_dual_tracks(mid)
         return str(harness.storage / mid / "mixed.wav")

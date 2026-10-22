@@ -257,7 +257,8 @@ class AudioService:
         ]
 
     def extract_dual_audio(
-        self, mic_path: str, system_path: str, meeting_id: str, layout: dict | None = None
+        self, mic_path: str, system_path: str, meeting_id: str, layout: dict | None = None,
+        *, defer_mix: bool = False,
     ) -> str:
         """Produce the three dual-track artifacts: processed mic, processed system, audio.
 
@@ -270,17 +271,28 @@ class AudioService:
         the two tracks ``layout`` names. Processed outputs deliberately use
         different names from uploaded source files so legacy rows pointing at
         ``mic.wav``/``system.wav`` cannot trigger an in-place FFmpeg conversion.
+
+        The mix is written to ``audio.part.wav`` and moved over ``audio.wav`` when ffmpeg
+        is done, so a Job stopped meanwhile never cuts in half the audio of a Meeting that
+        was already COMPLETED. With ``defer_mix`` the move waits for ``install_mix`` (a
+        Reprocessing does it once its results are committed) and the path returned is the
+        ``audio.part.wav`` to read in the meantime.
         """
         mic_out, system_out = self.extract_dual_tracks(mic_path, system_path, meeting_id, layout)
-        directory = get_meeting_path(meeting_id)
-        mixed_out = directory / "audio.wav"
-        part = directory / MIX_PART_OUTPUT
+        part = get_meeting_path(meeting_id) / MIX_PART_OUTPUT
         try:
             self._mix(mic_out, system_out, str(part))
-            os.replace(part, mixed_out)
-        finally:
+        except BaseException:
             part.unlink(missing_ok=True)
-        return str(mixed_out)
+            raise
+        return str(part) if defer_mix else self.install_mix(meeting_id)
+
+    @staticmethod
+    def install_mix(meeting_id: str) -> str:
+        """Move the finished ``audio.part.wav`` over ``audio.wav``; return the latter's path."""
+        directory = get_meeting_path(meeting_id)
+        os.replace(directory / MIX_PART_OUTPUT, directory / "audio.wav")
+        return str(directory / "audio.wav")
 
     def extract_dual_tracks(
         self, mic_path: str, system_path: str, meeting_id: str, layout: dict | None = None
