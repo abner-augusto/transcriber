@@ -186,7 +186,7 @@ Source: `.scratch/architecture-review/issues/09-cancel-job.md`.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 048 | Cancel a Job: `CANCELLED` returns, the runner loop alone stops the child, and a Reprocessing writes its results only at the end | P2 | L | 019, 045, 046 | IN PROGRESS (executor Claude, 2026-10-22) |
+| 048 | Cancel a Job: `CANCELLED` returns, the runner loop alone stops the child, and a Reprocessing writes its results only at the end | P2 | L | 019, 045, 046 | DONE (executor Claude, 2026-10-22; migration 8 adds a NULL column; the manual Cancel check on a real Preset is the user's) |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.

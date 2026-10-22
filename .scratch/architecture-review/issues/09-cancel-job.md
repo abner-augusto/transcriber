@@ -10,7 +10,7 @@ Reprocessing of a completed Meeting).
 
 **Blocked by:** plan 019.
 
-**Status:** ready-for-agent (design in `plans/048-cancel-a-job.md`, 2026-10-22)
+**Status:** done (plan 048, 2026-10-22; the manual Cancel check on a real Preset is still the user's)
 
 **Note (2026-09-25):** the speculative `LocalJobRunner.cancel` that plan 019
 added was removed during review: nothing called it, it raced the runner loop,
@@ -26,7 +26,7 @@ with the route.
 
 ## Design session, 2026-10-22
 
-**Status now:** ready-for-agent. Executable plan: `plans/048-cancel-a-job.md`.
+**Status now:** done. It was ready-for-agent after this session; executable plan: `plans/048-cancel-a-job.md`.
 
 Answers to the open questions:
 

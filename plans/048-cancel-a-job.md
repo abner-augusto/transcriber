@@ -100,8 +100,9 @@ open questions of ticket 09 and puts the whole transition in one place.
       PENDING or RUNNING Job. Asking twice returns the same Job.
     - the runner publishes `{"type": "cancelled"}` when the transition is done; the page
       refetches on it.
-    - `transcriber_cli cancel <Meeting>` posts, then waits (up to 60 s) until the Job leaves
-      PENDING/RUNNING and prints where the Meeting went back to. `--no-wait` returns at
+    - `transcriber_cli cancel <Meeting>` posts, then waits (`--timeout`, default 60 s;
+      exit 3 on timeout) until the Job leaves PENDING/RUNNING and prints where the Meeting
+      went back to (exit 1 if the Job ended some other way first). `--no-wait` returns at
       once. `_wait` (`process --wait`, `wait`) learns the `cancelled` status; today it would
       poll forever.
     - the Meeting page shows Cancel beside the progress while a Job runs, disabled with
@@ -114,13 +115,15 @@ open questions of ticket 09 and puts the whole transition in one place.
    "DATETIME")`; `fail()` leaves a CANCELLED Job alone; update
    `tests/test_dead_live_surface.py`.
 2. **Results at the end** (decisions 7, 8): tests first for the tasks (`tests/
-   test_cancel_safe_tasks.py`: a stage raising `KeyboardInterrupt`-like stop after the
-   Transcriber leaves the stored Words, Turns and Segments of a COMPLETED Meeting as they
-   were), then the move in `process_meeting.py`, `reprocess_task.py`, `meeting_store.py`,
-   `AudioService.extract_dual_audio`.
-3. **Intention and transition** (`jobs/__init__.py`): `request_cancel(job_id, ...)`,
-   `cancel_job(job_id, ...)` and `restore_after_cancel` (decisions 4, 5, 6); `JobRunner`
-   gains `cancel(job_id)`; `InlineJobRunner.cancel` records the intention too.
+   test_cancel_safe_tasks.py`: a `BaseException` raised at the Diarizer, the speaker
+   naming or the Segment write, which `running()` does not catch and so behaves like a
+   killed child, leaves the Words, Turns, Segments and audio path of a COMPLETED Meeting
+   as they were), then the move in `process_meeting.py`, `reprocess_task.py`,
+   `meeting_store.py`, `AudioService.extract_dual_audio` (`audio.part.wav`).
+3. **Intention and transition** (`jobs/__init__.py`): `cancel(db, meeting_id)` (the route's
+   front door), `request_cancel(job_id)`, `cancel_requested`, `cancelled_pending`,
+   `cancel_job(job_id)` with its restore rule (decisions 4, 5, 6); `JobRunner` gains
+   `cancel(job_id)`; `InlineJobRunner.cancel` records the intention too.
    `services/audio_retention.drop_cancelled_work` deletes the files.
 4. **Runner** (`jobs/runners.py`): `LocalJobRunner.cancel`, the loop checks (decision 3),
    `_stop_process` ends the tree (decision 9). Tests with real spawned children, in
@@ -151,6 +154,20 @@ open questions of ticket 09 and puts the whole transition in one place.
   `tests/test_speaker_carry.py` in a way that needs a change to what they assert: stop and
   report, because the edit-preservation contract (plan 028) is not this plan's to change.
 - The tree kill needs a dependency, or `taskkill` is absent on the target machine.
+
+## Outcome (2026-10-22)
+
+Done as designed. Notes the next reader needs:
+
+- The race at the natural end is covered at two levels: `cancel_job` is a no-op on a
+  finished Job (unit), and a runner whose loop read the request before the child completed
+  leaves the Job COMPLETED (real child, `tests/test_cancel_job.py`). The runner's own check
+  (`jobs.cancel_requested`) already ignores a Job that is no longer PENDING or RUNNING.
+- Not verified here: a real cancel on a real Preset and GPU, and the POSIX branch of the
+  process-tree kill (`os.setsid` + `killpg`); the Windows branch (`taskkill /T /F`) is
+  tested with a real grandchild process.
+- Legacy rows: a Meeting FAILED by an older run that left Words but no Segments goes to
+  UPLOADED, with those Words and Turns cleared, if its retry is cancelled.
 
 ## Out of scope
 
