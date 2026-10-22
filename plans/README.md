@@ -32,8 +32,8 @@ status here when finished.
 
 Source: `.scratch/architecture-review/README.md`. Plans 014–021 come from the
 design sessions held the same day on tickets 01–07. Tickets 08 (corrections on
-the Meeting page) and 09 (Cancel a Job) are still `needs-exploration`. Tickets
-10 and 11 were closed on 2026-09-25: plans 018/019 removed the broker and the
+the Meeting page) and 09 (Cancel a Job) were still `needs-exploration`; 09 became
+plan 048 on 2026-10-22. Tickets 10 and 11 were closed on 2026-09-25: plans 018/019 removed the broker and the
 Postgres lock they described.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
@@ -180,6 +180,14 @@ Decisions (user, 2026-10-10):
 - the five Meetings with stored Corrections get Reapply Vocabulary after
   041.
 
+### Cancel a Job (2026-10-22)
+
+Source: `.scratch/architecture-review/issues/09-cancel-job.md`.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 048 | Cancel a Job: `CANCELLED` returns, the runner loop alone stops the child, and a Reprocessing writes its results only at the end | P2 | L | 019, 045, 046 | IN PROGRESS (executor Claude, 2026-10-22) |
+
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`.
 
@@ -249,6 +257,8 @@ summarized in [`LOCAL-VERIFICATION.md`](LOCAL-VERIFICATION.md).
 - **Dead live/recording/finalizing UI and unused `UPLOADING` /
   `CANCELLED` enums (YAGNI):** executed directly (not a numbered plan).
   Locked by `tests/test_dead_live_surface.py`. Plan 011 must not restore them.
+  `CANCELLED` came back with a producer in plan 048 (2026-10-22), and the test was
+  changed on purpose.
 - MCP server as the agent interface (2026-10-09): deferred. A stdlib CLI
   (029/030) works with every agent, including a local one, and adds no
   long-running process. Revisit only if the CLI's text output proves too
