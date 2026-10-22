@@ -108,7 +108,8 @@ def test_every_job_persists_its_run_config_when_it_starts(monkeypatch, tmp_path,
         db.commit()
         meeting_id, job_id = meeting.id, job.id
 
-    with running(meeting_id, job_id) as (db, meeting, job):
+    with running(meeting_id, job_id) as current:
+        job = current.job
         assert job.run_config == config.model_dump(mode="json", exclude_none=True)
 
     with session_factory() as db:

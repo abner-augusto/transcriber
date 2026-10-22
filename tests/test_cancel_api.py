@@ -113,7 +113,7 @@ def _runner_finishes_the_cancel(db_session, client):
         status, content = forward(method, url, headers, body)
         if method == "POST" and url.endswith("/cancel"):
             import json
-            assert jobs.cancel_job(json.loads(content)["id"])
+            assert jobs.finish_cancel(json.loads(content)["id"])
         return status, content
 
     return Api(base_url="http://test", transport=transport)
@@ -124,7 +124,7 @@ def test_cli_cancel_waits_for_the_runner_and_says_where_the_meeting_went(db_sess
     _job(db_session, meeting, JobStatus.RUNNING)
     api = _runner_finishes_the_cancel(db_session, TestClient(app))
 
-    code, out, _ = run(["cancel", meeting.id, "--interval", "0"], api, capsys)
+    code, out, _ = run(["cancel", meeting.id, "--wait", "--interval", "0"], api, capsys)
 
     assert code == 0
     assert "cancelled" in out and "uploaded" in out
@@ -132,12 +132,12 @@ def test_cli_cancel_waits_for_the_runner_and_says_where_the_meeting_went(db_sess
     assert meeting.status == MeetingStatus.UPLOADED
 
 
-def test_cli_cancel_no_wait_returns_after_the_request(db_session, capsys):
+def test_cli_cancel_returns_after_the_request_unless_asked_to_wait(db_session, capsys):
     meeting = _meeting(db_session)
     job = _job(db_session, meeting, JobStatus.RUNNING)
     api = Api(base_url="http://test", transport=forward_to_app(TestClient(app)))
 
-    code, out, _ = run(["cancel", meeting.id, "--no-wait"], api, capsys)
+    code, out, _ = run(["cancel", meeting.id], api, capsys)
 
     assert code == 0
     assert job.id[:8] in out
@@ -150,7 +150,7 @@ def test_cli_cancel_times_out_with_exit_3_when_the_runner_does_not_answer(db_ses
     _job(db_session, meeting, JobStatus.RUNNING)
     api = Api(base_url="http://test", transport=forward_to_app(TestClient(app)))
 
-    code, _, err = run(["cancel", meeting.id, "--interval", "0", "--timeout", "0"], api, capsys)
+    code, _, err = run(["cancel", meeting.id, "--wait", "--interval", "0", "--timeout", "0"], api, capsys)
 
     assert code == 3
     assert "still running" in err

@@ -15,7 +15,7 @@ import time
 from typing import Protocol
 
 from models import Job
-from models.job import JobType
+from models.job import JobStatus, JobType
 
 
 class JobRunner(Protocol):
@@ -126,19 +126,31 @@ def _signal_tree(process, *, hard: bool) -> None:
     """Signal what the Job child started (an Engine runtime, whisper.cpp, ffmpeg) with it.
 
     Ending only the child would leave those running, holding the GPU while the next Job
-    starts. Windows: ``taskkill /T`` walks the tree below the child. Elsewhere the child
-    leads its own process group (``_execute_job_in_child``) and the group gets the signal.
+    starts. Windows: ``taskkill /T /F`` walks the tree below the child and kills it at once
+    (``hard`` changes nothing there). Elsewhere the child leads its own process group
+    (``_execute_job_in_child``) and the group gets the signal. The child must still be alive
+    (not yet reaped): its pid is then still the group's id, and cannot belong to anyone else.
+
+    Known limit: once the child itself is gone, nothing links it to its descendants any
+    more (``/T`` finds them through the parent), so those are not found.
     """
     try:
         if os.name == "nt":
-            subprocess.run(
+            result = subprocess.run(
                 ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                capture_output=True, check=False, timeout=15,
+                capture_output=True, text=True, check=False, timeout=15,
             )
+            if result.returncode != 0:
+                log.warning(
+                    "taskkill of the Job process tree %s exited with %s: %s",
+                    process.pid, result.returncode, (result.stderr or result.stdout).strip(),
+                )
         else:
             os.killpg(process.pid, signal.SIGKILL if hard else signal.SIGTERM)
-    except (OSError, subprocess.SubprocessError):
-        pass  # no such group yet, or already gone: the child itself is stopped below
+    except (OSError, subprocess.SubprocessError) as exc:
+        # No such group yet (the child has not called setsid), or already gone: the child
+        # itself is stopped by the caller.
+        log.warning("Could not signal the Job process tree %s: %s", process.pid, exc)
 
 
 def _stop_process(process) -> None:
@@ -149,10 +161,9 @@ def _stop_process(process) -> None:
     process.terminate()
     process.join(5)
     if process.is_alive():
+        _signal_tree(process, hard=True)
         process.kill()
         process.join()
-    if os.name != "nt":
-        _signal_tree(process, hard=True)  # descendants that ignored SIGTERM
 
 
 def _import_handler(path: str) -> Callable[[str, str], object]:
@@ -260,21 +271,20 @@ class LocalJobRunner:
                 log.exception("Local runner failed while executing Job %s", job_id)
                 self._fail_job(job_id, "Local runner failed unexpectedly.")
 
-    def _cancel_queued(self, exclude: str | None = None) -> None:
-        """Take the queued Jobs the user cancelled out of the queue. They have no process.
+    def _cancel_queued(self, active: str | None = None) -> bool:
+        """Take the queued Jobs the user cancelled out of the queue; say if ``active`` was too.
 
-        Never the Job being started (``exclude``): its child may be flipping it to RUNNING
-        right now, and the watch loop owns the end of that Job.
+        A queued Job has no process, so it is finished here. The ``active`` Job is only
+        reported, never finished: its child may be flipping it to RUNNING right now, and
+        the watch loop owns the end of that Job.
         """
-        from jobs import cancelled_pending
+        from jobs import cancel_requests
 
-        for job_id in cancelled_pending(exclude=exclude, session_factory=self.session_factory):
-            self._cancel_job(job_id)
-
-    def _cancel_requested(self, job_id: str) -> bool:
-        from jobs import cancel_requested
-
-        return cancel_requested(job_id, session_factory=self.session_factory)
+        requests = cancel_requests(session_factory=self.session_factory)
+        for job_id, status in requests.items():
+            if status == JobStatus.PENDING and job_id != active:
+                self._finish_cancel(job_id)
+        return active in requests
 
     def _oldest_pending(self):
         from models import Job
@@ -310,8 +320,8 @@ class LocalJobRunner:
         return max(self.minimum_timeout_seconds, duration_limit)
 
     def _run_job(self, job_id: str, meeting_id: str, job_type: JobType) -> None:
-        if self._cancel_requested(job_id):  # cancelled between being picked and being started
-            self._cancel_job(job_id)
+        if self._cancel_queued(active=job_id):  # cancelled between being picked and being started
+            self._finish_cancel(job_id)
             return
         messages = self._context.Queue()
         handler_path = self.handler_paths[job_type]
@@ -349,9 +359,7 @@ class LocalJobRunner:
                 if now >= next_cancel_check:
                     next_cancel_check = now + 0.5
                     try:
-                        cancelled = self._cancel_requested(job_id)
-                        if not cancelled:
-                            self._cancel_queued(exclude=job_id)
+                        cancelled = self._cancel_queued(active=job_id)
                     except Exception:
                         log.exception("Could not look for cancellation requests")
                     if cancelled:
@@ -380,7 +388,7 @@ class LocalJobRunner:
             process.join()
             self._drain_messages(messages)
             if cancelled:
-                self._cancel_job(job_id)
+                self._finish_cancel(job_id)
             elif not self._stop.is_set() and not timed_out and process.exitcode != 0:
                 self._fail_job(
                     job_id,
@@ -424,12 +432,12 @@ class LocalJobRunner:
         except Exception:
             log.exception("Could not relay progress for Meeting %s", meeting_id)
 
-    def _cancel_job(self, job_id: str) -> None:
+    def _finish_cancel(self, job_id: str) -> None:
         """Make the transition for a Job whose process, if it had one, is dead."""
-        from jobs import cancel_job
+        from jobs import finish_cancel
 
         try:
-            cancel_job(job_id, session_factory=self.session_factory, progress_bus=self.progress_bus)
+            finish_cancel(job_id, session_factory=self.session_factory, progress_bus=self.progress_bus)
         except Exception:
             log.exception("Could not cancel Job %s", job_id)
             try:
@@ -447,8 +455,10 @@ def _execute_job_in_child(handler_path: str, meeting_id: str, job_id: str, messa
     from jobs import configure
 
     if os.name != "nt":
-        # Lead a process group of its own, so that cancelling the Job can signal the Engine
-        # runtimes and ffmpeg it starts together with it (``_signal_tree``).
+        # A session of its own: the runner can signal this child and what it starts as one
+        # group (``_signal_tree``). Effects: Ctrl-C in the server's terminal no longer
+        # reaches the child (the server's shutdown stops it), and a hard kill of the server
+        # leaves the child and its tree running as orphans, as before.
         try:
             os.setsid()
         except OSError:

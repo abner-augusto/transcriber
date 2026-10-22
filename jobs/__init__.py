@@ -7,7 +7,7 @@ from typing import NamedTuple
 
 from sqlalchemy import update
 
-from models import Job, Meeting, MeetingStatus
+from models import Job, Meeting, MeetingStatus, Segment
 from models.job import JobStatus, JobType
 
 log = logging.getLogger(__name__)
@@ -86,6 +86,7 @@ def enqueue(db, meeting_id: str, kind: JobType) -> Job:
     if not meeting:
         raise MeetingNotFoundError("Meeting not found")
 
+    previous = (meeting.status, meeting.audio_filepath)  # what a cancel puts the Meeting back to
     result = db.execute(
         update(Meeting)
         .where(Meeting.id == meeting_id)
@@ -97,7 +98,10 @@ def enqueue(db, meeting_id: str, kind: JobType) -> Job:
         raise JobAlreadyRunning("Meeting is already being processed")
 
     meeting.status = MeetingStatus.PROCESSING
-    job = Job(meeting_id=meeting.id, job_type=kind, status=JobStatus.PENDING)
+    job = Job(
+        meeting_id=meeting.id, job_type=kind, status=JobStatus.PENDING,
+        previous_meeting_status=previous[0].value, previous_audio_filepath=previous[1],
+    )
     db.add(job)
     db.commit()
 
@@ -151,45 +155,33 @@ def request_cancel(job_id: str, *, session_factory=None) -> bool:
         db.close()
 
 
-def cancel_requested(job_id: str, *, session_factory=None) -> bool:
-    """Whether the user asked to stop this Job and it has not finished."""
+def cancel_requests(*, session_factory=None) -> dict[str, JobStatus]:
+    """The unfinished Jobs the user asked to stop, oldest first: {job id: PENDING or RUNNING}."""
     db = sessions(session_factory)()
     try:
-        job = db.get(Job, job_id)
-        return (
-            job is not None
-            and job.cancel_requested_at is not None
-            and job.status in (JobStatus.PENDING, JobStatus.RUNNING)
+        rows = (
+            db.query(Job.id, Job.status)
+            .filter(Job.status.in_((JobStatus.PENDING, JobStatus.RUNNING)), Job.cancel_requested_at.isnot(None))
+            .order_by(Job.created_at.asc())
         )
+        return {job_id: status for job_id, status in rows}
     finally:
         db.close()
 
 
-def cancelled_pending(*, exclude: str | None = None, session_factory=None) -> list[str]:
-    """Ids of queued PENDING Jobs whose cancellation was requested (never ``exclude``)."""
-    db = sessions(session_factory)()
-    try:
-        query = db.query(Job.id).filter(
-            Job.status == JobStatus.PENDING, Job.cancel_requested_at.isnot(None)
-        )
-        if exclude is not None:
-            query = query.filter(Job.id != exclude)
-        return [row[0] for row in query.order_by(Job.created_at.asc())]
-    finally:
-        db.close()
-
-
-def cancel_job(job_id: str, *, session_factory=None, progress_bus=None) -> bool:
-    """Move a PENDING or RUNNING Job to CANCELLED and its Meeting back to where it was.
+def finish_cancel(job_id: str, *, session_factory=None, progress_bus=None) -> bool:
+    """Move a PENDING or RUNNING Job to CANCELLED and put its Meeting back where it was.
 
     Called by the runner's loop once the Job's process (if any) is dead, never while it
     can still write. Returns False, changing nothing, when the Job is missing or already
-    finished: a Job that completed first stays COMPLETED.
+    finished: a Job whose final transaction was committed first stays COMPLETED.
 
-    The Meeting goes back to COMPLETED when it still holds a transcript (Words and
-    Segments), otherwise to UPLOADED. A Job that had started also loses what it made
-    (plan 048): the work files, and on a Meeting going back to UPLOADED the partial Words,
-    Turns, Segments and Speakers an older run left. The original recording is never touched.
+    The Meeting goes back to the state the Job recorded when it claimed it (``enqueue``):
+    COMPLETED stays as it is, untouched; UPLOADED (or FAILED) gets its audio path back. A
+    Job that had started also loses the work files it made, and on a Meeting going back to
+    UPLOADED the partial Words, Turns, Segments and Speakers. The original recording is
+    never touched. A Job made before plan 048 recorded nothing, so its Meeting is put back
+    by what it holds (``_was_transcribed``): the fallback.
     """
     db = sessions(session_factory)()
     try:
@@ -202,13 +194,14 @@ def cancel_job(job_id: str, *, session_factory=None, progress_bus=None) -> bool:
         job.completed_at = datetime.utcnow()
         meeting_id = job.meeting_id
         meeting = db.get(Meeting, meeting_id)
-        transcribed = False
+        keep_audio = False
         if meeting is not None and meeting.status == MeetingStatus.PROCESSING:
-            transcribed = _restore_meeting(db, meeting, discard_partial=started)
-        db.commit()
+            keep_audio = _put_back(db, job, meeting, started=started)
         if started and meeting is not None:
+            # Before the commit, so that a CANCELLED Job already has its work files gone.
             from services.audio_retention import drop_cancelled_work
-            drop_cancelled_work(meeting, keep_audio=transcribed)
+            drop_cancelled_work(meeting, keep_audio=keep_audio)
+        db.commit()
     finally:
         db.close()
     try:
@@ -218,23 +211,30 @@ def cancel_job(job_id: str, *, session_factory=None, progress_bus=None) -> bool:
     return True
 
 
-def _restore_meeting(db, meeting: Meeting, *, discard_partial: bool) -> bool:
-    """Put a PROCESSING Meeting back to COMPLETED or UPLOADED; say whether it is transcribed."""
-    from models import Segment, Speaker
+def _was_transcribed(db, job: Job, meeting: Meeting) -> bool:
+    """Whether the Meeting was COMPLETED when the Job claimed it: what its Reprocessing keeps."""
+    if job.previous_meeting_status is not None:
+        return job.previous_meeting_status == MeetingStatus.COMPLETED.value
+    # Fallback for a Job that recorded nothing: infer it from the data.
     from transcript.words import words_from_stored
 
-    transcribed = bool(words_from_stored(meeting.raw_transcription)) and (
+    return bool(words_from_stored(meeting.raw_transcription)) and (
         db.query(Segment.id).filter(Segment.meeting_id == meeting.id).first() is not None
     )
-    if transcribed:
+
+
+def _put_back(db, job: Job, meeting: Meeting, *, started: bool) -> bool:
+    """Set the Meeting back to what it was; say whether its audio.wav is still its audio."""
+    if _was_transcribed(db, job, meeting):
         meeting.status = MeetingStatus.COMPLETED
         return True
-    meeting.status = MeetingStatus.UPLOADED
-    if discard_partial:
-        db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
-        db.query(Speaker).filter(Speaker.meeting_id == meeting.id).delete()
-        meeting.raw_transcription = None
-        meeting.raw_diarization = None
+    failed = job.previous_meeting_status == MeetingStatus.FAILED.value
+    meeting.status = MeetingStatus.FAILED if failed else MeetingStatus.UPLOADED
+    if job.previous_meeting_status is not None:
+        meeting.audio_filepath = job.previous_audio_filepath
+    if started and not failed:
+        from meeting_store import discard_transcript
+        discard_transcript(db, meeting)
     return False
 
 
@@ -244,14 +244,33 @@ class RunningJob(NamedTuple):
     db: object
     meeting: Meeting
     job: Job
+    after_commit_actions: list
 
     @property
     def run_config(self):
         from run_config import RunConfig
         return RunConfig.model_validate(self.job.run_config)
 
+    @property
+    def reprocessing(self) -> bool:
+        """Whether the Meeting was COMPLETED when the Job claimed it.
+
+        A Reprocessing keeps the previous transcript whole until its one final
+        transaction, so cancelling it (plan 048) leaves the Meeting as it was. A first
+        transcription saves each stage as it finishes, so a late failure still leaves
+        Words and Turns to Re-diarize or Re-identify from.
+        """
+        return _was_transcribed(self.db, self.job, self.meeting)
+
     def progress(self, percent: float, step: str) -> None:
         _progress(self.db, self.job, self.meeting, percent, step)
+
+    def after_commit(self, action) -> None:
+        """Run ``action`` once the Job's final transaction is committed (file clean-up).
+
+        A failing action is logged: it never fails a Job that already completed.
+        """
+        self.after_commit_actions.append(action)
 
 
 @contextmanager
@@ -271,7 +290,11 @@ def running(meeting_id: str, job_id: str):
         meeting.status = MeetingStatus.PROCESSING
         db.commit()
 
-        yield RunningJob(db, meeting, job)
+        after_commit_actions: list = []
+        # The body leaves its results uncommitted: they are saved by this one commit, with
+        # the Job's own COMPLETED, so a cancel (which kills the child) finds either all of
+        # them or none (plan 048).
+        yield RunningJob(db, meeting, job, after_commit_actions)
 
         meeting.status = MeetingStatus.COMPLETED
         job.status = JobStatus.COMPLETED
@@ -279,6 +302,11 @@ def running(meeting_id: str, job_id: str):
         job.current_step = "Done!"
         job.completed_at = datetime.utcnow()
         db.commit()
+        for action in after_commit_actions:
+            try:
+                action()
+            except Exception:
+                log.exception("A step after the commit of Job %s failed", job_id)
         _progress(db, job, meeting, 100, "Done!")
     except Exception as exc:
         db.rollback()
