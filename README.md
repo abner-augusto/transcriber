@@ -116,7 +116,7 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
    - **Dual-track / OBS**: provide a microphone track and an optional system-audio track
 3. Enter a title and click **Start**
 4. For uploaded files, click **Start transcription** on the meeting page. Before that, the **Tracks in this file** section lists what the app found (with each track's name and level) and lets you choose which track is the microphone and which the system audio, or read the file as one track
-5. Watch real-time progress as the pipeline runs. **Cancel** (next to the title) stops the running or queued Job: a Meeting that was never transcribed goes back to *uploaded* (its upload is kept; the partial work and the working files are deleted), and a Meeting that was being reprocessed goes back to *completed* with the previous transcript untouched. It never touches the original recording
+5. Watch real-time progress as the pipeline runs. **Cancel** (next to the title) stops the running or queued Job: a Meeting that was never transcribed goes back to *uploaded* (its upload is kept; the partial work and the working files are deleted), and a Meeting that was being reprocessed goes back to *completed* with the previous transcript, audio and duration untouched (a Reprocessing saves nothing until its one final transaction). A Job that finishes before the cancel lands stays completed. It never touches the original recording
 6. Browse the transcript with synced audio playback
 7. Click speaker names to rename, click segments to edit text
 8. Settle **Review Notes** in the sidebar's Review tab: answer the agent's questions, accept or dismiss its suggestions, or leave a note on a segment (hover → Note). Segments with a note are tinted and the audio bar shows one clickable mark per note, amber when it waits for you and blue when it waits for the agent. Below the notes, **Vocabulary Corrections** lists every Word the Vocabulary changed in the Meeting (cyan underline in the transcript until confirmed), with Confirm and Undo per row
@@ -131,7 +131,7 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 ```
 uv run python -m transcriber_cli list
 uv run python -m transcriber_cli upload reuniao.m4a --title "Obra 12/10" --participants "Ana, Bruno" --process --wait
-uv run python -m transcriber_cli cancel <id>
+uv run python -m transcriber_cli cancel <id> --wait
 uv run python -m transcriber_cli show <id> --from 10:00 --to 15:00
 uv run python -m transcriber_cli show <id> --grep "Lourdes"
 uv run python -m transcriber_cli speakers <id> --unnamed
@@ -261,7 +261,7 @@ transcriber/
 | `PUT` | `/api/meetings/{id}/sources` | Point the Meeting at where its original recording(s) live now: `{source, system_source?, adopt?}`. 409 when the file is not the same recording (size and hash); 400 for a relative path, a missing file, or a Meeting without a reference unless `adopt` is true |
 | `POST` | `/api/meetings/{id}/reidentify` | Re-identify speakers |
 | `POST` | `/api/meetings/{id}/reapply-vocabulary` | Reapply vocabulary corrections |
-| `POST` | `/api/meetings/{id}/cancel` | Ask for the Meeting's `pending` or `running` Job to stop. Answers at once with the Job and its `cancel_requested_at`; the runner then stops the Job's processes, sets the Job `cancelled`, puts the Meeting back to `uploaded` (never transcribed) or `completed` (a Reprocessing), and sends `{"type": "cancelled"}` on the socket. 409 when the Meeting has no such Job |
+| `POST` | `/api/meetings/{id}/cancel` | Ask for the Meeting's `pending` or `running` Job to stop. Answers at once with the Job and its `cancel_requested_at`; the runner then stops the Job's processes, sets the Job `cancelled`, puts the Meeting back to the state it had when the Job claimed it (`uploaded`, `failed` or `completed`), and sends `{"type": "cancelled"}` on the socket. A Job that already committed its results stays `completed`. 409 when the Meeting has no such Job |
 | `GET` | `/api/search?q=...` | Search transcript segments |
 | `GET` | `/api/meetings/{id}/analytics` | Get meeting analytics |
 | `GET` | `/api/model-settings/presets` | List model presets |

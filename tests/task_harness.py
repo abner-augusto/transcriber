@@ -71,9 +71,14 @@ class TaskHarness:
         (directory / DUAL_MIC_OUTPUT).write_bytes(b"")
         (directory / DUAL_SYSTEM_OUTPUT).write_bytes(b"")
 
-    def job(self, meeting_id: str, job_type: JobType) -> str:
+    def job(self, meeting_id: str, job_type: JobType, previous: str | None = None) -> str:
+        """A PENDING Job. ``previous`` is the Meeting status `jobs.enqueue` would have recorded;
+        left out, the Job is like one made before plan 048 and the data decides."""
         with self.session_factory() as db:
-            job = Job(meeting_id=meeting_id, job_type=job_type, status=JobStatus.PENDING)
+            job = Job(
+                meeting_id=meeting_id, job_type=job_type, status=JobStatus.PENDING,
+                previous_meeting_status=previous,
+            )
             db.add(job)
             db.commit()
             return job.id
@@ -149,8 +154,9 @@ def install(monkeypatch, tmp_path, *, transcriber, diarization: DiarizationResul
     monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid, track=None: fp)
     monkeypatch.setattr(
         "services.audio_service.AudioService.extract_dual_audio",
-        lambda self, mic, system, mid, layout=None: str(storage / mid / "mixed.wav"),
+        lambda self, mic, system, mid, layout=None, defer_mix=False: str(storage / mid / "mixed.wav"),
     )
+    monkeypatch.setattr("services.audio_service.AudioService.install_mix", staticmethod(lambda mid: None))
     monkeypatch.setattr("services.audio_service.AudioService.get_duration", lambda self, fp: 4.0)
     monkeypatch.setattr("services.vad_service.VadService.compute_vad_segments", compute_vad_segments)
     return harness

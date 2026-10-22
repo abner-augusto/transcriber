@@ -138,9 +138,10 @@ _Avoid_: task (that names the code a Job runs, not the Job itself)
 
 **Cancel**:
 The user's request to stop a pending or running Job. The Job ends as cancelled and the Meeting
-goes back to how it was before the Job: uploaded when it was never transcribed (the Job's partial
-work and working files are deleted), completed with the previous transcript untouched when the Job
-was a Reprocessing. The original recording is never touched.
+goes back to the state it had when the Job claimed it: uploaded when it was never transcribed (the
+Job's partial work and working files are deleted), completed with the previous transcript untouched
+when the Job was a Reprocessing, failed when the Job was a retry. A Job that already saved its
+results is completed, not cancelled. The original recording is never touched.
 _Avoid_: abort, kill (that is what the runner does to the process, not what the user asks)
 
 **Reprocessing**:

@@ -45,3 +45,23 @@ runner stops the child and makes the transition. Finding: Full reprocess and Re-
 wrote the new Words and Turns many minutes before replacing the Segments, so the plan also
 makes them write their results only at the end. Surface: `POST /api/meetings/{id}/cancel`,
 `transcriber_cli cancel <Meeting>` (ADR-0010) and a Cancel button on the Meeting page.
+
+### Decisions after code review, 2026-10-22
+
+- **The Meeting goes back to the state the Job recorded**, not to what its data suggests:
+  `jobs.enqueue` stores the Meeting's status and audio path on the Job. COMPLETED stays
+  COMPLETED untouched (so a Reprocessing of a silent Meeting, or of one whose transcript the
+  user emptied, no longer turns UPLOADED and loses data); UPLOADED goes back to the upload and
+  discards the partial; FAILED (a retry) goes back to FAILED. The Words-and-Segments rule
+  remains only as the fallback for a Job queued before the upgrade.
+- **Too late once the final transaction is committed.** A Reprocessing and a first
+  transcription end in one commit with the results, the Meeting's COMPLETED and the Job's
+  COMPLETED; if it landed first, the Job stays COMPLETED and the cancel is ignored. File
+  clean-up runs after that commit.
+- **Only a Reprocessing writes nothing until the end.** A first transcription saves each
+  stage as it did, so a late failure still allows Re-diarize, Re-identify and Reapply
+  vocabulary; its cancel discards those stages.
+- The dual-track mix of a Reprocessing stays in `audio.part.wav` until that commit; the
+  Reprocessing does not touch `duration` either.
+- `transcriber_cli cancel` returns after the request and waits only with `--wait`, like
+  `process` and `reprocess`.

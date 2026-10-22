@@ -21,16 +21,24 @@ DROPPED_NAMES = (DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT)
 PARTIAL_NAMES = (MIX_PART_OUTPUT,)
 
 
-def drop_raw_audio(meeting) -> None:
-    """Delete the Meeting's sources and processed tracks, and forget the source paths.
+def forget_raw_audio(meeting) -> None:
+    """Forget the source paths of a Meeting whose sources are about to be deleted.
 
-    ``meeting`` needs ``id``, ``audio_filepath``, ``mic_audio_filepath`` and
-    ``system_audio_filepath``. Only files named above inside the Meeting's own folder are
-    deleted, never the file ``audio_filepath`` names. A file that cannot be deleted is
-    logged and left; the step never fails the Job that called it.
+    Part of the Job's final transaction; ``delete_raw_audio`` follows once it is committed.
     """
-    directory = get_meeting_path(meeting.id)
-    played = _resolved(meeting.audio_filepath)
+    meeting.mic_audio_filepath = None
+    meeting.system_audio_filepath = None
+
+
+def delete_raw_audio(meeting_id: str, audio_filepath: str | None) -> None:
+    """Delete a Meeting's sources and processed tracks, after its Job committed.
+
+    Only files named above inside the Meeting's own folder are deleted, never the file
+    ``audio_filepath`` names. A file that cannot be deleted is logged and left; the step
+    never fails the Job that called it.
+    """
+    directory = get_meeting_path(meeting_id)
+    played = _resolved(audio_filepath)
     doomed = [
         path for path in directory.iterdir()
         if path.is_file()
@@ -42,8 +50,6 @@ def drop_raw_audio(meeting) -> None:
             path.unlink()
         except OSError as exc:
             log.warning("Could not delete %s: %s", path, exc)
-    meeting.mic_audio_filepath = None
-    meeting.system_audio_filepath = None
 
 
 def drop_cancelled_work(meeting, *, keep_audio: bool) -> None:

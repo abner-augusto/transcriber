@@ -240,6 +240,26 @@ def test_extract_dual_audio_replaces_audio_wav_only_when_the_mix_is_whole(tmp_pa
     assert not (meeting_dir / "audio.part.wav").exists()
 
 
+def test_a_deferred_mix_leaves_audio_wav_alone_until_it_is_installed(tmp_path):
+    """A Reprocessing keeps the audio the page plays until its results are committed."""
+    meeting_dir = tmp_path / "m1"
+    meeting_dir.mkdir()
+    (meeting_dir / "audio.wav").write_bytes(b"old mix")
+
+    with patch("services.audio_service.get_meeting_path", return_value=meeting_dir):
+        with patch("subprocess.run", side_effect=_mixing_run(meeting_dir)):
+            out = AudioService().extract_dual_audio("mic.wav", "system.wav", "m1", defer_mix=True)
+
+        assert out == str(meeting_dir / "audio.part.wav")
+        assert (meeting_dir / "audio.wav").read_bytes() == b"old mix"
+        assert (meeting_dir / "audio.part.wav").read_bytes() == b"new mix"
+
+        assert AudioService.install_mix("m1") == str(meeting_dir / "audio.wav")
+
+    assert (meeting_dir / "audio.wav").read_bytes() == b"new mix"
+    assert not (meeting_dir / "audio.part.wav").exists()
+
+
 def test_extract_dual_audio_never_overwrites_source_artifacts(tmp_path):
     """Legacy dual-track rows may point at mic.wav/system.wav source files."""
     meeting_dir = tmp_path / "m1"

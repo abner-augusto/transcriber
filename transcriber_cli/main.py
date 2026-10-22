@@ -118,7 +118,7 @@ def cmd_cancel(api, args):
     meeting = resolve_meeting(api, args.meeting)
     job = api.post(f"/api/meetings/{meeting['id']}/cancel")
     handle = f"{job['job_type']} job {job['id'][:8]} of Meeting {meeting['id'][:8]}"
-    if args.no_wait:
+    if not args.wait:
         emit(args, job, [f"cancel requested for {handle}; the Job is still {job['status']}"])
         return 0
     started = time.monotonic()
@@ -666,13 +666,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--wait", action="store_true", help="block until the Job ends")
 
     p = command("cancel", cmd_cancel,
-                "stop the Meeting's running or queued Job; the Meeting goes back to uploaded "
-                "(never transcribed) or completed (a Reprocessing). Waits for the app to confirm "
-                "(exit 0 cancelled, 1 the Job ended first, 3 timeout)")
-    p.add_argument("--no-wait", action="store_true", help="return once the request is recorded")
+                "ask the app to stop the Meeting's running or queued Job; the Meeting goes back to "
+                "how it was (uploaded, failed or completed)")
+    p.add_argument("--wait", action="store_true",
+                   help="block until the app confirms (exit 0 cancelled, 1 the Job ended first, 3 timeout)")
     p.add_argument("--timeout", type=float, default=60.0, metavar="SECONDS",
-                   help="give up waiting after this long (default 60)")
-    p.add_argument("--interval", type=float, default=1.0, metavar="SECONDS")
+                   help="with --wait, give up after this long (default 60)")
+    p.add_argument("--interval", type=float, default=1.0, metavar="SECONDS", help="with --wait")
 
     p = command("wait", cmd_wait,
                 "block until the newest Job ends (exit 0 completed, 1 failed or cancelled, 3 timeout)")

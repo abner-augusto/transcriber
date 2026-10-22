@@ -269,6 +269,7 @@ def test_replacing_segments_gives_a_newly_attributed_label_a_speaker(monkeypatch
             {"start": 1.2, "end": 1.8, "text": "pessoal", "speaker": "SPEAKER_02"},
         ]
         replace_segments(db, db.get(Meeting, meeting_id), aligned)
+        db.commit()
 
     meeting = harness.load(meeting_id)
     names = {s.label: s.display_name for s in meeting.speakers}

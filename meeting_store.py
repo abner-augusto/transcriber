@@ -69,6 +69,19 @@ def _user_edits(db, meeting) -> _UserEdits:
     return edits
 
 
+def _delete_rows(db, meeting) -> None:
+    db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
+    db.query(Speaker).filter(Speaker.meeting_id == meeting.id).delete()
+    db.flush()
+
+
+def discard_transcript(db, meeting) -> None:
+    """Back to never transcribed: no Segments, Speakers, Words or Turns. The caller commits."""
+    _delete_rows(db, meeting)
+    meeting.raw_transcription = None
+    meeting.raw_diarization = None
+
+
 def rebuild_speakers_and_segments(
     db, meeting, aligned, speaker_info, speaker_id_service,
     *, keep: Literal["labels", "overlap"],
@@ -79,14 +92,14 @@ def rebuild_speakers_and_segments(
     ones as before: "labels" (Re-identify) keeps manual Speaker names by label and
     re-applies Segment reassignments; "overlap" (new Turns) carries a manual name to
     the new label that overlaps it most and drops reassignments.
+
+    Nothing is committed: the delete and the rows written below are one transaction the
+    caller commits, so a Job stopped in between (plan 048) never leaves a Meeting with no
+    Segments.
     """
     edited = _edited_segments(db, meeting)
     prior = _user_edits(db, meeting)
-    db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
-    db.query(Speaker).filter(Speaker.meeting_id == meeting.id).delete()
-    # One transaction with the rows written below (committed in _finish_rebuild): a Job
-    # stopped between the delete and the insert must not leave a Meeting with no Segments.
-    db.flush()
+    _delete_rows(db, meeting)
 
     speakers = {}
     for i, (label, info) in enumerate(sorted(speaker_info.items())):
@@ -154,7 +167,9 @@ def _carry_names_by_overlap(speakers: dict[str, Speaker], aligned, prior: _UserE
 
 
 def replace_segments(db, meeting, aligned):
-    """Replace the Meeting's Segments, keeping its Speakers, edited text and reassignments."""
+    """Replace the Meeting's Segments, keeping its Speakers, edited text and reassignments.
+
+    Nothing is committed: the caller commits (a Job's ``running`` does)."""
     edited = _edited_segments(db, meeting)
     prior = _user_edits(db, meeting)
     speakers = {
@@ -267,4 +282,4 @@ def _finish_rebuild(db, speakers: dict[str, Speaker], written, reassigned) -> No
         if speaker.segment_count == 0 and not label.startswith(MANUAL_PREFIX):
             db.delete(speaker)
             del speakers[label]
-    db.commit()
+    db.flush()

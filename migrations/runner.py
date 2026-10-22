@@ -7,14 +7,10 @@ from sqlalchemy import text
 
 
 def _add_column(table: str, column: str, ddl: str):
-    """An idempotent ADD COLUMN: SQLite has no IF NOT EXISTS for columns.
-
-    A database without the table is left alone (an old fixture; a fresh database gets the
-    column from the model metadata).
-    """
+    """An idempotent ADD COLUMN: SQLite has no IF NOT EXISTS for columns."""
     def apply(connection):
         existing = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")}
-        if existing and column not in existing:
+        if column not in existing:
             connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
     return apply
 
@@ -177,8 +173,12 @@ _MIGRATIONS = (
     ),
     (
         8,
-        "job cancel_requested_at",
-        (_add_column("jobs", "cancel_requested_at", "DATETIME"),),
+        "job cancel_requested_at and the Meeting state to go back to",
+        (
+            _add_column("jobs", "cancel_requested_at", "DATETIME"),
+            _add_column("jobs", "previous_meeting_status", "VARCHAR"),
+            _add_column("jobs", "previous_audio_filepath", "VARCHAR"),
+        ),
     ),
 )
 

@@ -37,12 +37,21 @@ def _folder(meeting_id: str):
 
 
 def _midway_body(meeting_id: str, job_id: str) -> None:
-    """A task between its stages: work files on disk, then waiting."""
+    """A task between its stages: work files on disk, then waiting.
+
+    A first transcription has saved the stages it finished (the audio, the Words, the
+    Turns); a Reprocessing has saved nothing and keeps the audio.wav it plays.
+    """
     with running(meeting_id, job_id) as current:
         directory = config.get_meeting_path(meeting_id)
         for name in ("audio.wav", "mic_processed.wav", "system_processed.wav", "audio.part.wav"):
-            if not (directory / name).exists():  # a rerun of a processed Meeting keeps its audio.wav
+            if not (directory / name).exists():
                 (directory / name).write_bytes(b"partial")
+        if not current.reprocessing:
+            current.meeting.audio_filepath = str(directory / "audio.wav")
+            current.meeting.raw_transcription = WORDS
+            current.meeting.raw_diarization = TURNS
+            current.db.commit()
         current.progress(40, "Transcribing")
         (directory / "midway.flag").write_text("here")
         time.sleep(60)
@@ -62,7 +71,7 @@ def _done_then_lingering_body(meeting_id: str, job_id: str) -> None:
     runner's loop looks at the request: the race at the natural end.
     """
     with running(meeting_id, job_id):
-        while not jobs.cancel_requested(job_id):
+        while job_id not in jobs.cancel_requests():
             time.sleep(0.02)
     (config.get_meeting_path(meeting_id) / "done.flag").write_text("done")
     time.sleep(60)
@@ -153,11 +162,22 @@ def _add_meeting(sessions, *, transcribed: bool, dual_track: bool = False, parti
         return meeting.id
 
 
-def _add_job(sessions, meeting_id, status=JobStatus.PENDING, created_at=None) -> str:
+def _add_job(sessions, meeting_id, status=JobStatus.PENDING, created_at=None, previous="auto") -> str:
+    """A Job as `jobs.enqueue` makes it: it records what the Meeting was.
+
+    ``previous`` is "uploaded", "completed" or "failed"; "auto" says "completed" for a
+    Meeting that holds Segments and "uploaded" otherwise; None records nothing, like a Job
+    made before plan 048.
+    """
     with sessions() as db:
+        meeting = db.get(Meeting, meeting_id)
+        if previous == "auto":
+            has_segments = db.query(Segment).filter_by(meeting_id=meeting_id).first() is not None
+            previous = "completed" if has_segments else "uploaded"
         job = Job(
             meeting_id=meeting_id, job_type=JobType.PROCESS_MEETING, status=status,
-            created_at=created_at or datetime.utcnow(),
+            created_at=created_at or datetime.utcnow(), previous_meeting_status=previous,
+            previous_audio_filepath=meeting.audio_filepath if previous else None,
         )
         db.add(job)
         db.commit()
@@ -254,7 +274,7 @@ def test_runner_cancel_writes_the_intention_and_nothing_else(runner_env):
         assert job.status == JobStatus.PENDING
 
 
-def test_cancel_job_changes_nothing_once_the_job_finished(runner_env):
+def test_finish_cancel_changes_nothing_once_the_job_finished(runner_env):
     sessions, _runner, events = runner_env
     meeting_id = _add_meeting(sessions, transcribed=True)
     with sessions() as db:
@@ -262,7 +282,7 @@ def test_cancel_job_changes_nothing_once_the_job_finished(runner_env):
         db.commit()
     for status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
         job_id = _add_job(sessions, meeting_id, status)
-        assert jobs.cancel_job(job_id) is False
+        assert jobs.finish_cancel(job_id) is False
         with sessions() as db:
             assert db.get(Job, job_id).status == status
     assert events == []
@@ -326,10 +346,13 @@ def test_a_queued_job_is_cancelled_while_another_runs(runner_env):
 
 def test_cancelling_a_first_transcription_returns_the_meeting_to_uploaded(runner_env):
     sessions, runner, events = runner_env
-    meeting_id = _add_meeting(sessions, transcribed=False, partial_words=True)
+    meeting_id = _add_meeting(sessions, transcribed=False)
     job_id = _add_job(sessions, meeting_id)
     runner.start()
     _wait_for_flag(meeting_id)
+    # The first transcription has saved its stages: the audio, the Words and the Turns.
+    saved = _meeting(sessions, meeting_id)
+    assert saved["audio"].endswith("audio.wav") and saved["words"] and saved["turns"]
 
     runner.cancel(job_id)
     job = _wait_for_status(sessions, job_id, JobStatus.CANCELLED)
@@ -378,6 +401,72 @@ def test_cancelling_a_reprocessing_returns_the_meeting_to_completed_with_its_tra
     assert (_folder(meeting_id) / "audio.wav").read_bytes() == b"the played audio"
 
 
+def test_cancelling_a_reprocessing_of_an_empty_transcript_still_returns_to_completed(runner_env):
+    """A Meeting of silent audio, or one whose transcript the user emptied, is COMPLETED too:
+    the state the Job recorded decides, not whether Words and Segments are there."""
+    sessions, runner, _events = runner_env
+    meeting_id = _add_meeting(sessions, transcribed=False)
+    with sessions() as db:
+        meeting = db.get(Meeting, meeting_id)
+        (_folder(meeting_id) / "audio.wav").write_bytes(b"the played audio")
+        meeting.audio_filepath = str(_folder(meeting_id) / "audio.wav")
+        meeting.raw_transcription = {"words": []}
+        meeting.raw_diarization = TURNS
+        db.commit()
+    job_id = _add_job(sessions, meeting_id, previous="completed")
+    runner.start()
+    _wait_for_flag(meeting_id)
+
+    runner.cancel(job_id)
+    _wait_for_status(sessions, job_id, JobStatus.CANCELLED)
+
+    meeting = _meeting(sessions, meeting_id)
+    assert meeting["status"] == MeetingStatus.COMPLETED
+    assert (meeting["words"], meeting["turns"]) == ({"words": []}, TURNS)
+    assert (_folder(meeting_id) / "audio.wav").read_bytes() == b"the played audio"
+
+
+def test_cancelling_a_retry_of_a_failed_meeting_returns_it_to_failed_with_what_it_had(runner_env):
+    sessions, runner, _events = runner_env
+    meeting_id = _add_meeting(sessions, transcribed=False)
+    with sessions() as db:  # an earlier run failed after the Transcriber and the Diarizer
+        meeting = db.get(Meeting, meeting_id)
+        (_folder(meeting_id) / "audio.wav").write_bytes(b"the earlier run's audio")
+        meeting.audio_filepath = str(_folder(meeting_id) / "audio.wav")
+        meeting.raw_transcription = WORDS
+        meeting.raw_diarization = TURNS
+        db.commit()
+    job_id = _add_job(sessions, meeting_id, previous="failed")
+    runner.start()
+    _wait_for_flag(meeting_id)
+
+    runner.cancel(job_id)
+    _wait_for_status(sessions, job_id, JobStatus.CANCELLED)
+
+    meeting = _meeting(sessions, meeting_id)
+    assert meeting["status"] == MeetingStatus.FAILED
+    assert (meeting["words"], meeting["turns"]) == (WORDS, TURNS)
+    assert meeting["audio"].endswith("audio.wav")
+    assert _names(meeting_id) == ["audio.wav", "midway.flag", "original.mp4"]
+
+
+def test_a_job_made_before_the_state_was_recorded_is_put_back_by_what_the_meeting_holds(runner_env):
+    """The fallback for old Jobs (previous_meeting_status is NULL): the data decides."""
+    sessions, _runner, _events = runner_env
+    transcribed = _add_meeting(sessions, transcribed=True)
+    untranscribed = _add_meeting(sessions, transcribed=False, partial_words=True)
+    for meeting_id in (transcribed, untranscribed):
+        job_id = _add_job(sessions, meeting_id, JobStatus.RUNNING, previous=None)
+        assert jobs.finish_cancel(job_id) is True
+
+    assert _meeting(sessions, transcribed)["status"] == MeetingStatus.COMPLETED
+    assert _meeting(sessions, transcribed)["segments"] == [("antes (editado)", True)]
+    partial = _meeting(sessions, untranscribed)
+    assert partial["status"] == MeetingStatus.UPLOADED
+    assert (partial["words"], partial["turns"]) == (None, None)
+    assert partial["audio"].endswith("original.mp4")
+
+
 def test_the_runner_goes_on_with_the_next_job_after_a_cancel(runner_env):
     sessions, runner, _events = runner_env
     first_meeting = _add_meeting(sessions, transcribed=False)
@@ -413,7 +502,7 @@ def test_the_engine_runtime_the_child_started_is_stopped_with_it(runner_env):
 # --- the race --------------------------------------------------------------------------
 
 
-def test_a_cancel_that_loses_the_race_with_the_natural_end_leaves_the_job_completed(runner_env):
+def test_a_cancel_that_loses_the_race_with_the_natural_end_leaves_the_job_completed(runner_env, monkeypatch):
     sessions, runner, events = runner_env
     runner.handler_paths[JobType.PROCESS_MEETING] = f"{__name__}._done_then_lingering_body"
     meeting_id = _add_meeting(sessions, transcribed=True)
@@ -421,7 +510,9 @@ def test_a_cancel_that_loses_the_race_with_the_natural_end_leaves_the_job_comple
     # The loop reads the request as still pending (it read the Job while it was RUNNING),
     # but only once the child has completed: the commit lands between the read and the stop.
     looks = threading.Event()
-    runner._cancel_requested = lambda job: looks.is_set()
+    monkeypatch.setattr(
+        jobs, "cancel_requests", lambda **kwargs: {job_id: JobStatus.RUNNING} if looks.is_set() else {}
+    )  # only the parent's runner loop calls it here: the child body is another process
     runner.start()
     _wait_for_status(sessions, job_id, JobStatus.RUNNING)
 
