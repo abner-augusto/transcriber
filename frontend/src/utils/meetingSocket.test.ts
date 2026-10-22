@@ -10,6 +10,10 @@ describe("meetingSocketAction", () => {
     expect(meetingSocketAction({ type: "meeting_changed" })).toEqual({ showProgress: false, refetch: true });
   });
 
+  it("refetches, without showing progress, when the Job was cancelled", () => {
+    expect(meetingSocketAction({ type: "cancelled" })).toEqual({ showProgress: false, refetch: true });
+  });
+
   it("shows and refetches a failure", () => {
     expect(meetingSocketAction({ type: "error", error: "boom" })).toEqual({ showProgress: true, refetch: true });
   });

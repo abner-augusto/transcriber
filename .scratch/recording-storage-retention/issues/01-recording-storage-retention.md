@@ -24,7 +24,7 @@ Meetings also keep `original.mov`/`.mp4`. One 3.6 GB Meeting folder held
 
 **Blocked by:** none.
 
-**Status:** done for retention (plan 045, 2026-10-14). Follow-ups below stay `needs-exploration`.
+**Status:** DONE (retention by plans 045 and 046, 2026-10-14; the follow-ups were closed as won't do on 2026-10-22, below). The Settings screen for `source_roots` is ticket `02-source-roots-settings.md`.
 
 **State left by the manual cleanup (2026-10-13):** in every Meeting older than
 7 days, these were deleted: `mic_source.wav`, `system_source.wav`,
@@ -46,12 +46,17 @@ Duplicate shares files by hard link; migration 5 fixes the rows left by the
 manual cleanup. A processed dual-track Meeting can no longer be Re-diarized,
 fully reprocessed or duplicated.
 
-**Follow-ups (not done):**
+**Follow-ups (closed 2026-10-22):**
 - ~~record where the original lives~~ done in plan 046 (Source Reference);
-- keep the processed tracks only for dual-track Meetings (about 115 MB per
-  hour per track) if Re-diarize of those matters;
-- per-Meeting disk usage and a manual "free space" action;
-- compression of `audio.wav` (not needed once sources are dropped).
+- ~~keep the processed tracks only for dual-track Meetings~~ **won't do**:
+  ADR-0012 superseded it. Re-diarize makes the processed tracks again from the
+  originals and deletes them when the Job ends;
+- ~~per-Meeting disk usage and a manual "free space" action~~ **won't do**: they
+  lost their reason. The app keeps only `audio.wav` per Meeting (ADR-0011) and
+  Duplicate shares it with a hard link, so there is nothing left to free. Reopen
+  disk usage only if `storage/` grows again;
+- ~~compression of `audio.wav`~~ **won't do**: this ticket itself says it is not
+  needed once the sources are dropped.
 
 **Open questions from the original exploration (answered above):**
 - Which reprocessing paths really need the sources (rerun with another preset,

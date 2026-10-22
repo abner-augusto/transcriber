@@ -33,7 +33,7 @@ flip the ticket to `ready-for-agent`.
 | `issues/06-vocabulary-for-parakeet.md` | new (ADR-0007) | ready → `plans/014-vocabulary-correction.md` |
 | `issues/07-vibevoice-maturation.md` | new (ADR-0007) | ready → `plans/021-vibevoice-evaluation.md` |
 | `issues/08-correction-suggestions-ui.md` | from 06 | plan 014 |
-| `issues/09-cancel-job.md` | from 02/04/05 | plan 019 |
+| `issues/09-cancel-job.md` | from 02/04/05 | ready → `plans/048-cancel-a-job.md` |
 | `issues/10-lost-pending-jobs.md` | PR #1 review of plan 007 | — (plan 019 removes the cause) |
 | `issues/11-api-startup-blocks-on-running-job.md` | PR #1 manual test | — (ready-for-agent; carry the rule into plan 018) |
 | `issues/12-reprocessing-resets-speaker-names.md` | PR #1 manual test | — (coordinate with plan 014) |

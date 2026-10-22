@@ -116,13 +116,13 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
    - **Dual-track / OBS**: provide a microphone track and an optional system-audio track
 3. Enter a title and click **Start**
 4. For uploaded files, click **Start transcription** on the meeting page. Before that, the **Tracks in this file** section lists what the app found (with each track's name and level) and lets you choose which track is the microphone and which the system audio, or read the file as one track
-5. Watch real-time progress as the pipeline runs
+5. Watch real-time progress as the pipeline runs. **Cancel** (next to the title) stops the running or queued Job: a Meeting that was never transcribed goes back to *uploaded* (its upload is kept; the partial work and the working files are deleted), and a Meeting that was being reprocessed goes back to *completed* with the previous transcript untouched. It never touches the original recording
 6. Browse the transcript with synced audio playback
 7. Click speaker names to rename, click segments to edit text
 8. Settle **Review Notes** in the sidebar's Review tab: answer the agent's questions, accept or dismiss its suggestions, or leave a note on a segment (hover → Note). Segments with a note are tinted and the audio bar shows one clickable mark per note, amber when it waits for you and blue when it waits for the agent. Below the notes, **Vocabulary Corrections** lists every Word the Vocabulary changed in the Meeting (cyan underline in the transcript until confirmed), with Confirm and Undo per row
 9. **Export** to SRT, WebVTT, TXT, Markdown, JSON, DOCX, or PDF
 
-**Storage.** The app does not archive your recordings: keep the originals in the meeting's project folder. When a Meeting finishes processing, the app deletes the uploaded file(s) and the intermediate tracks and keeps only `audio.wav` (16 kHz mono; a mix for a dual-track Meeting) for playback and re-runs. A Meeting that has not finished processing keeps its upload. A dual-track Meeting's Re-diarize, Full reprocess and Duplicate need the separate mic and system recordings, so the app keeps a **Source Reference** to each original (name, size, a fast hash and, when known, its path) and reads it from there ([ADR-0011](docs/adr/0011-the-app-keeps-no-original-recordings.md), [ADR-0012](docs/adr/0012-the-app-references-originals-it-does-not-keep.md)). `transcriber_cli upload` records the path; a browser upload records no path. When you move an original, point the Meeting at it again with `transcriber_cli set M --source NEWPATH` (`--system-source` for the second track) or in the **Original recording** section of the Meeting page; the file must be the same recording (size and hash). Meetings uploaded before references existed have none: attach one with `set M --source PATH --adopt`. Folders listed in the `source_roots` setting (`PUT /api/settings/preferences`, absolute paths, empty by default) are searched for a moved file with the same size and hash, down to `source_search_depth` levels below each root (default 3: a file in the root is level 0, `root/a/b/c/file` is level 3). The app only reads an original; it never moves or deletes it.
+**Storage.** The app does not archive your recordings: keep the originals in the meeting's project folder. When a Meeting finishes processing, the app deletes the uploaded file(s) and the intermediate tracks and keeps only `audio.wav` (16 kHz mono; a mix for a dual-track Meeting) for playback and re-runs. A Meeting that has not finished processing keeps its upload, and so does one whose Job was cancelled (the Job deletes the working files it made). A dual-track Meeting's Re-diarize, Full reprocess and Duplicate need the separate mic and system recordings, so the app keeps a **Source Reference** to each original (name, size, a fast hash and, when known, its path) and reads it from there ([ADR-0011](docs/adr/0011-the-app-keeps-no-original-recordings.md), [ADR-0012](docs/adr/0012-the-app-references-originals-it-does-not-keep.md)). `transcriber_cli upload` records the path; a browser upload records no path. When you move an original, point the Meeting at it again with `transcriber_cli set M --source NEWPATH` (`--system-source` for the second track) or in the **Original recording** section of the Meeting page; the file must be the same recording (size and hash). Meetings uploaded before references existed have none: attach one with `set M --source PATH --adopt`. Folders listed in the `source_roots` setting (`PUT /api/settings/preferences`, absolute paths, empty by default) are searched for a moved file with the same size and hash, down to `source_search_depth` levels below each root (default 3: a file in the root is level 0, `root/a/b/c/file` is level 3). The app only reads an original; it never moves or deletes it.
 
 ## Command line
 
@@ -131,6 +131,7 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 ```
 uv run python -m transcriber_cli list
 uv run python -m transcriber_cli upload reuniao.m4a --title "Obra 12/10" --participants "Ana, Bruno" --process --wait
+uv run python -m transcriber_cli cancel <id>
 uv run python -m transcriber_cli show <id> --from 10:00 --to 15:00
 uv run python -m transcriber_cli show <id> --grep "Lourdes"
 uv run python -m transcriber_cli speakers <id> --unnamed
@@ -260,12 +261,13 @@ transcriber/
 | `PUT` | `/api/meetings/{id}/sources` | Point the Meeting at where its original recording(s) live now: `{source, system_source?, adopt?}`. 409 when the file is not the same recording (size and hash); 400 for a relative path, a missing file, or a Meeting without a reference unless `adopt` is true |
 | `POST` | `/api/meetings/{id}/reidentify` | Re-identify speakers |
 | `POST` | `/api/meetings/{id}/reapply-vocabulary` | Reapply vocabulary corrections |
+| `POST` | `/api/meetings/{id}/cancel` | Ask for the Meeting's `pending` or `running` Job to stop. Answers at once with the Job and its `cancel_requested_at`; the runner then stops the Job's processes, sets the Job `cancelled`, puts the Meeting back to `uploaded` (never transcribed) or `completed` (a Reprocessing), and sends `{"type": "cancelled"}` on the socket. 409 when the Meeting has no such Job |
 | `GET` | `/api/search?q=...` | Search transcript segments |
 | `GET` | `/api/meetings/{id}/analytics` | Get meeting analytics |
 | `GET` | `/api/model-settings/presets` | List model presets |
 | `GET` | `/api/model-settings/assignments` | Get model assignments |
 | `PUT` | `/api/model-settings/assignments` | Update model assignments |
-| `WS` | `/ws/meetings/{id}` | Progress updates, and `{"type": "meeting_changed"}` when a Segment, Speaker or the Meeting's details are edited, so an open page refetches |
+| `WS` | `/ws/meetings/{id}` | Progress updates, and `{"type": "meeting_changed"}` when a Segment, Speaker or the Meeting's details are edited, and `{"type": "cancelled"}` when a cancelled Job has ended, so an open page refetches |
 
 ## Author
 

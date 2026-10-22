@@ -23,7 +23,8 @@ export function shouldReconnectMeetingSocket(opts: {
 /** What the Meeting page does with one socket event. */
 export function meetingSocketAction(event: ProgressUpdate): { showProgress: boolean; refetch: boolean } {
   if (event.type === "ping") return { showProgress: false, refetch: false };
-  if (event.type === "meeting_changed") return { showProgress: false, refetch: true };
+  // The Job was cancelled and the Meeting is back where it was: read it again, show no progress.
+  if (event.type === "meeting_changed" || event.type === "cancelled") return { showProgress: false, refetch: true };
   const finished = event.type === "error" || (event.type === "progress" && event.progress === 100);
   return { showProgress: true, refetch: finished };
 }

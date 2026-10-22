@@ -6,7 +6,10 @@ import importlib
 import logging
 import multiprocessing
 from multiprocessing.queues import Queue
+import os
 from queue import Empty
+import signal
+import subprocess
 import threading
 import time
 from typing import Protocol
@@ -17,6 +20,9 @@ from models.job import JobType
 
 class JobRunner(Protocol):
     def submit(self, job: Job) -> str | None: ...
+
+    def cancel(self, job_id: str) -> None:
+        """Record that the Job should stop. Only an intention: the runner acts on it."""
 
 
 class ProgressBus(Protocol):
@@ -50,6 +56,10 @@ class InlineJobRunner:
         if handler is not None:
             handler(job.meeting_id, job.id)
         return None
+
+    def cancel(self, job_id: str) -> None:
+        from jobs import request_cancel
+        request_cancel(job_id)
 
 
 class InProcessBus:
@@ -112,15 +122,37 @@ class QueueProgressBus:
         yield  # pragma: no cover - makes this an async generator for the protocol
 
 
+def _signal_tree(process, *, hard: bool) -> None:
+    """Signal what the Job child started (an Engine runtime, whisper.cpp, ffmpeg) with it.
+
+    Ending only the child would leave those running, holding the GPU while the next Job
+    starts. Windows: ``taskkill /T`` walks the tree below the child. Elsewhere the child
+    leads its own process group (``_execute_job_in_child``) and the group gets the signal.
+    """
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                capture_output=True, check=False, timeout=15,
+            )
+        else:
+            os.killpg(process.pid, signal.SIGKILL if hard else signal.SIGTERM)
+    except (OSError, subprocess.SubprocessError):
+        pass  # no such group yet, or already gone: the child itself is stopped below
+
+
 def _stop_process(process) -> None:
-    """Terminate a Job child, and kill it if it ignores the request."""
+    """Stop a Job child and everything it started: terminate, then kill what ignores it."""
     if not process.is_alive():
         return
+    _signal_tree(process, hard=False)
     process.terminate()
     process.join(5)
     if process.is_alive():
         process.kill()
         process.join()
+    if os.name != "nt":
+        _signal_tree(process, hard=True)  # descendants that ignored SIGTERM
 
 
 def _import_handler(path: str) -> Callable[[str, str], object]:
@@ -165,6 +197,18 @@ class LocalJobRunner:
         self._wake.set()
         return None
 
+    def cancel(self, job_id: str) -> None:
+        """Record that the Job should stop; the loop does the rest.
+
+        This only writes an intention to the database. It never touches a process or a
+        status, because the loop is already reading the child's exit and writing the end
+        state: a second writer here is what made the first attempt race (plan 048).
+        """
+        from jobs import request_cancel
+
+        request_cancel(job_id, session_factory=self.session_factory)
+        self._wake.set()
+
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             return
@@ -198,6 +242,7 @@ class LocalJobRunner:
     def _run_loop(self) -> None:
         while not self._stop.is_set():
             try:
+                self._cancel_queued()
                 pending = self._oldest_pending()
             except Exception:
                 log.exception("Could not inspect the pending Job queue")
@@ -214,6 +259,22 @@ class LocalJobRunner:
             except Exception:
                 log.exception("Local runner failed while executing Job %s", job_id)
                 self._fail_job(job_id, "Local runner failed unexpectedly.")
+
+    def _cancel_queued(self, exclude: str | None = None) -> None:
+        """Take the queued Jobs the user cancelled out of the queue. They have no process.
+
+        Never the Job being started (``exclude``): its child may be flipping it to RUNNING
+        right now, and the watch loop owns the end of that Job.
+        """
+        from jobs import cancelled_pending
+
+        for job_id in cancelled_pending(exclude=exclude, session_factory=self.session_factory):
+            self._cancel_job(job_id)
+
+    def _cancel_requested(self, job_id: str) -> bool:
+        from jobs import cancel_requested
+
+        return cancel_requested(job_id, session_factory=self.session_factory)
 
     def _oldest_pending(self):
         from models import Job
@@ -249,6 +310,9 @@ class LocalJobRunner:
         return max(self.minimum_timeout_seconds, duration_limit)
 
     def _run_job(self, job_id: str, meeting_id: str, job_type: JobType) -> None:
+        if self._cancel_requested(job_id):  # cancelled between being picked and being started
+            self._cancel_job(job_id)
+            return
         messages = self._context.Queue()
         handler_path = self.handler_paths[job_type]
         process = self._context.Process(
@@ -271,7 +335,9 @@ class LocalJobRunner:
         timeout_seconds = self._timeout_seconds(meeting_id)
         deadline = started + timeout_seconds
         next_timeout_check = started + 1
+        next_cancel_check = started
         timed_out = False
+        cancelled = False
         try:
             while process.is_alive():
                 if self._stop.is_set():
@@ -280,6 +346,18 @@ class LocalJobRunner:
                     break
 
                 now = time.monotonic()
+                if now >= next_cancel_check:
+                    next_cancel_check = now + 0.5
+                    try:
+                        cancelled = self._cancel_requested(job_id)
+                        if not cancelled:
+                            self._cancel_queued(exclude=job_id)
+                    except Exception:
+                        log.exception("Could not look for cancellation requests")
+                    if cancelled:
+                        _stop_process(process)
+                        break
+
                 if now >= next_timeout_check:
                     updated_timeout = self._timeout_seconds(meeting_id)
                     if updated_timeout > timeout_seconds:
@@ -301,7 +379,9 @@ class LocalJobRunner:
 
             process.join()
             self._drain_messages(messages)
-            if not self._stop.is_set() and not timed_out and process.exitcode != 0:
+            if cancelled:
+                self._cancel_job(job_id)
+            elif not self._stop.is_set() and not timed_out and process.exitcode != 0:
                 self._fail_job(
                     job_id,
                     f"Job child process exited with code {process.exitcode}.",
@@ -344,6 +424,19 @@ class LocalJobRunner:
         except Exception:
             log.exception("Could not relay progress for Meeting %s", meeting_id)
 
+    def _cancel_job(self, job_id: str) -> None:
+        """Make the transition for a Job whose process, if it had one, is dead."""
+        from jobs import cancel_job
+
+        try:
+            cancel_job(job_id, session_factory=self.session_factory, progress_bus=self.progress_bus)
+        except Exception:
+            log.exception("Could not cancel Job %s", job_id)
+            try:
+                self._fail_job(job_id, "Job was stopped but could not be cancelled cleanly.")
+            except Exception:
+                log.exception("Could not fail Job %s either", job_id)
+
     def _fail_job(self, job_id: str, error: str) -> None:
         from jobs import fail
 
@@ -353,5 +446,12 @@ class LocalJobRunner:
 def _execute_job_in_child(handler_path: str, meeting_id: str, job_id: str, messages: Queue) -> None:
     from jobs import configure
 
+    if os.name != "nt":
+        # Lead a process group of its own, so that cancelling the Job can signal the Engine
+        # runtimes and ffmpeg it starts together with it (``_signal_tree``).
+        try:
+            os.setsid()
+        except OSError:
+            pass
     configure(progress_bus=QueueProgressBus(messages))
     _import_handler(handler_path)(meeting_id, job_id)

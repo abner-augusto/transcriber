@@ -114,6 +114,36 @@ def cmd_reprocess(api, args):
     return code
 
 
+def cmd_cancel(api, args):
+    meeting = resolve_meeting(api, args.meeting)
+    job = api.post(f"/api/meetings/{meeting['id']}/cancel")
+    handle = f"{job['job_type']} job {job['id'][:8]} of Meeting {meeting['id'][:8]}"
+    if args.no_wait:
+        emit(args, job, [f"cancel requested for {handle}; the Job is still {job['status']}"])
+        return 0
+    started = time.monotonic()
+    while True:
+        job = next(
+            (j for j in api.get(f"/api/meetings/{meeting['id']}/jobs") if j["id"] == job["id"]), job
+        )
+        if job["status"] not in ("pending", "running"):
+            break
+        if time.monotonic() - started >= args.timeout:
+            print(
+                f"cancel requested for {handle}, but the Job is still {job['status']} "
+                f"after {args.timeout:g}s",
+                file=sys.stderr,
+            )
+            return EXIT_TIMEOUT
+        time.sleep(args.interval)
+    if job["status"] != "cancelled":
+        emit(args, job, [f"{handle} {job['status']} before it could be cancelled"])
+        return 1
+    after = api.get(f"/api/meetings/{meeting['id']}")["status"]
+    emit(args, job, [f"cancelled {handle}; the Meeting is {after} again"])
+    return 0
+
+
 def _wait(api, args, meeting_id, timeout, interval):
     started = time.monotonic()
     last = None
@@ -135,6 +165,12 @@ def _wait(api, args, meeting_id, timeout, interval):
                 print(json.dumps(job, ensure_ascii=False, indent=2))
             else:
                 print(f"failed: {job.get('error') or 'unknown error'}")
+            return 1
+        if job["status"] == "cancelled":
+            if args.json:
+                print(json.dumps(job, ensure_ascii=False, indent=2))
+            else:
+                print("cancelled")
             return 1
         if timeout is not None and time.monotonic() - started >= timeout:
             print(f"timed out after {timeout:g}s; Job still {job['status']}", file=sys.stderr)
@@ -629,8 +665,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("kind", choices=REPROCESS_KINDS)
     p.add_argument("--wait", action="store_true", help="block until the Job ends")
 
+    p = command("cancel", cmd_cancel,
+                "stop the Meeting's running or queued Job; the Meeting goes back to uploaded "
+                "(never transcribed) or completed (a Reprocessing). Waits for the app to confirm "
+                "(exit 0 cancelled, 1 the Job ended first, 3 timeout)")
+    p.add_argument("--no-wait", action="store_true", help="return once the request is recorded")
+    p.add_argument("--timeout", type=float, default=60.0, metavar="SECONDS",
+                   help="give up waiting after this long (default 60)")
+    p.add_argument("--interval", type=float, default=1.0, metavar="SECONDS")
+
     p = command("wait", cmd_wait,
-                "block until the newest Job ends (exit 0 completed, 1 failed, 3 timeout)")
+                "block until the newest Job ends (exit 0 completed, 1 failed or cancelled, 3 timeout)")
     p.add_argument("--timeout", type=float, metavar="SECONDS", help="give up after this long (default: never)")
     p.add_argument("--interval", type=float, default=2.0, metavar="SECONDS")
 
