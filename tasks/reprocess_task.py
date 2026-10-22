@@ -42,7 +42,9 @@ def _reprocess_meeting(current: RunningJob, rerun_diarization: bool):
             tracks = locate_tracks(meeting)
             db.commit()
             made_tracks = True
-            AudioService().extract_dual_tracks(str(tracks.mic), str(tracks.system), meeting.id)
+            AudioService().extract_dual_tracks(
+                str(tracks.mic), str(tracks.system), meeting.id, layout=meeting.track_layout
+            )
         current.progress(10, "Running new speaker identification...")
         try:
             diarization = diarize_meeting(meeting, audio_path, diarizer=diarizer, vad_service=VadService())

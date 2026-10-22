@@ -31,6 +31,8 @@ Ask for the participants and the domain terms first; they are the best evidence 
 
 **Done** when `wait` exits 0 (1 failed: show the error; 3 timed out). An existing Meeting skips this phase. Use `set M --participants ... --vocabulary ...` to add what you learn later.
 
+**Tracks.** A file with several tracks (an OBS recording: microphone and desktop audio) is read when uploaded, and `upload` prints one `track` line per track found: its number, name, `speech`/`silent`/`duplicate`/`mix`, level, and the role it was given (`-> mic`, `-> system`, `-> audio`). `show M` prints the same lines. **Check them before `process`**: the mic should be the track named "Microfone" with a level around -15 dB; a desktop track at -70 dB or below is nearly silent (nobody spoke through the speakers). Overrule with `set M --mic-track N --system-track N` (`N` is the stream number as printed, or `STREAM:CHANNEL` for a stereo file's channels; `--system-track none` reads the file as one track). It works only before the Meeting is processed (409 after); to change it later, upload again.
+
 **Originals.** The app does not keep the recording; it keeps a reference to where it lives. `upload` records the path of the file you pass, so upload from the place the file will stay. **After the user's workflow moves an original (inbox to project folder), run `set M --source NEWPATH`** (`--system-source NEWPATH` for the system track of a dual-track Meeting); it refuses a file that is not the same recording. A Meeting uploaded before references existed needs `--adopt` once. Never move, rename or delete the user's original yourself.
 
 ## 3. Name Speakers

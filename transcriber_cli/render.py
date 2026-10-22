@@ -1,5 +1,7 @@
 """Compact plain-ASCII text for Meetings, Segments, and Speakers."""
 
+import re
+
 LOW_CONFIDENCE = 0.6  # TranscriptView.tsx draws a Segment below this as low-confidence
 
 
@@ -109,6 +111,41 @@ def meeting_header(m: dict) -> list[str]:
     for source in m.get("sources") or []:
         where = source["path"] or "path not saved"
         lines.append(f"source {source['track']}: {source['name']} ({source['state']}) {where}")
+    lines += track_lines(m.get("track_layout"))
+    return lines
+
+
+def track_ref(selector: dict) -> str:
+    """`STREAM` or `STREAM:CHANNEL`: how a track is named on the command line."""
+    if selector["channel"] is None:
+        return str(selector["stream"])
+    return f"{selector['stream']}:{selector['channel']}"
+
+
+def parse_track(text: str) -> dict:
+    """The selector for `STREAM` or `STREAM:CHANNEL`."""
+    match = re.fullmatch(r"(\d+)(?::(\d+))?", text.strip())
+    if not match:
+        raise ValueError(f"not a track: '{text}' (use STREAM or STREAM:CHANNEL, e.g. 1 or 0:1)")
+    stream, channel = match.groups()
+    return {"stream": int(stream), "channel": None if channel is None else int(channel)}
+
+
+def track_lines(layout: dict | None) -> list[str]:
+    """One line per track found in the uploaded file, with the role it was given."""
+    if not layout:
+        return []
+    roles = {
+        role: (layout.get(role) or {})
+        for role in ("mic", "system", "audio")
+    }
+    lines = []
+    for track in layout["tracks"]:
+        selector = {"stream": track["stream"], "channel": track["channel"]}
+        title = f' "{track["title"]}"' if track.get("title") else ""
+        line = f"track {track_ref(selector)}{title} {track['status']} {track['level_db']:.1f} dB"
+        role = next((name for name, chosen in roles.items() if chosen == selector), None)
+        lines.append(f"{line} -> {role}" if role else line)
     return lines
 
 

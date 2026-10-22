@@ -146,10 +146,10 @@ def install(monkeypatch, tmp_path, *, transcriber, diarization: DiarizationResul
     monkeypatch.setattr("tasks.reprocess_task.make_diarizer", lambda run_config, **kwargs: diarizer)
     monkeypatch.setattr("tasks.reprocess_task.hf_token", lambda: "")
     monkeypatch.setattr("preferences.hf_token", lambda: "")
-    monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid: fp)
+    monkeypatch.setattr("services.audio_service.AudioService.extract_audio", lambda self, fp, mid, track=None: fp)
     monkeypatch.setattr(
         "services.audio_service.AudioService.extract_dual_audio",
-        lambda self, mic, system, mid: str(storage / mid / "mixed.wav"),
+        lambda self, mic, system, mid, layout=None: str(storage / mid / "mixed.wav"),
     )
     monkeypatch.setattr("services.audio_service.AudioService.get_duration", lambda self, fp: 4.0)
     monkeypatch.setattr("services.vad_service.VadService.compute_vad_segments", compute_vad_segments)

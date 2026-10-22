@@ -12,12 +12,42 @@ export interface SourcesRequest {
   adopt: boolean;
 }
 
+/** One track of an uploaded file: a stream, or a channel of its only (stereo) stream. */
+export interface TrackSelector {
+  stream: number;
+  channel: number | null;
+}
+
+export interface FoundTrack extends TrackSelector {
+  title: string | null;
+  status: "speech" | "silent" | "duplicate" | "mix";
+  level_db: number;
+}
+
+/** The tracks found in an uploaded file, and which the app will read as the mic and the system. */
+export interface TrackLayout {
+  tracks: FoundTrack[];
+  mic: TrackSelector | null;
+  system: TrackSelector | null;
+  /** The one track a single-track Meeting reads. */
+  audio: TrackSelector | null;
+  /** True once the user overruled the app's guess. */
+  manual: boolean;
+}
+
+export interface TracksRequest {
+  mic: TrackSelector;
+  system: TrackSelector | null;
+}
+
 export interface Meeting {
   id: string;
   title: string;
   status: "uploaded" | "processing" | "completed" | "failed";
   original_filename: string | null;
   is_dual_track?: boolean | null;
+  /** Present when the uploaded file had more than one track to tell apart. */
+  track_layout?: TrackLayout | null;
   /** False for a dual-track Meeting whose original recordings the app cannot read now. */
   reprocessable?: boolean;
   /** The Source References: where each original recording lives outside the app. */

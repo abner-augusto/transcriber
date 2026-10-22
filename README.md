@@ -112,10 +112,10 @@ checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
 
 1. Click **New transcription** on the home page
 2. Choose **Single file** or **Dual-track / OBS**
-   - **Single file**: drag-and-drop or browse for an audio/video file
+   - **Single file**: drag-and-drop or browse for an audio/video file. A file with several tracks (an OBS recording with the microphone and the desktop audio on separate tracks, or a real stereo file) is read for them: the app tells a microphone from a desktop-audio track from a mix, using the track names OBS records ("Microfone", "Computador") and otherwise the file's order, and processes the file as a dual-track Meeting. A silent track, a copy of another (a stereo file whose two channels are identical) or the track that is the sum of the others (OBS track 1 in some profiles) is ignored; a file left with one track is a single-track Meeting
    - **Dual-track / OBS**: provide a microphone track and an optional system-audio track
 3. Enter a title and click **Start**
-4. For uploaded files, click **Start transcription** on the meeting page
+4. For uploaded files, click **Start transcription** on the meeting page. Before that, the **Tracks in this file** section lists what the app found (with each track's name and level) and lets you choose which track is the microphone and which the system audio, or read the file as one track
 5. Watch real-time progress as the pipeline runs
 6. Browse the transcript with synced audio playback
 7. Click speaker names to rename, click segments to edit text
@@ -256,6 +256,7 @@ transcriber/
 | `POST` | `/api/notes/{id}/dismiss` | Dismiss an open suggestion or question, or an answered question |
 | `POST` | `/api/notes/{id}/accept` | Apply an open suggestion through the existing edit routes; `learn: false` teaches no Vocabulary, `save_profile: false` skips the Voice Profile |
 | `POST` | `/api/meetings/{id}/rediarize` | Re-run speaker diarization (a dual-track Meeting reads its original recordings through their Source References: 400 when it has none, 409 when they cannot be found; `reprocessable` and `sources` in `GET /api/meetings/{id}` say which) |
+| `PUT` | `/api/meetings/{id}/tracks` | Choose which track of the uploaded file is the mic and which the system: `{mic, system?}`, each `{stream, channel}` (`stream` counts audio streams from 0; `channel` is null unless the file's only stream is multi-channel). `system` null reads the file as one track. Only a track listed in `track_layout.tracks` can be chosen, and only while the Meeting is `uploaded` (409 afterwards) |
 | `PUT` | `/api/meetings/{id}/sources` | Point the Meeting at where its original recording(s) live now: `{source, system_source?, adopt?}`. 409 when the file is not the same recording (size and hash); 400 for a relative path, a missing file, or a Meeting without a reference unless `adopt` is true |
 | `POST` | `/api/meetings/{id}/reidentify` | Re-identify speakers |
 | `POST` | `/api/meetings/{id}/reapply-vocabulary` | Reapply vocabulary corrections |

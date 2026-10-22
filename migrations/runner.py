@@ -166,6 +166,11 @@ _MIGRATIONS = (
         "meeting source_refs",
         (_add_column("meetings", "source_refs", "JSON"),),
     ),
+    (
+        7,
+        "meeting track_layout",
+        (_add_column("meetings", "track_layout", "JSON"),),
+    ),
 )
 
 

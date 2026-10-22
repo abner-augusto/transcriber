@@ -12,6 +12,8 @@ import ProgressTracker from "../components/ProgressTracker";
 import ExportDialog from "../components/ExportDialog";
 import DuplicateReprocessDialog from "../components/DuplicateReprocessDialog";
 import SourcesPanel from "../components/SourcesPanel";
+import TracksPanel from "../components/TracksPanel";
+import { canChooseTracks } from "../utils/tracks";
 import { apiErrorMessage } from "../utils/apiError";
 import { reprocessBlockedReason } from "../utils/reprocess";
 import { parseVocabulary, formatVocabulary, cleanParticipants } from "../utils/vocabulary";
@@ -403,6 +405,11 @@ export default function MeetingPage() {
           <span>{actionError}</span>
           <button onClick={() => setActionError("")} className="text-red-400 hover:text-white">Dismiss</button>
         </div>
+      )}
+
+      {/* Tracks of the uploaded file (before processing) */}
+      {canChooseTracks(currentMeeting) && (
+        <TracksPanel meeting={currentMeeting} onChanged={(updated) => setCurrentMeeting({ ...currentMeeting, ...updated, segments: currentMeeting.segments, speakers: currentMeeting.speakers, review_notes: currentMeeting.review_notes })} />
       )}
 
       {/* Original recording (kept outside the app) */}
