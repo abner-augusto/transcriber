@@ -26,7 +26,7 @@ before answering 409 (ADR-0012). With the folders set once, the user stops runni
 
 **Acceptance criteria:**
 - [ ] Settings -> Preferences shows the current folders and the depth, read from
-      `GET /api/settings/preferences`.
+      `GET /api/settings` (the `preferences` block).
 - [ ] Adding a folder and removing one are saved with `PUT /api/settings/preferences`
       (`source_roots` as the whole list), and the list shown afterwards is the one the
       server returned.
