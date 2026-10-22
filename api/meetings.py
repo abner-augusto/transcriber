@@ -15,7 +15,7 @@ from sqlalchemy import func
 import presets
 from database import get_db
 import jobs
-from jobs import JobAlreadyRunning, MeetingNotFoundError
+from jobs import JobAlreadyRunning, MeetingNotFoundError, NothingToCancel
 from models import Meeting, MeetingStatus, Speaker, Segment
 from models.job import Job, JobType
 from config import get_meeting_path
@@ -430,6 +430,23 @@ def start_processing(meeting_id: str, db: Session = Depends(get_db)):
 
 class DuplicateMeetingRequest(BaseModel):
     preset_id: str
+
+
+@router.post("/{meeting_id}/cancel")
+def cancel_processing(meeting_id: str, db: Session = Depends(get_db)):
+    """Ask for the Meeting's PENDING or RUNNING Job to be stopped.
+
+    Answers at once with the Job and its recorded request: the runner's loop stops the
+    child and moves the Job to CANCELLED a moment later, and the Meeting back to UPLOADED
+    (never transcribed) or COMPLETED (a Reprocessing), then tells the open pages.
+    """
+    try:
+        job = jobs.cancel(db, meeting_id)
+    except MeetingNotFoundError:
+        raise HTTPException(404, "Meeting not found")
+    except NothingToCancel as exc:
+        raise HTTPException(409, str(exc))
+    return job.to_dict()
 
 
 @router.post("/{meeting_id}/duplicate")
