@@ -10,13 +10,15 @@ import logging
 from pathlib import Path
 
 from config import get_meeting_path
-from services.audio_service import DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT
+from services.audio_service import DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT, MIX_PART_OUTPUT
 
 log = logging.getLogger(__name__)
 
 # Upload names: ``api.meetings.create_meeting`` saves them as ``<stem><container extension>``.
 DROPPED_STEMS = ("original", "mic_source", "system_source")
 DROPPED_NAMES = (DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT)
+# A mix ffmpeg was writing when its Job was stopped (see ``AudioService.extract_dual_audio``).
+PARTIAL_NAMES = (MIX_PART_OUTPUT,)
 
 
 def drop_raw_audio(meeting) -> None:
@@ -32,7 +34,7 @@ def drop_raw_audio(meeting) -> None:
     doomed = [
         path for path in directory.iterdir()
         if path.is_file()
-        and (path.stem in DROPPED_STEMS or path.name in DROPPED_NAMES)
+        and (path.stem in DROPPED_STEMS or path.name in (*DROPPED_NAMES, *PARTIAL_NAMES))
         and path.resolve() != played
     ]
     for path in doomed:
@@ -42,6 +44,27 @@ def drop_raw_audio(meeting) -> None:
             log.warning("Could not delete %s: %s", path, exc)
     meeting.mic_audio_filepath = None
     meeting.system_audio_filepath = None
+
+
+def drop_cancelled_work(meeting, *, keep_audio: bool) -> None:
+    """Delete what a Job that was stopped left in the Meeting's folder (plan 048).
+
+    The processed tracks and a half-written mix always go. ``audio.wav`` goes too unless
+    ``keep_audio`` (the Meeting went back to COMPLETED and plays it) or the Meeting's
+    ``audio_filepath`` names it. The uploads (``original.*``, ``mic_source.*``,
+    ``system_source.*``) are never touched: they are what an UPLOADED Meeting starts from
+    again. A file that cannot be deleted is logged and left.
+    """
+    directory = get_meeting_path(meeting.id)
+    played = _resolved(meeting.audio_filepath)
+    names = [*DROPPED_NAMES, *PARTIAL_NAMES, *(() if keep_audio else ("audio.wav",))]
+    for name in names:
+        path = directory / name
+        try:
+            if path.is_file() and path.resolve() != played:
+                path.unlink()
+        except OSError as exc:
+            log.warning("Could not delete %s: %s", path, exc)
 
 
 def drop_processed_tracks(meeting_id: str) -> None:
