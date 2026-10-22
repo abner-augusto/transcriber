@@ -25,6 +25,9 @@ def _fake_run(probe_stdout: str = ""):
     def run(cmd, **kwargs):
         calls.append(cmd)
         is_ffprobe = any("ffprobe" in c for c in cmd)
+        if "-filter_complex" in cmd:  # the mix: ffmpeg writes its output file
+            Path(cmd[-1]).parent.mkdir(parents=True, exist_ok=True)
+            Path(cmd[-1]).touch()
         return subprocess.CompletedProcess(cmd, 0, stdout=probe_stdout if is_ffprobe else "")
 
     return run, calls
@@ -202,6 +205,39 @@ def test_extract_dual_audio_output_paths_are_in_meeting_dir():
     # The mixed output lives in the meeting's storage directory.
     assert Path(out).name == "audio.wav"
     assert "m1" in out
+
+
+def _mixing_run(meeting_dir, *, fail_mix=False):
+    """subprocess.run that, for the mix command, writes its output file (or fails)."""
+    def run(cmd, **kwargs):
+        if "-filter_complex" in cmd:
+            Path(cmd[-1]).write_bytes(b"half")
+            if fail_mix:
+                raise subprocess.CalledProcessError(1, cmd, stderr="killed")
+            Path(cmd[-1]).write_bytes(b"new mix")
+        return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+    return run
+
+
+def test_extract_dual_audio_replaces_audio_wav_only_when_the_mix_is_whole(tmp_path):
+    """A Reprocessing rewrites the audio of a COMPLETED Meeting, which cancelling may stop."""
+    meeting_dir = tmp_path / "m1"
+    meeting_dir.mkdir()
+    (meeting_dir / "audio.wav").write_bytes(b"old mix")
+
+    with patch("services.audio_service.get_meeting_path", return_value=meeting_dir):
+        with patch("subprocess.run", side_effect=_mixing_run(meeting_dir, fail_mix=True)):
+            with pytest.raises(RuntimeError):
+                AudioService().extract_dual_audio("mic.wav", "system.wav", "m1")
+        assert (meeting_dir / "audio.wav").read_bytes() == b"old mix"
+
+        with patch("subprocess.run", side_effect=_mixing_run(meeting_dir)):
+            out = AudioService().extract_dual_audio("mic.wav", "system.wav", "m1")
+
+    assert out == str(meeting_dir / "audio.wav")
+    assert (meeting_dir / "audio.wav").read_bytes() == b"new mix"
+    assert not (meeting_dir / "audio.part.wav").exists()
 
 
 def test_extract_dual_audio_never_overwrites_source_artifacts(tmp_path):

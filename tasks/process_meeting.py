@@ -51,8 +51,10 @@ def process_meeting_task(meeting_id: str, job_id: str):
                     track=(meeting.track_layout or {}).get("audio"),
                 )
             duration = audio_service.get_duration(audio_path)
+            # Only the duration is saved now: the runner reads it to size the time limit.
+            # The audio, Words and Turns are saved with the Segments at the end, so that a
+            # Job stopped halfway (plan 048) leaves the Meeting as it was.
             meeting.duration = duration
-            meeting.audio_filepath = audio_path
             db.commit()
             current.progress(5, "Audio extracted")
 
@@ -69,10 +71,7 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 words = align_words(audio_path, words, run_config=run_config)
                 transcription = replace(transcription, words=words)
 
-            meeting.raw_transcription = raw_transcription(
-                preset["engine"], preset["id"], transcription
-            )
-            db.commit()
+            stored_transcription = raw_transcription(preset["engine"], preset["id"], transcription)
             current.progress(48 if fa_enabled else 45, "Transcription complete")
 
             # Step 3: Diarization & VAD bounding
@@ -92,8 +91,6 @@ def process_meeting_task(meeting_id: str, job_id: str):
                 native=transcription.native,
                 on_path=report_diarization_path,
             )
-            meeting.raw_diarization = diarization.to_stored()
-            db.commit()
             current.progress(70, "Diarization complete")
 
             # Step 4: Build the Segments a reader sees, from the Words and the Turns
@@ -119,6 +116,10 @@ def process_meeting_task(meeting_id: str, job_id: str):
             )
             # Step 6: Save results (preserving edits)
             current.progress(90, "Saving results...")
+            # Everything the Job made is saved in one transaction with the Segments.
+            meeting.audio_filepath = audio_path
+            meeting.raw_transcription = stored_transcription
+            meeting.raw_diarization = diarization.to_stored()
             # A first run has no manual Speakers; a re-run of a processed Meeting has new Turns.
             rebuild_speakers_and_segments(
                 db, meeting, aligned, speaker_info, speaker_id_service, keep="overlap"

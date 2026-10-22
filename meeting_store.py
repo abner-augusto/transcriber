@@ -84,7 +84,9 @@ def rebuild_speakers_and_segments(
     prior = _user_edits(db, meeting)
     db.query(Segment).filter(Segment.meeting_id == meeting.id).delete()
     db.query(Speaker).filter(Speaker.meeting_id == meeting.id).delete()
-    db.commit()
+    # One transaction with the rows written below (committed in _finish_rebuild): a Job
+    # stopped between the delete and the insert must not leave a Meeting with no Segments.
+    db.flush()
 
     speakers = {}
     for i, (label, info) in enumerate(sorted(speaker_info.items())):

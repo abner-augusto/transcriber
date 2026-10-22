@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -18,6 +19,9 @@ SAMPLE_RATE = 8000
 QUIET_PEAK_DB = -50.0
 DUAL_MIC_OUTPUT = "mic_processed.wav"
 DUAL_SYSTEM_OUTPUT = "system_processed.wav"
+# The mix is written here and moved over audio.wav when ffmpeg is done, so that stopping a
+# Reprocessing never cuts in half the audio of a Meeting that was already COMPLETED.
+MIX_PART_OUTPUT = "audio.part.wav"
 
 
 def _stderr_text(stderr) -> str:
@@ -268,9 +272,15 @@ class AudioService:
         ``mic.wav``/``system.wav`` cannot trigger an in-place FFmpeg conversion.
         """
         mic_out, system_out = self.extract_dual_tracks(mic_path, system_path, meeting_id, layout)
-        mixed_out = str(get_meeting_path(meeting_id) / "audio.wav")
-        self._mix(mic_out, system_out, mixed_out)
-        return mixed_out
+        directory = get_meeting_path(meeting_id)
+        mixed_out = directory / "audio.wav"
+        part = directory / MIX_PART_OUTPUT
+        try:
+            self._mix(mic_out, system_out, str(part))
+            os.replace(part, mixed_out)
+        finally:
+            part.unlink(missing_ok=True)
+        return str(mixed_out)
 
     def extract_dual_tracks(
         self, mic_path: str, system_path: str, meeting_id: str, layout: dict | None = None

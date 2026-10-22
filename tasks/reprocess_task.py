@@ -51,8 +51,6 @@ def _reprocess_meeting(current: RunningJob, rerun_diarization: bool):
         finally:
             if made_tracks:
                 drop_processed_tracks(meeting.id)
-        meeting.raw_diarization = diarization.to_stored()
-        db.commit()
         current.progress(50, "Diarization complete")
     else:
         diarization = MeetingDiarization.from_stored(meeting.raw_diarization)
@@ -89,6 +87,10 @@ def _reprocess_meeting(current: RunningJob, rerun_diarization: bool):
         85 if rerun_diarization else 80,
         "Saving results...",
     )
+    if rerun_diarization:
+        # The new Turns are saved in the same transaction as the Segments built from them,
+        # so a Job stopped halfway (plan 048) leaves the Meeting as it was.
+        meeting.raw_diarization = diarization.to_stored()
     # Re-diarizing makes new Turns, so labels mean new people; otherwise they are stable.
     rebuild_speakers_and_segments(
         db, meeting, aligned, speaker_info, speaker_id_service,
