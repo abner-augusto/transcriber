@@ -39,6 +39,11 @@ class Job(Base):
     # The user asked to stop this Job. Only an intention: the local runner's loop alone
     # stops the child process and moves the Job to CANCELLED (plan 048).
     cancel_requested_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    # What the Meeting was when this Job claimed it ("uploaded", "completed", "failed") and
+    # the audio it played, so a cancel puts it back exactly there. NULL on a Job made
+    # before plan 048.
+    previous_meeting_status: Mapped[str] = mapped_column(String, nullable=True)
+    previous_audio_filepath: Mapped[str] = mapped_column(String, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

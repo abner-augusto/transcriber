@@ -62,6 +62,7 @@ def test_migration_2_adds_speaker_edited_to_an_existing_segments_table(tmp_path)
             "CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL)"
         )
         connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
+        connection.exec_driver_sql("CREATE TABLE jobs (id TEXT PRIMARY KEY)")
 
     upgrade(engine)
     upgrade(engine)
@@ -80,6 +81,7 @@ def test_migration_3_adds_split_times_to_an_existing_meetings_table(tmp_path):
             "CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL)"
         )
         connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
+        connection.exec_driver_sql("CREATE TABLE jobs (id TEXT PRIMARY KEY)")
 
     upgrade(engine)
     upgrade(engine)
@@ -99,6 +101,7 @@ def _database_before_migration_4(tmp_path, corrections_per_segment):
             "CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL, corrections JSON)"
         )
         connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
+        connection.exec_driver_sql("CREATE TABLE jobs (id TEXT PRIMARY KEY)")
         connection.exec_driver_sql(
             "CREATE TABLE vocabulary_entries (id TEXT PRIMARY KEY, term TEXT, misheard_as JSON)"
         )
@@ -160,6 +163,7 @@ def _meetings_before_migration_5(tmp_path, rows):
             "CREATE TABLE meetings (id TEXT PRIMARY KEY, audio_filepath TEXT, "
             "mic_audio_filepath TEXT, system_audio_filepath TEXT)"
         )
+        connection.exec_driver_sql("CREATE TABLE jobs (id TEXT PRIMARY KEY)")
         for row in rows:
             connection.execute(text("INSERT INTO meetings VALUES (:id, :a, :m, :s)"), row)
         connection.exec_driver_sql(
@@ -230,6 +234,7 @@ def test_migration_5_leaves_a_database_without_audio_columns_alone(tmp_path):
     with engine.begin() as connection:
         connection.exec_driver_sql("CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL)")
         connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
+        connection.exec_driver_sql("CREATE TABLE jobs (id TEXT PRIMARY KEY)")
 
     upgrade(engine)
 
@@ -268,14 +273,12 @@ def test_migration_7_adds_track_layout_and_guesses_nothing(tmp_path):
     engine.dispose()
 
 
-def test_migration_8_adds_cancel_requested_at_to_existing_jobs(tmp_path):
+def test_migration_8_adds_the_cancel_columns_to_existing_jobs(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'jobs.db'}")
     with engine.begin() as connection:
         connection.exec_driver_sql("CREATE TABLE segments (id TEXT PRIMARY KEY, text TEXT NOT NULL)")
         connection.exec_driver_sql("CREATE TABLE meetings (id TEXT PRIMARY KEY)")
-        connection.exec_driver_sql(
-            "CREATE TABLE jobs (id TEXT PRIMARY KEY, status VARCHAR(9) NOT NULL)"
-        )
+        connection.exec_driver_sql("CREATE TABLE jobs (id TEXT PRIMARY KEY, status VARCHAR(9) NOT NULL)")
         connection.exec_driver_sql("INSERT INTO jobs VALUES ('old', 'PENDING')")
 
     upgrade(engine)
@@ -283,8 +286,11 @@ def test_migration_8_adds_cancel_requested_at_to_existing_jobs(tmp_path):
 
     with engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(jobs)")}
-        assert "cancel_requested_at" in columns
-        assert connection.execute(text("SELECT cancel_requested_at FROM jobs")).scalar_one() is None
+        assert {"cancel_requested_at", "previous_meeting_status", "previous_audio_filepath"} <= columns
+        # A Job made before the columns existed guesses nothing.
+        assert connection.execute(
+            text("SELECT cancel_requested_at, previous_meeting_status, previous_audio_filepath FROM jobs")
+        ).one() == (None, None, None)
         # CANCELLED fits the column the Enum created for the longest older name (COMPLETED).
         connection.exec_driver_sql("UPDATE jobs SET status = 'CANCELLED'")
         assert connection.execute(text("SELECT status FROM jobs")).scalar_one() == "CANCELLED"
