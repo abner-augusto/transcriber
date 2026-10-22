@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMeeting, startProcessing, getJobs, rediarizeMeeting, reidentifyMeeting, reapplyVocabulary, updateMeetingTitle, updateMeeting } from "../api";
+import { getMeeting, startProcessing, getJobs, cancelMeeting, rediarizeMeeting, reidentifyMeeting, reapplyVocabulary, updateMeetingTitle, updateMeeting } from "../api";
 import { useStore } from "../store";
 import type { ProgressUpdate } from "../types";
 import TranscriptView from "../components/TranscriptView";
@@ -32,6 +32,8 @@ export default function MeetingPage() {
   const [showReprocess, setShowReprocess] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false);
   const [actionError, setActionError] = useState("");
+  // The user asked to stop the Job and the runner has not confirmed yet.
+  const [cancelling, setCancelling] = useState(false);
   const [participants, setParticipants] = useState("");
   const [domainVocab, setDomainVocab] = useState("");
   const [showAdvancedVocab, setShowAdvancedVocab] = useState(false);
@@ -95,6 +97,7 @@ export default function MeetingPage() {
       ws?.close();
       setCurrentMeeting(null);
       setProgress(null);
+      setCancelling(false);
     };
   }, [id]);
 
@@ -102,14 +105,32 @@ export default function MeetingPage() {
     const m = await getMeeting(meetingId);
     if (!isCurrent()) return;
     setCurrentMeeting(m);
-    if (m.status === "processing") {
-      const jobs = await getJobs(meetingId);
-      if (!isCurrent()) return;
-      const active = jobs.find((j) => j.status === "running" || j.status === "pending");
-      if (active) {
-        setProgress({ type: "progress", progress: active.progress, step: active.current_step || "Processing...", status: "processing" });
-      }
+    if (m.status !== "processing") {
+      setCancelling(false);
+      return;
     }
+    const jobs = await getJobs(meetingId);
+    if (!isCurrent()) return;
+    const active = jobs.find((j) => j.status === "running" || j.status === "pending");
+    setCancelling(!!active?.cancel_requested_at);
+    if (active) {
+      setProgress({ type: "progress", progress: active.progress, step: active.current_step || "Processing...", status: "processing" });
+    }
+  }
+
+  async function handleCancel() {
+    if (!id) return;
+    if (!window.confirm("Stop this job? What it has done so far is discarded.")) return;
+    setCancelling(true);
+    try {
+      await cancelMeeting(id);
+    } catch (err) {
+      setCancelling(false);
+      setActionError(apiErrorMessage(err));
+      loadMeeting(); // the Job may have just ended: show where the Meeting is now
+      return;
+    }
+    setActionError("");
   }
 
   function loadMeeting() {
@@ -299,6 +320,16 @@ export default function MeetingPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {isProcessing && (
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              title="Stop the running job; the Meeting goes back to how it was"
+              className="px-4 py-2.5 bg-slate-800 text-red-300 border border-red-500/30 rounded-xl font-medium hover:text-white hover:bg-red-500/20 hover:border-red-500/50 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+            >
+              {cancelling ? "Cancelling..." : "Cancel"}
+            </button>
+          )}
           {isUploaded && (
             <button
               onClick={handleProcess}

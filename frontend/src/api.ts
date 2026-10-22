@@ -39,6 +39,12 @@ export async function startProcessing(id: string): Promise<Job> {
   return data;
 }
 
+/** Ask for the Meeting's running or queued Job to stop. Answers at once; the Meeting changes a moment later. */
+export async function cancelMeeting(id: string): Promise<Job> {
+  const { data } = await api.post(`/meetings/${id}/cancel`);
+  return data;
+}
+
 export async function rediarizeMeeting(id: string): Promise<Job> {
   const { data } = await api.post(`/meetings/${id}/rediarize`);
   return data;

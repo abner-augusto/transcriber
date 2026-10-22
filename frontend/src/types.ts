@@ -139,10 +139,12 @@ export interface Job {
   id: string;
   meeting_id: string;
   job_type: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
   progress: number;
   current_step: string | null;
   error: string | null;
+  /** Set once the user asked to stop the Job; the Job keeps its status until the runner stops it. */
+  cancel_requested_at: string | null;
   run_config: Record<string, unknown> | null;
   started_at: string | null;
   completed_at: string | null;
@@ -150,7 +152,7 @@ export interface Job {
 }
 
 export interface ProgressUpdate {
-  type: "progress" | "error" | "ping" | "meeting_changed";
+  type: "progress" | "error" | "ping" | "meeting_changed" | "cancelled";
   progress?: number;
   step?: string;
   status?: string;

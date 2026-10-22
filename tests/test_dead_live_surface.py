@@ -33,3 +33,10 @@ def test_frontend_meeting_type_matches_backend_statuses():
     assert 'status: "uploaded" | "processing" | "completed" | "failed"' in meeting_block
     assert "recording_status" not in meeting_block
     assert "mode:" not in meeting_block
+
+
+def test_frontend_job_type_matches_backend_statuses():
+    types = (ROOT / "frontend" / "src" / "types.ts").read_text(encoding="utf-8")
+    job_block = types.split("export interface Job")[1].split("export interface ProgressUpdate")[0]
+
+    assert 'status: "pending" | "running" | "completed" | "failed" | "cancelled"' in job_block
