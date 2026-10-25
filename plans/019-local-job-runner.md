@@ -13,8 +13,10 @@
 
 ## Status
 
-- **Execution**: DONE — measurements, LocalRunner, automated lifecycle checks,
-  and local end-to-end Jobs passed. See [verification plan](TEST-PLAN.md).
+- **Execution**: IN PROGRESS — measurements, LocalRunner, automated lifecycle
+  checks, and local end-to-end Jobs passed. Still pending on the machine: a
+  restart with a hard kill mid-Job and the VRAM check after each Job, as in
+  `plans/README.md`. See [verification plan](TEST-PLAN.md).
 
 - **Priority**: P2
 - **Effort**: L
