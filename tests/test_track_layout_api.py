@@ -97,6 +97,22 @@ def test_a_plain_mono_file_is_not_analyzed(client, db_session, monkeypatch):
     assert meeting.audio_filepath
 
 
+def test_an_opus_file_is_accepted(client, db_session, monkeypatch):
+    monkeypatch.setattr(
+        "api.meetings.AudioService.probe_audio",
+        lambda self, path: {"stream_count": 1, "channels": 1, "streams": []},
+    )
+
+    response = client.post(
+        "/api/meetings",
+        data={"title": "T"},
+        files={"file": ("voice.opus", b"bytes", "audio/opus")},
+    )
+
+    assert response.status_code == 200, response.text
+    assert db_session.get(Meeting, response.json()["id"]).audio_filepath.endswith(".opus")
+
+
 def test_a_failed_analysis_does_not_fail_the_upload(client, db_session, monkeypatch):
     def broken(self, path):
         raise RuntimeError("ffmpeg failed")

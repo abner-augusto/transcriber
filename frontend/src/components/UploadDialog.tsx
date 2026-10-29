@@ -170,7 +170,7 @@ export default function UploadDialog({ onClose, onCreated }: Props) {
               <input
                 ref={micFileRef}
                 type="file"
-                accept="audio/*,video/*"
+                accept="audio/*,video/*,.opus"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -205,7 +205,7 @@ export default function UploadDialog({ onClose, onCreated }: Props) {
               <input
                 ref={systemFileRef}
                 type="file"
-                accept="audio/*,video/*"
+                accept="audio/*,video/*,.opus"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -249,7 +249,7 @@ export default function UploadDialog({ onClose, onCreated }: Props) {
             <input
               ref={fileRef}
               type="file"
-              accept="audio/*,video/*"
+              accept="audio/*,video/*,.opus"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];

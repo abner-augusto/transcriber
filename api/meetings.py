@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
 # Upload constraints
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024 * 1024  # 5 GB
-ALLOWED_EXTENSIONS = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".flac", ".aac", ".wma", ".mov", ".avi", ".mkv"}
+ALLOWED_EXTENSIONS = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac", ".aac", ".wma", ".mov", ".avi", ".mkv"}
 MAX_TITLE_LENGTH = 500
 
 
