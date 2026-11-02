@@ -14,7 +14,7 @@ it.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** in-progress
+**Status:** done (plan 014; bench reviewed 2026-11-02: at least 43 hits, 2 false changes)
 
 **Plan:** `plans/014-vocabulary-correction.md` (design session 2026-09-24: post-correction at
 Segment derivation, Misheard Forms learned from edits, Re-apply Vocabulary Reprocessing).

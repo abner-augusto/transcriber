@@ -17,7 +17,7 @@
 
 ## Status
 
-- **Execution**: IN PROGRESS — implementation through Step 4; local bench gate remains.
+- **Execution**: DONE — bench run and reviewed by the user on 2026-11-02 (Outcome); the bench's own scoring gaps are ticket `architecture-review/16`.
 
 - **Priority**: P1 (the most-used Engine gets no Vocabulary today)
 - **Effort**: L
@@ -238,7 +238,7 @@ Outcome section.
 - [x] Stored `raw_transcription` Words are unchanged by correction
 - [x] Corrections are stored per Segment and recomputed on every rebuild
 - [x] Re-apply Vocabulary keeps Speaker names
-- [x] Bench numbers from the user's Meetings recorded in this plan (2026-11-02; the 7 false changes await the user's review)
+- [x] Bench numbers from the user's Meetings recorded in this plan (2026-11-02; false changes reviewed by the user the same day)
 - [x] `plans/README.md` row and ticket 06 status updated
 - [x] `GLOSSARY.md`: drop the "(planned, plan 014)" markers and the "once plan 014 lands" wording
 
@@ -300,3 +300,18 @@ Outcome section.
   of the user's edits (310 tokens) stay misses: leave-one-out forms rarely
   recur across Meetings. The 7 false changes still need the user's review before
   this plan and ticket 06 close.
+- **Review of the 7 false changes, 2026-11-02** (the user read each one in
+  context): only 2 tokens are a real wrong change.
+
+  | Meeting | Change | Verdict |
+  |---|---|---|
+  | 0d6197f6 | `oferta terreno` → `Oferta Terreno` (2) | right; the user made the same fix, but the bench casefolds tokens and cannot see a case-only edit |
+  | 9f80feef | `RP.` → `ERP` (1) | right; the user wrote `no ERP`, and the inserted word merges the two changes in the bench's diff |
+  | 83731ade | `Garra` → `Garrah` (1) | right; Garrah is the person in those Meetings, and the user's edit had kept the mishearing |
+  | cd928188 | `Abel` → `Abner` (1) | right; the user confirms Abel, Bimel and Bimeiro are mishearings of Abner |
+  | b171ef10 | `e investidor` → `Hey Investidor` (2) | wrong in this Segment: the `similar` rule swallowed the conjunction to reach the Vocabulary term |
+
+  With the review, the run is at least 43 hits against 2 false changes, and
+  the starting constants stay. Two bench gaps (case-only edits, and a change
+  next to an inserted word) counted right corrections as false, and can hide
+  hits too: ticket `architecture-review/16`.
