@@ -18,7 +18,7 @@ knows which Engine ran, which `GLOSSARY.md` says it must not.
 **Blocked by:** None. Plan 012 is done: `tasks.diarization.diarize_meeting` takes
 `native` / `native_engine`, which collapse into the `Transcription` value.
 
-**Status:** in-progress
+**Status:** done (plan 015 smoke tiers verified 2026-11-02; harness gap in issue 15)
 
 **Plan:** `plans/015-transcriber-returns-transcription.md` (design session 2026-09-24:
 provenance dict, `load`/`unload` on the port, Aligner stays separate, RunConfig stays out).

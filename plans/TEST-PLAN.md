@@ -108,7 +108,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 Then run `.\start.ps1`. Confirm the built UI loads on port 8000, `/api/health`
-reports SQLite and the in-process progress bus, existing migrated Meetings
+reports `status` and `database` ok, existing migrated Meetings
 remain visible and searchable, and only the app process is needed. Record the
 Windows version and pass/fail in `plans/LOCAL-VERIFICATION.md`, without
 including personal Meeting data.

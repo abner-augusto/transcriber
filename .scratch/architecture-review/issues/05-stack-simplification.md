@@ -25,7 +25,7 @@ not.
 **Blocked by:** 02 (Job module), 04 (child process). The SQLite + FTS5 swap
 can be done independently and first.
 
-**Status:** in-progress (Plans 018/019 verified; Plan 020 implementation complete, clean Windows install pending)
+**Status:** in-progress (Plans 018/019 verified; Plan 020 clean Windows install passed 2026-11-02, clean Linux install pending; hard-kill gap of plan 019 in issue 14)
 
 **Plans:** `plans/018-sqlite-and-migration.md` (SQLite + FTS5, manual migration command)
 and `plans/020-remove-legacy-infrastructure.md` (remove Redis/Celery/Postgres/Docker, `uv`,

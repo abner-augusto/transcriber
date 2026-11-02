@@ -117,6 +117,21 @@ Include a hard kill of the app process: on Windows a spawned Job child is not
 killed with its parent, so check that no orphaned child keeps the GPU while
 the restarted app fails its Job and starts the next PENDING one.
 
+## Step 6 machine check (2026-11-02)
+
+Fresh checkout, snapshot of the local database, two clips cut from one local
+recording. One real Job per Engine: Parakeet 50.7 s and faster-whisper
+large-v3 18.4 s on 20 s of audio; VRAM read 449 MiB (the idle baseline) after
+each Job.
+
+Hard kill mid-Job **fails**: with Job A (faster-whisper, 4 min) RUNNING and
+Job B PENDING, killing the app process left the Job child alive and on the
+GPU. The restarted app failed Job A and started Job B while the orphan was
+still running (8,514 MiB). The orphan then finished and wrote Job A as
+COMPLETED over the recovery's error. VRAM came back to 449 MiB only after both
+children exited. Issue `architecture-review/14` holds the details and the
+options.
+
 ## STOP conditions
 
 - Per-Job model loading cost is unacceptable (step 1).

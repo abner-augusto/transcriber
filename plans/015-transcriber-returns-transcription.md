@@ -12,7 +12,7 @@
 
 ## Status
 
-- **Execution status**: IN PROGRESS
+- **Execution status**: DONE (smoke tiers verified 2026-11-02; the smoke harness rejects hub model names, issue architecture-review/15)
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED (touches every adapter)
@@ -156,7 +156,8 @@ returns nothing.
 - [x] Protocol v1 serialization/validation assertions in
   `tests/test_engine_runtime_protocol.py` remain unchanged and pass; isolated-adapter
   behavior tests live separately in `tests/test_isolated_transcriber.py`
-- [ ] Smoke tiers run on the user's machine for parakeet.cpp and faster-whisper large-v3 (ADR-0007): `model_load` and `model_inference`
+- [x] Smoke tiers run on the user's machine for parakeet.cpp and faster-whisper large-v3 (ADR-0007): `model_load` and `model_inference`
+      (2026-11-02; faster-whisper through the same functions with the guard pointed at the cached snapshot, see `LOCAL-VERIFICATION.md`)
 - [x] `plans/README.md` row and ticket 01 status updated
 
 ## Outcome
@@ -166,6 +167,13 @@ Implementation and ordinary backend verification are complete. The user-only
 faster-whisper large-v3 remain pending; the user must run them and record the
 results before this plan can be marked DONE. No local model smoke or private
 recording was run by the agent.
+
+Smoke tiers, 2026-11-02 (GPU window, authorized by the user): Parakeet passed
+`model_load` and `model_inference` through pytest on 12 s of local audio.
+faster-whisper large-v3 stops at the harness's local-path guard because its
+Preset names the hub model (`large-v3`); run offline against the cached
+snapshot, the same functions passed (load 9.3 s, inference 18.8 s, 25 Words).
+The guard gap is issue `architecture-review/15`.
 
 ## Carried over from the PR #1 review
 
