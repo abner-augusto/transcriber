@@ -238,7 +238,7 @@ Outcome section.
 - [x] Stored `raw_transcription` Words are unchanged by correction
 - [x] Corrections are stored per Segment and recomputed on every rebuild
 - [x] Re-apply Vocabulary keeps Speaker names
-- [ ] Bench numbers from the user's Meetings recorded in this plan
+- [x] Bench numbers from the user's Meetings recorded in this plan (2026-11-02; the 7 false changes await the user's review)
 - [x] `plans/README.md` row and ticket 06 status updated
 - [x] `GLOSSARY.md`: drop the "(planned, plan 014)" markers and the "once plan 014 lands" wording
 
@@ -274,3 +274,29 @@ Outcome section.
   `.\.venv\Scripts\python.exe -m bench.vocabulary_correction` on the user's edited Meetings;
   record its per-Meeting and total hits, false changes, and misses here. Do not
   mark this plan or ticket complete until that gate is reviewed.
+- **Bench run, 2026-11-02** (local database, starting thresholds, leave-one-out;
+  about 40 minutes on one CPU core). 26 Meetings with edited Segments: 22
+  parakeet.cpp, 4 faster-whisper, 2 whisper.cpp.
+
+  | Meeting | Engine | Hits | False changes | Misses |
+  |---|---|---:|---:|---:|
+  | 12249cff | parakeet.cpp | 16 | 0 | 24 |
+  | c0e50387 | parakeet.cpp | 8 | 0 | 31 |
+  | 0d6197f6 | parakeet.cpp | 6 | 2 | 39 |
+  | 9f80feef | parakeet.cpp | 6 | 1 | 26 |
+  | dad8213f | parakeet.cpp | 1 | 0 | 6 |
+  | dc053256 | parakeet.cpp | 1 | 0 | 14 |
+  | b171ef10 | parakeet.cpp | 0 | 2 | 1 |
+  | 83731ade | parakeet.cpp | 0 | 1 | 23 |
+  | cd928188 | parakeet.cpp | 0 | 1 | 4 |
+  | 13 other parakeet.cpp | parakeet.cpp | 0 | 0 | 109 |
+  | 4 faster-whisper | faster-whisper | 0 | 0 | 28 |
+  | 2 whisper.cpp | whisper.cpp | 0 | 0 | 5 |
+  | **Total** | | **38** | **7** | **310** |
+
+  Hits exceed false changes (38 against 7), so the STOP condition does not
+  trigger and the starting constants stay. Every hit and false change is on
+  parakeet.cpp; on the Whisper Engines the held-out forms change nothing. Most
+  of the user's edits (310 tokens) stay misses: leave-one-out forms rarely
+  recur across Meetings. The 7 false changes still need the user's review before
+  this plan and ticket 06 close.
