@@ -17,7 +17,7 @@
 
 ## Status
 
-- **Execution**: DONE — bench run and reviewed by the user on 2026-11-02 (Outcome); the bench's own scoring gaps are ticket `architecture-review/16`.
+- **Execution**: DONE — bench run and reviewed by the user on 2026-11-02 (Outcome: at least 45 hits, 0 false changes); the bench's own scoring gaps are ticket `architecture-review/16`.
 
 - **Priority**: P1 (the most-used Engine gets no Vocabulary today)
 - **Effort**: L
@@ -301,7 +301,7 @@ Outcome section.
   recur across Meetings. The 7 false changes still need the user's review before
   this plan and ticket 06 close.
 - **Review of the 7 false changes, 2026-11-02** (the user read each one in
-  context): only 2 tokens are a real wrong change.
+  context): none is a real wrong change.
 
   | Meeting | Change | Verdict |
   |---|---|---|
@@ -309,9 +309,10 @@ Outcome section.
   | 9f80feef | `RP.` → `ERP` (1) | right; the user wrote `no ERP`, and the inserted word merges the two changes in the bench's diff |
   | 83731ade | `Garra` → `Garrah` (1) | right; Garrah is the person in those Meetings, and the user's edit had kept the mishearing |
   | cd928188 | `Abel` → `Abner` (1) | right; the user confirms Abel, Bimel and Bimeiro are mishearings of Abner |
-  | b171ef10 | `e investidor` → `Hey Investidor` (2) | wrong in this Segment: the `similar` rule swallowed the conjunction to reach the Vocabulary term |
+  | b171ef10 | `e investidor` → `Hey Investidor` (2) | right; Hey Investidor is the profile name of the influencer who promotes Brasil Urbano's products (Garrah's son), and the user's edit had kept the mishearing |
 
-  With the review, the run is at least 43 hits against 2 false changes, and
-  the starting constants stay. Two bench gaps (case-only edits, and a change
+  With the review, the run is at least 45 hits against 0 false changes, and
+  the starting constants stay. In three of the five cases the correction was
+  right and the user's own edit had kept the mishearing. Two bench gaps (case-only edits, and a change
   next to an inserted word) counted right corrections as false, and can hide
   hits too: ticket `architecture-review/16`.

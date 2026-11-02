@@ -40,7 +40,7 @@ Postgres lock they described.
 |------|-------|----------|--------|------------|--------|
 | 012 | One Diarization stage for full processing and Reprocessing | P1 | M | — | DONE |
 | 013 | Move Segment derivation out of `tasks/shared.py` | P2 | S | 012 | DONE |
-| 014 | Vocabulary Correction (ticket 06) | P1 | L | 012, 013 | DONE (bench and review 2026-11-02: at least 43 hits, 2 false changes) |
+| 014 | Vocabulary Correction (ticket 06) | P1 | L | 012, 013 | DONE (bench and review 2026-11-02: at least 45 hits, 0 false changes) |
 | 015 | The Transcriber returns a Transcription (ticket 01) | P2 | M | 012 | DONE (smoke tiers 2026-11-02; harness gap in architecture-review/15) |
 | 016 | One place for Preferences, RunConfig per Job (ticket 03) | P2 | L | 015 (soft) | DONE |
 | 017 | One Job module, Celery as first adapter (ticket 02) | P2 | M | 007 | DONE |
