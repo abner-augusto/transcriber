@@ -22,4 +22,4 @@ output JSON once it has parsed it, so the file never outlives the call.
   only the uploads.
 - A test covering the engine's JSON removal, or the retention cleanup's.
 
-**Status:** ready-for-agent
+**Status:** done

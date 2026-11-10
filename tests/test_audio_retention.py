@@ -48,7 +48,7 @@ def test_dual_track_sources_and_processed_tracks_go_and_the_mix_stays(monkeypatc
 
     _drop(meeting)
 
-    assert sorted(p.name for p in directory.iterdir()) == ["audio.wav", "audio.wav.json"]
+    assert sorted(p.name for p in directory.iterdir()) == ["audio.wav"]
     assert meeting.mic_audio_filepath is None
     assert meeting.system_audio_filepath is None
     assert meeting.audio_filepath == str(directory / "audio.wav")

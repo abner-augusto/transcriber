@@ -17,8 +17,8 @@ log = logging.getLogger(__name__)
 # Upload names: ``api.meetings.create_meeting`` saves them as ``<stem><container extension>``.
 DROPPED_STEMS = ("original", "mic_source", "system_source")
 DROPPED_NAMES = (DUAL_MIC_OUTPUT, DUAL_SYSTEM_OUTPUT)
-# A mix ffmpeg was writing when its Job was stopped (see ``AudioService.extract_dual_audio``).
-PARTIAL_NAMES = (MIX_PART_OUTPUT,)
+# A partial mix or whisper-cli output left by a stopped or completed Job.
+PARTIAL_NAMES = (MIX_PART_OUTPUT, "audio.wav.json")
 
 
 def forget_raw_audio(meeting) -> None:

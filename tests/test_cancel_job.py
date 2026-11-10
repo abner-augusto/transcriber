@@ -353,6 +353,7 @@ def test_cancelling_a_first_transcription_returns_the_meeting_to_uploaded(runner
     # The first transcription has saved its stages: the audio, the Words and the Turns.
     saved = _meeting(sessions, meeting_id)
     assert saved["audio"].endswith("audio.wav") and saved["words"] and saved["turns"]
+    (_folder(meeting_id) / "audio.wav.json").write_text("{}", encoding="utf-8")
 
     runner.cancel(job_id)
     job = _wait_for_status(sessions, job_id, JobStatus.CANCELLED)
