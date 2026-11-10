@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { listMeetings, deleteMeeting, updateMeetingTitle, searchSegments } from "../api";
 import type { SearchResult } from "../api";
 import { useStore } from "../store";
@@ -168,17 +168,17 @@ export default function HomePage() {
             <p className="text-xs text-slate-500">{searchResults.reduce((n, r) => n + r.segments.length, 0)} results in {searchResults.length} meeting(s)</p>
             {searchResults.map((result) => (
               <div key={result.meeting_id} className="bg-slate-900/50 border border-slate-800/50 rounded-xl overflow-hidden">
-                <button
-                  onClick={() => navigate(`/meetings/${result.meeting_id}`)}
-                  className="w-full px-4 py-2.5 text-left hover:bg-slate-800/50 transition border-b border-slate-800/30"
+                <Link
+                  to={`/meetings/${result.meeting_id}`}
+                  className="block w-full px-4 py-2.5 text-left hover:bg-slate-800/50 transition border-b border-slate-800/30"
                 >
                   <span className="text-sm font-semibold text-violet-400">{result.meeting_title}</span>
-                </button>
+                </Link>
                 <div className="divide-y divide-slate-800/30">
                   {result.segments.slice(0, 5).map((seg) => (
-                    <button
+                    <Link
                       key={seg.id}
-                      onClick={() => navigate(`/meetings/${result.meeting_id}`)}
+                      to={`/meetings/${result.meeting_id}`}
                       className="w-full px-4 py-2 text-left hover:bg-slate-800/30 transition flex items-start gap-3"
                     >
                       <span className="text-xs text-slate-600 font-mono mt-0.5 flex-shrink-0 w-10">
@@ -188,7 +188,7 @@ export default function HomePage() {
                         <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: seg.speaker_color }} />
                       )}
                       <span className="text-sm text-slate-300 line-clamp-2">{seg.text}</span>
-                    </button>
+                    </Link>
                   ))}
                   {result.segments.length > 5 && (
                     <div className="px-4 py-1.5 text-xs text-slate-600">
@@ -239,10 +239,7 @@ export default function HomePage() {
                 key={m.id}
                 className="group bg-slate-900/50 border border-slate-800/50 rounded-xl hover:border-slate-700/50 transition-all"
               >
-                <div
-                  onClick={() => navigate(`/meetings/${m.id}`)}
-                  className="p-5 cursor-pointer hover:bg-slate-800/50 rounded-xl transition-all"
-                >
+                <div className="p-5 hover:bg-slate-800/50 rounded-xl transition-all">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       {editingId === m.id ? (
@@ -261,15 +258,11 @@ export default function HomePage() {
                           className="w-full bg-slate-800 border border-violet-500/50 rounded-lg px-2 py-0.5 text-white font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500/50"
                         />
                       ) : (
-                        <h3
-                          onDoubleClick={(e) => startRename(e, m.id, m.title)}
-                          title="Double-click to rename"
-                          className="font-semibold text-white group-hover:text-violet-300 transition truncate flex items-center gap-2"
-                        >
+                        <Link to={`/meetings/${m.id}`} className="block font-semibold text-white group-hover:text-violet-300 transition truncate">
                           {m.title}
-                        </h3>
+                        </Link>
                       )}
-                      <div className="flex items-center gap-3 mt-1.5 text-sm text-slate-500">
+                      <Link to={`/meetings/${m.id}`} aria-label={`Open ${m.title}`} className="flex items-center gap-3 mt-1.5 text-sm text-slate-500">
                         <span>{formatDate(m.created_at)}</span>
                         <span className="w-1 h-1 rounded-full bg-slate-700" />
                         <span>{formatDuration(m.duration)}</span>
@@ -285,13 +278,20 @@ export default function HomePage() {
                             <span>{m.segment_count} segments</span>
                           </>
                         )}
-                      </div>
+                      </Link>
                     </div>
                     <div className="flex items-center gap-3 ml-4">
                       <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${badge.color}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
                         {badge.text}
                       </span>
+                      <button
+                        onClick={(e) => startRename(e, m.id, m.title)}
+                        className="text-slate-500 hover:text-white transition-all p-1 text-sm"
+                        title="Rename"
+                      >
+                        Rename
+                      </button>
                       <button
                         onClick={(e) => handleDelete(e, m.id)}
                         className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all p-1"
