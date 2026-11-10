@@ -316,3 +316,10 @@ Outcome section.
   right and the user's own edit had kept the mishearing. Two bench gaps (case-only edits, and a change
   next to an inserted word) counted right corrections as false, and can hide
   hits too: ticket `architecture-review/16`.
+- **Bench re-run after ticket 16, 2026-11-10** (case-sensitive tokens, a
+  correction matched inside a `replace` span; 28 Meetings with edited Segments
+  now). Total **41 hits, 4 false changes, 401 misses**. The two gaps moved as
+  expected: 0d6197f6 is 8 hits and 0 false changes (`Oferta Terreno`), 9f80feef
+  7 and 0 (`ERP`). The 4 false changes left are the three reviewed above as
+  right (83731ade 1, cd928188 1, b171ef10 2). Misses grew from 310 because
+  case-only edits now count as edits, and two Meetings joined the set.
