@@ -30,4 +30,6 @@ opcode when the user's side only adds words around the corrected term.
   record the new totals in `plans/014-vocabulary-correction.md`.
 - The report stays metadata-only.
 
-**Status:** ready-for-agent
+**Status:** done
+
+The orchestrator will rerun the bench on the local database and record totals in plan 014.

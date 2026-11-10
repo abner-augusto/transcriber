@@ -88,3 +88,21 @@ def test_bench_scores_each_meeting_only_with_forms_learned_elsewhere(tmp_path, m
     # Each Meeting sees the form once, from the other Meeting: not enough to use it.
     assert report["totals"] == {"hits": 0, "false_changes": 0, "misses": 2}
     engine.dispose()
+
+
+def test_bench_counts_case_only_manual_edit_as_a_hit():
+    meeting, edited = _meeting(
+        "meeting-case", "Vocabulary: Garrah", heard="garrah", edited="Garrah"
+    )
+    count = score_meeting(meeting, [edited], [])
+
+    assert (count.hits, count.false_changes, count.misses) == (1, 0, 0)
+
+
+def test_bench_counts_correction_next_to_inserted_word():
+    meeting, edited = _meeting(
+        "meeting-insert", "Vocabulary: ERP", heard="RP.", edited="no ERP"
+    )
+    count = score_meeting(meeting, [edited], [MisheardForm("RP", "ERP", 2)])
+
+    assert (count.hits, count.false_changes, count.misses) == (1, 0, 1)

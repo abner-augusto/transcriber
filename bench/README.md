@@ -17,7 +17,8 @@ script learns them again from the edits of the *other* Meetings
 their start and end times (within 1.5 seconds), then reports corrected user
 changes (**hits**), corrections the user did not make (**false changes**), and
 user changes still left wrong (**misses**). Counts are tokens, totaled per
-Meeting and across the report.
+Meeting and across the report. Case and accents are significant; words inserted
+around a corrected term remain misses.
 
 The default JSON report is written to `bench/out/vocabulary_correction.json`.
 To choose another local output path, pass `--output path\to\report.json`.

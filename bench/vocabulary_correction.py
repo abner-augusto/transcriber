@@ -51,9 +51,8 @@ class MeetingCounts:
 
 
 def _tokens(text: str) -> list[str]:
-    # Keep accents significant here: an accent-only manual fix is still an edit
-    # for the benchmark, even though correction matching ignores accents.
-    return [match.group().casefold() for match in TOKEN_PATTERN.finditer(text)]
+    # Keep case and accents significant so either kind of manual fix is an edit.
+    return [match.group() for match in TOKEN_PATTERN.finditer(text)]
 
 
 def _align_by_time(edited: Segment, derived: list[dict]) -> dict | None:
@@ -66,7 +65,7 @@ def _align_by_time(edited: Segment, derived: list[dict]) -> dict | None:
     return min(candidates, key=lambda item: item[0])[1] if candidates else None
 
 
-def _manual_changes(before: str, after: str) -> list[tuple[str, str, int]]:
+def _manual_changes(before: str, after: str) -> list[tuple[str, list[str], int]]:
     """Return (heard phrase, user's phrase, changed-token count) from a word diff."""
     before_tokens = _tokens(before)
     after_tokens = _tokens(after)
@@ -77,9 +76,8 @@ def _manual_changes(before: str, after: str) -> list[tuple[str, str, int]]:
             continue
         heard = "".join(before_tokens[a_start:a_end])
         wanted_tokens = after_tokens[b_start:b_end]
-        wanted = "".join(wanted_tokens)
         count = len(wanted_tokens) or len(before_tokens[a_start:a_end])
-        changes.append((heard, wanted, count))
+        changes.append((heard, wanted_tokens, count))
     return changes
 
 
@@ -92,16 +90,23 @@ def _score_segment(edited: Segment, baseline: dict | None, corrected: dict | Non
 
     for correction in corrections:
         heard = "".join(_tokens(correction["heard"]))
-        term = "".join(_tokens(correction["term"]))
-        match_index = next((
-            index for index, (manual_heard, wanted, _count) in enumerate(unmatched_manual)
-            if manual_heard == heard and wanted == term
+        term = _tokens(correction["term"])
+        match = next((
+            (index, offset)
+            for index, (manual_heard, wanted, _count) in enumerate(unmatched_manual)
+            if manual_heard == heard and term
+            for offset in range(len(wanted) - len(term) + 1)
+            if wanted[offset:offset + len(term)] == term
         ), None)
-        if match_index is not None:
-            _manual_heard, _wanted, count = unmatched_manual.pop(match_index)
-            hits += count
+        if match is not None:
+            index, offset = match
+            _manual_heard, wanted, count = unmatched_manual.pop(index)
+            hits += len(term)
+            remaining = count - len(term)
+            if remaining:
+                unmatched_manual.append(("", wanted[:offset] + wanted[offset + len(term):], remaining))
         else:
-            false_changes += len(_tokens(correction["term"]))
+            false_changes += len(term)
 
     misses = sum(count for _heard, _wanted, count in unmatched_manual)
     return hits, false_changes, misses
