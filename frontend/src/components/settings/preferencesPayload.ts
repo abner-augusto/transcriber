@@ -19,3 +19,13 @@ export function buildDiarizationPayload({
     min_speaker_seconds: minSpeakerSeconds,
   };
 }
+
+export function buildSourceSearchPayload(roots: string[], depth: string) {
+  if (!/^\d+$/.test(depth) || !Number.isSafeInteger(Number(depth))) {
+    throw new Error("Search depth must be a whole number of 0 or more.");
+  }
+  if (roots.some((root) => !/^(?:\/|[a-zA-Z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/.test(root))) {
+    throw new Error("Enter an absolute path for each folder.");
+  }
+  return { source_roots: roots, source_search_depth: Number(depth) };
+}

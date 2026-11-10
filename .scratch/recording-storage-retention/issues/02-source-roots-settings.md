@@ -22,22 +22,22 @@ before answering 409 (ADR-0012). With the folders set once, the user stops runni
 
 **Blocked by:** none.
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Acceptance criteria:**
-- [ ] Settings -> Preferences shows the current folders and the depth, read from
+- [x] Settings -> Preferences shows the current folders and the depth, read from
       `GET /api/settings` (the `preferences` block).
-- [ ] Adding a folder and removing one are saved with `PUT /api/settings/preferences`
+- [x] Adding a folder and removing one are saved with `PUT /api/settings/preferences`
       (`source_roots` as the whole list), and the list shown afterwards is the one the
       server returned.
-- [ ] The depth accepts a whole number from 0 up; a blank or invalid value is refused on the
+- [x] The depth accepts a whole number from 0 up; a blank or invalid value is refused on the
       page and never sent.
-- [ ] A relative path is refused on the page with a message ("absolute path"), as the
+- [x] A relative path is refused on the page with a message ("absolute path"), as the
       server would drop it.
-- [ ] The payload builder is a pure function with a vitest test, like
+- [x] The payload builder is a pure function with a vitest test, like
       `frontend/src/components/settings/preferencesPayload.ts`.
-- [ ] README (Storage paragraph) says the folders can be set on the Settings page.
-- [ ] `npm test` in `frontend/` and `pytest` from the repo root pass, and the output is read.
+- [x] README (Storage paragraph) says the folders can be set on the Settings page.
+- [x] `npm test` in `frontend/` and `pytest` from the repo root pass, and the output is read.
 
 **Notes:**
 - Backend is done: `preferences.py` (`source_roots`, `source_search_depth` and their

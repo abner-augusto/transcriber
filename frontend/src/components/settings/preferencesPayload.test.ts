@@ -54,3 +54,19 @@ describe("buildDiarizationPayload", () => {
     ).toEqual({ engine: "pyannote", speech_threshold: 0.35, min_speaker_seconds: 3 });
   });
 });
+
+import { buildSourceSearchPayload } from "./preferencesPayload";
+
+describe("buildSourceSearchPayload", () => {
+  it("builds the complete search preferences", () => {
+    expect(buildSourceSearchPayload(["C:\\Recordings", "/home/me/audio"], "0")).toEqual({
+      source_roots: ["C:\\Recordings", "/home/me/audio"], source_search_depth: 0,
+    });
+  });
+  it.each(["", "-1", "1.5", "abc", "1e2"])("rejects invalid depth %s", (depth) => {
+    expect(() => buildSourceSearchPayload([], depth)).toThrow(/whole number/i);
+  });
+  it.each(["relative/path", "C:relative", "\\rooted"])("rejects relative path %s", (path) => {
+    expect(() => buildSourceSearchPayload([path], "3")).toThrow(/absolute path/i);
+  });
+});

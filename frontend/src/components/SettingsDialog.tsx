@@ -19,12 +19,15 @@ export default function SettingsDialog({ onClose }: Props) {
 
   async function handleSave() {
     setSaving(true);
-    if (tab === "preferences" || tab === "diarization") {
-      await preferences.save();
+    try {
+      if (tab === "preferences" || tab === "diarization") await preferences.save();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save preferences");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   }
 
   if (!settings) {

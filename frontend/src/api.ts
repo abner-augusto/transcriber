@@ -257,6 +257,8 @@ export interface Settings {
 }
 
 export interface Preferences {
+  source_roots: string[];
+  source_search_depth: number;
   default_vocabulary: string;
   speaker_profiles_enabled: boolean;
   hf_auth_token: string;

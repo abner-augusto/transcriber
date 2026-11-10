@@ -7,7 +7,7 @@ import {
 import type { DiarizerOption, DiarizationPrefs, RejectedForm, SpeakerProfile, VocabularyEntry } from "../../api";
 import type { VocabularyProfile } from "../../types";
 import { apiErrorMessage } from "../../utils/apiError";
-import { buildDiarizationPayload } from "./preferencesPayload";
+import { buildDiarizationPayload, buildSourceSearchPayload } from "./preferencesPayload";
 
 /**
  * The Preferences tab's fields, loaded once when the Settings dialog opens.
@@ -16,6 +16,9 @@ import { buildDiarizationPayload } from "./preferencesPayload";
  * dialog's shared Save button can write them.
  */
 export function usePreferencesForm() {
+  const [sourceRoots, setSourceRoots] = useState<string[]>([]);
+  const [sourceDepth, setSourceDepth] = useState("3");
+  const [newSourceRoot, setNewSourceRoot] = useState("");
   const [defaultVocab, setDefaultVocab] = useState("");
   const [voiceProfilesEnabled, setVoiceProfilesEnabled] = useState(true);
   const [hfToken, setHfToken] = useState("");
@@ -41,6 +44,8 @@ export function usePreferencesForm() {
   async function loadPreferences() {
     const { preferences: p, diarizers: options } = await getSettings();
     setDiarizers(options);
+    setSourceRoots(p.source_roots ?? []);
+    setSourceDepth(String(p.source_search_depth ?? 3));
     setDefaultVocab(p.default_vocabulary || "");
     setVoiceProfilesEnabled(p.speaker_profiles_enabled);
     setHfToken(p.hf_auth_token || "");
@@ -97,7 +102,10 @@ export function usePreferencesForm() {
   }
 
   async function save() {
-    await updatePreferences({
+    const roots = newSourceRoot.trim() ? [...sourceRoots, newSourceRoot.trim()] : sourceRoots;
+    const sourceSearch = buildSourceSearchPayload(roots, sourceDepth);
+    const saved = await updatePreferences({
+      ...sourceSearch,
       default_vocabulary: defaultVocab,
       speaker_profiles_enabled: voiceProfilesEnabled,
       hf_auth_token: hfToken,
@@ -110,9 +118,13 @@ export function usePreferencesForm() {
         minSpeakerSeconds,
       }),
     });
+    setSourceRoots(saved.source_roots);
+    setSourceDepth(String(saved.source_search_depth));
+    setNewSourceRoot("");
   }
 
   return {
+    sourceRoots, setSourceRoots, sourceDepth, setSourceDepth, newSourceRoot, setNewSourceRoot,
     defaultVocab, setDefaultVocab,
     voiceProfilesEnabled, setVoiceProfilesEnabled,
     hfToken, setHfToken,

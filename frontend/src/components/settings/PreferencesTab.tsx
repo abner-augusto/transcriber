@@ -1,3 +1,4 @@
+import { buildSourceSearchPayload } from "./preferencesPayload";
 import { deleteMisheardForm, deleteVocabularyEntry } from "../../api";
 import type { PreferencesForm } from "./usePreferencesForm";
 
@@ -7,6 +8,7 @@ interface Props {
 
 export default function PreferencesTab({ form }: Props) {
   const {
+    sourceRoots, setSourceRoots, sourceDepth, setSourceDepth, newSourceRoot, setNewSourceRoot,
     defaultVocab, setDefaultVocab, voiceProfilesEnabled, setVoiceProfilesEnabled,
     voiceProfiles, learnedVocab, setLearnedVocab, rejectedForms, handleDeleteRejectedForm,
     vocabularyCorrectionEnabled, setVocabularyCorrectionEnabled,
@@ -16,6 +18,29 @@ export default function PreferencesTab({ form }: Props) {
 
   return (
     <>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Folders searched for moved originals</label>
+        <p className="text-xs text-slate-500 mb-2">Enter absolute folder paths to search when an original recording has moved.</p>
+        {sourceRoots.map((root, index) => (
+          <div key={`${root}-${index}`} className="flex items-center gap-2 mb-1 text-sm text-slate-300">
+            <span className="flex-1 break-all">{root}</span>
+            <button type="button" onClick={() => setSourceRoots(sourceRoots.filter((_, i) => i !== index))} className="text-red-400" aria-label={`Remove ${root}`}>Remove</button>
+          </div>
+        ))}
+        <div className="flex gap-2 mt-2">
+          <input aria-label="Absolute folder path" value={newSourceRoot} onChange={(e) => setNewSourceRoot(e.target.value)} placeholder="Absolute folder path" className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" />
+          <button type="button" onClick={() => {
+            const root = newSourceRoot.trim();
+            if (!root) return;
+            try { buildSourceSearchPayload([root], "0"); setSourceRoots([...sourceRoots, root]); setNewSourceRoot(""); }
+            catch (err) { alert(err instanceof Error ? err.message : String(err)); }
+          }} className="text-sm text-violet-400">Add folder</button>
+        </div>
+        <label className="block text-sm text-slate-300 mt-3" htmlFor="source-depth">Search depth</label>
+        <p className="text-xs text-slate-500 mb-1">A file in the folder is level 0.</p>
+        <input id="source-depth" type="number" min="0" step="1" value={sourceDepth} onChange={(e) => setSourceDepth(e.target.value)} className="w-24 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" />
+      </div>
 
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1">Default vocabulary</label>
