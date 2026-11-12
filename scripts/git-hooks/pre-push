@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+tropa gate passed full && exit 0
+exec bash "$(git rev-parse --show-toplevel)/scripts/check"
