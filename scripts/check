@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Green for this repo: pytest without the model_* markers (fake Engines, no GPU),
+# the frontend type check and tests, then tropa quality.
+# Every gate runs even when an earlier one fails, so the final line names all of them.
+set -u
+cd "$(dirname "$0")/.."
+
+if ! command -v tropa >/dev/null 2>&1; then
+    echo "check: FAIL (the tropa CLI is missing; install it with: uv tool install --editable <agent-skills>/tropa/cli)"
+    exit 2
+fi
+
+logs=$(mktemp -d)
+trap 'rm -rf "$logs"' EXIT
+start=$(tropa gate tree)
+
+HF_HUB_OFFLINE=1 uv run --frozen --offline --extra dev python -m pytest -q \
+    -m "not model_load and not model_inference" 2>&1 | tee "$logs/pytest"
+pytest=${PIPESTATUS[0]}
+
+(cd frontend && npx --no-install tsc -b)
+tsc=$?
+
+(cd frontend && NO_COLOR=1 npm test 2>&1) | tee "$logs/vitest"
+vitest=${PIPESTATUS[0]}
+
+tropa quality .
+quality=$?
+
+counts="pytest: $(tail -n 1 "$logs/pytest") | vitest:$(grep -E '^ +Tests ' "$logs/vitest" | tail -n 1 | sed -E 's/^ +Tests +/ /')"
+
+if [ "$pytest" -ne 0 ] || [ "$tsc" -ne 0 ] || [ "$vitest" -ne 0 ] || [ "$quality" -ne 0 ]; then
+    echo "check: FAIL (pytest=$pytest, tsc=$tsc, vitest=$vitest, tropa quality=$quality) | $counts"
+    exit 1
+fi
+
+tropa gate record full --tree "$start" || exit 1
+echo "check: ok | $counts"

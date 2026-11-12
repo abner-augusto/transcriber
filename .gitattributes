@@ -5,6 +5,8 @@ docker/nginx.conf text eol=lf
 docker/supervisord.conf text eol=lf
 *.sh text eol=lf
 *.command text eol=lf
+scripts/check text eol=lf
+scripts/git-hooks/* text eol=lf
 
 # Windows batch files need CRLF
 *.bat text eol=crlf
