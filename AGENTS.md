@@ -1,5 +1,11 @@
 # Agent Instructions
 
+## Check
+
+`bash scripts/check` defines green: `pytest` from the repo root (fake Engines, no GPU; the `model_*` markers are opt-in), the type check and `npm test` in `frontend/`, then `tropa quality` against `docs/agents/quality-baseline.json`. Its limits and the tracker kind are in `docs/agents/tropa.toml`.
+
+Once per clone, run `git config core.hooksPath scripts/git-hooks`: the pre-push hook runs the check unless it already passed on the pushed tree.
+
 ## Work Tracking
 
 Implementation work is tracked as local Markdown issues under `.scratch/*/issues/`; read the relevant ones before starting planned work.
@@ -31,7 +37,7 @@ Ask before any destructive data operation (database, `storage/`, `models/`).
 
 ## Done
 
-The gate output is read: `pytest` from the repo root (fake Engines, no GPU; the `model_*` markers are opt-in) and `npm test` in `frontend/`. The report lists what you deleted.
+The output of `bash scripts/check` is read. The report lists what you deleted.
 
 ## Corrections
 
