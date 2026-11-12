@@ -27,9 +27,11 @@ can be done independently and first.
 
 **Status:** in-progress (Plans 018/019 verified; Plan 020 clean Windows install passed 2026-11-02, clean Linux install pending; hard-kill gap of plan 019 in issue 14)
 
-**Plans:** `plans/018-sqlite-and-migration.md` (SQLite + FTS5, manual migration command)
-and `plans/020-remove-legacy-infrastructure.md` (remove Redis/Celery/Postgres/Docker, `uv`,
+**Plans:** `docs/archive/plans/018-sqlite-and-migration.md` (SQLite + FTS5, manual migration command)
+and `docs/archive/plans/020-remove-legacy-infrastructure.md` (remove Redis/Celery/Postgres/Docker, `uv`,
 one start command). Decided 2026-09-24: Windows native, single user, one GPU.
+Both plans are archived; this ticket carries plan 020's one open Done criterion,
+the clean Linux install.
 
 **Constraints:**
 - ADR-0001: everything stays local.
@@ -47,6 +49,7 @@ Segment text checksums must match before the app is pointed at SQLite.
   single-process change.
 
 **Acceptance criteria (draft):**
-- [ ] Fresh Windows install with Docker Desktop stopped or absent
+- [x] Fresh Windows install with Docker Desktop stopped or absent (2026-11-02, fresh clone of `1775cfe`; `docs/archive/plans/LOCAL-VERIFICATION.md`, row 020)
+- [ ] Clean Linux install from a fresh checkout (plan 020 Step 2; not yet run anywhere)
 - [x] Search matches accented and unaccented Portuguese spellings
 - [x] `start.ps1` / `start.sh` start the app on one port with local Jobs

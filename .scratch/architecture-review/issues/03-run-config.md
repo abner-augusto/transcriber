@@ -19,7 +19,7 @@ with.
 
 **Status:** done
 
-**Plan:** `plans/016-one-place-for-preferences-and-run-config.md` (design session 2026-09-24:
+**Plan:** `docs/archive/plans/016-one-place-for-preferences-and-run-config.md` (design session 2026-09-24:
 one `Preferences` model and one file in storage, `.env` only for machine facts, RunConfig
 resolved at Job start and stored on the Job, Engines configured through factories).
 

@@ -1,6 +1,6 @@
 # 01 - Degrade Safely When Optional Engine Capabilities Fail
 
-**Plan:** `plans/001-degrade-optional-engine-capabilities.md`
+**Plan:** `docs/archive/plans/001-degrade-optional-engine-capabilities.md`
 
 **What to build:** Make Qwen/VibeVoice forced-aligner initialization transactional
 and optional. If processor or model loading fails, retain a diagnostic reason and

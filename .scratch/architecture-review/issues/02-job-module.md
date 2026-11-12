@@ -20,7 +20,7 @@ executed on its own.
 
 **Status:** completed
 
-**Plan:** `plans/017-job-module.md` (design session 2026-09-24 on 02/04/05).
+**Plan:** `docs/archive/plans/017-job-module.md` (design session 2026-09-24 on 02/04/05).
 
 **Outcome:** The adapters are Celery + Redis in production and inline + in-memory
 for tests. `rebuild_speakers_and_segments` lives in `meeting_store.py`.

@@ -1,6 +1,6 @@
 # 02 - Make Celery Task Failures Truthful
 
-**Plan:** `plans/002-make-celery-failures-truthful.md`
+**Plan:** `docs/archive/plans/002-make-celery-failures-truthful.md`
 
 **What to build:** Preserve the existing `meeting_job` database and Redis failure
 handling while allowing genuine processing exceptions to propagate to Celery.

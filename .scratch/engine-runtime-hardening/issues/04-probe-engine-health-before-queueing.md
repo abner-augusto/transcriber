@@ -1,6 +1,6 @@
 # 04 - Probe Engine Health Before Queueing Jobs
 
-**Plan:** `plans/004-probe-engine-health-before-queueing.md`
+**Plan:** `docs/archive/plans/004-probe-engine-health-before-queueing.md`
 
 **What to build:** Introduce structured, fast Engine health probes with `ready`,
 `degraded`, and `blocked` states. Validate package/class, checkpoint metadata,

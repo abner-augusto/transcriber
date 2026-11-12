@@ -26,7 +26,7 @@ with the route.
 
 ## Design session, 2026-10-22
 
-**Status now:** done. It was ready-for-agent after this session; executable plan: `plans/048-cancel-a-job.md`.
+**Status now:** done. It was ready-for-agent after this session; executable plan: `docs/archive/plans/048-cancel-a-job.md`.
 
 Answers to the open questions:
 

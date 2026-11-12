@@ -1,6 +1,6 @@
 # 02 - Settings Screen for the Folders Searched for a Moved Original
 
-**Source:** plan 046 (`plans/README.md`, row 046: "no Settings screen for `source_roots`
+**Source:** plan 046 (`docs/archive/plans/README.md`, row 046: "no Settings screen for `source_roots`
 yet"); ADR-0012. Split from ticket 01 on 2026-10-22.
 
 **What to build:** A section in Settings -> Preferences to see and change the two

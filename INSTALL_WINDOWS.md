@@ -37,7 +37,7 @@ from `frontend/`; Vite proxies API requests to port 8000.
 
 Stop the old app and worker, then retain a PostgreSQL dump. Install the
 optional migration driver and follow the exact checks in
-[the verification plan](plans/TEST-PLAN.md#plan-018-postgresql-to-sqlite). The
+[the verification plan](docs/archive/plans/TEST-PLAN.md#plan-018-postgresql-to-sqlite). The
 copy command never modifies its PostgreSQL source or overwrites its target.
 Keep the database and dump until you open and search the migrated Meetings.
 

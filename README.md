@@ -99,14 +99,14 @@ requests to port 8000.
 ## Migrate an older PostgreSQL database
 
 For existing PostgreSQL data, retain a database dump and follow the migration
-and verification steps in [plans/TEST-PLAN.md](plans/TEST-PLAN.md#plan-018-postgresql-to-sqlite).
+and verification steps in [docs/archive/plans/TEST-PLAN.md](docs/archive/plans/TEST-PLAN.md#plan-018-postgresql-to-sqlite).
 The importer reads the source without changing it and refuses to overwrite its
 SQLite target. Keep the dump until the migrated Meetings open and search works.
 
 ## Tests and release checks
 
 The consolidated backend, frontend, migration, local-model, and clean-install
-checks are in [plans/TEST-PLAN.md](plans/TEST-PLAN.md).
+checks are in [docs/archive/plans/TEST-PLAN.md](docs/archive/plans/TEST-PLAN.md).
 
 ## Usage
 

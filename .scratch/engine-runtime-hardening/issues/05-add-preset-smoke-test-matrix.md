@@ -1,6 +1,6 @@
 # 05 - Add a Tiered Preset Smoke-Test Matrix
 
-**Plan:** `plans/005-add-preset-smoke-test-matrix.md`
+**Plan:** `docs/archive/plans/005-add-preset-smoke-test-matrix.md`
 
 **What to build:** Add three Engine verification tiers: deterministic metadata
 tests in the normal suite, opt-in local model-load tests, and opt-in tiny-audio

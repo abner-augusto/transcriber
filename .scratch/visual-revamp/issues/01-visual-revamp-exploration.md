@@ -18,8 +18,8 @@ calm matter more than flash.
 2. `/prototype`: build throwaway mockups of the two screens that matter most, the
    Meeting page (transcript + Speakers + audio player) and the Upload dialog, in two or
    three candidate directions, for the user to compare side by side.
-3. Write the chosen direction as a `plans/NNN-*.md` (tokens first, then screens one at a
-   time), then flip this issue to `ready-for-agent`.
+3. Write the chosen direction into this issue, or a spec beside it in this folder (tokens
+   first, then screens one at a time), then flip this issue to `ready-for-agent`.
 
 **Blocked by:** none.
 
@@ -35,4 +35,4 @@ calm matter more than flash.
 **Acceptance criteria (for the exploration itself):**
 - [ ] `DESIGN.md` records the agreed direction.
 - [ ] Prototypes of the Meeting page and Upload dialog were shown and one direction chosen.
-- [ ] A plan in `plans/` lists the implementation steps; this issue is `ready-for-agent`.
+- [ ] This issue, or a spec beside it, lists the implementation steps; this issue is `ready-for-agent`.

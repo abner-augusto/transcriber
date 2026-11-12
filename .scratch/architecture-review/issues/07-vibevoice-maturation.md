@@ -16,8 +16,10 @@ same Diarization stage as pyannote, so comparisons are like for like).
 
 **Status:** ready-for-agent
 
-**Plan:** `plans/021-vibevoice-evaluation.md` (design session 2026-09-24: fix the Words and swap
-only the Turns to isolate the Diarizer; baseline faster-whisper large-v3 + pyannote; numbers only in the repo).
+**Plan:** `docs/archive/plans/021-vibevoice-evaluation.md` (design session 2026-09-24: fix the Words and swap
+only the Turns to isolate the Diarizer; baseline faster-whisper large-v3 + pyannote; numbers only in the repo). The plan is
+archived and nothing in it has run; its decisions, steps and promotion rule are this
+ticket's spec. Steps 4 and 5 need the user's GPU and private recordings.
 
 **Open questions for the exploration session:**
 - Which recordings form the evaluation set (length, number of speakers,
@@ -28,4 +30,6 @@ only the Turns to isolate the Diarizer; baseline faster-whisper large-v3 + pyann
 
 **Acceptance criteria (draft):**
 - [ ] Evaluation script in `bench/` with results recorded in the repo
-- [ ] Decision recorded in ADR-0007 (promote, keep experimental, or remove)
+- [ ] Both axes (Diarization and Transcription) measured on every recording in the set
+- [ ] No transcript text in the repository (`rg` over `bench/results/` for a known phrase returns nothing)
+- [ ] Decision recorded in ADR-0007 (promote, secondary, keep experimental, or remove) with the numbers

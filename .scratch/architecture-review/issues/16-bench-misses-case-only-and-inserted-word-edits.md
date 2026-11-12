@@ -27,7 +27,7 @@ opcode when the user's side only adds words around the corrected term.
   `no ERP` with the correction `RP.` → `ERP` scores a hit, and the inserted
   `no` stays a miss.
 - The bench re-run on the local database moves the two cases above to hits;
-  record the new totals in `plans/014-vocabulary-correction.md`.
+  record the new totals in `docs/archive/plans/014-vocabulary-correction.md`.
 - The report stays metadata-only.
 
 **Status:** done

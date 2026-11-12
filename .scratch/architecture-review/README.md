@@ -11,8 +11,8 @@ as defined by the `codebase-design` skill; domain terms from `GLOSSARY.md`.
 
 | Candidate | Where it lives | Status |
 |-----------|----------------|--------|
-| 1. Deepen the Diarization stage | `plans/012-deepen-diarization-stage.md` (supersedes plan 008) | done |
-| 3. Move Segment derivation out of `tasks/shared.py` | `plans/013-extract-segment-derivation.md` | done |
+| 1. Deepen the Diarization stage | `docs/archive/plans/012-deepen-diarization-stage.md` (supersedes plan 008) | done |
+| 3. Move Segment derivation out of `tasks/shared.py` | `docs/archive/plans/013-extract-segment-derivation.md` | done |
 | Primary Engines (parakeet.cpp, faster-whisper large-v3) | `docs/adr/0007-primary-engines-in-daily-use.md` | accepted |
 
 ## Backlog — each needs its own exploration session
@@ -20,20 +20,21 @@ as defined by the `codebase-design` skill; domain terms from `GLOSSARY.md`.
 Status `needs-exploration`: the direction is agreed, the interface is not.
 Start a session by reading the ticket, then run the skill's grilling loop
 (constraints, dependencies, shape of the deepened module, what sits behind
-the seam, which tests survive). Turn the outcome into a `plans/NNN-*.md` and
-flip the ticket to `ready-for-agent`.
+the seam, which tests survive). Write the outcome into the ticket (or a spec
+beside it in this folder) and flip the ticket to `ready-for-agent`. The plans
+linked below are archived records of the sessions already held.
 
 | Ticket | Candidate | Blocked by |
 |--------|-----------|------------|
-| `issues/01-transcriber-returns-transcription.md` | 2 | ready → `plans/015-transcriber-returns-transcription.md` |
-| `issues/02-job-module.md` | 4 | ready → `plans/017-job-module.md` |
-| `issues/03-run-config.md` | 5 | ready → `plans/016-one-place-for-preferences-and-run-config.md` |
-| `issues/04-per-job-child-process.md` | 6 | ready → `plans/019-local-job-runner.md` |
-| `issues/05-stack-simplification.md` | stack | ready → `plans/018-sqlite-and-migration.md`, `plans/020-remove-legacy-infrastructure.md` |
-| `issues/06-vocabulary-for-parakeet.md` | new (ADR-0007) | ready → `plans/014-vocabulary-correction.md` |
-| `issues/07-vibevoice-maturation.md` | new (ADR-0007) | ready → `plans/021-vibevoice-evaluation.md` |
+| `issues/01-transcriber-returns-transcription.md` | 2 | ready → `docs/archive/plans/015-transcriber-returns-transcription.md` |
+| `issues/02-job-module.md` | 4 | ready → `docs/archive/plans/017-job-module.md` |
+| `issues/03-run-config.md` | 5 | ready → `docs/archive/plans/016-one-place-for-preferences-and-run-config.md` |
+| `issues/04-per-job-child-process.md` | 6 | ready → `docs/archive/plans/019-local-job-runner.md` |
+| `issues/05-stack-simplification.md` | stack | ready → `docs/archive/plans/018-sqlite-and-migration.md`, `docs/archive/plans/020-remove-legacy-infrastructure.md` |
+| `issues/06-vocabulary-for-parakeet.md` | new (ADR-0007) | ready → `docs/archive/plans/014-vocabulary-correction.md` |
+| `issues/07-vibevoice-maturation.md` | new (ADR-0007) | ready → `docs/archive/plans/021-vibevoice-evaluation.md` |
 | `issues/08-correction-suggestions-ui.md` | from 06 | plan 014 |
-| `issues/09-cancel-job.md` | from 02/04/05 | ready → `plans/048-cancel-a-job.md` |
+| `issues/09-cancel-job.md` | from 02/04/05 | ready → `docs/archive/plans/048-cancel-a-job.md` |
 | `issues/10-lost-pending-jobs.md` | PR #1 review of plan 007 | — (plan 019 removes the cause) |
 | `issues/11-api-startup-blocks-on-running-job.md` | PR #1 manual test | — (ready-for-agent; carry the rule into plan 018) |
 | `issues/12-reprocessing-resets-speaker-names.md` | PR #1 manual test | — (coordinate with plan 014) |

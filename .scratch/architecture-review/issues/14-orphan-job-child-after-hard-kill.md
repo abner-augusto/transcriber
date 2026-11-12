@@ -41,6 +41,11 @@ interruption error).
   starts the next PENDING Job.
 - A recovered (FAILED) Job is never moved to COMPLETED by a late child.
 - A test for whichever mechanism is chosen; the machine check above re-run and
-  recorded in `plans/LOCAL-VERIFICATION.md`.
+  recorded in this ticket (the 2026-11-02 run is in
+  `docs/archive/plans/LOCAL-VERIFICATION.md`).
+
+**Plan:** `docs/archive/plans/019-local-job-runner.md` (archived). This ticket
+carries its one open Done criterion: the restart with a hard kill mid-Job and
+the VRAM check after it.
 
 **Status:** needs-exploration

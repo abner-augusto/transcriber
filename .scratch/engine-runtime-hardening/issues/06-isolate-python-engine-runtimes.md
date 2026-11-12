@@ -1,6 +1,6 @@
 # 06 - Isolate Python Engines in Dedicated Runtimes
 
-**Plan:** `plans/006-isolate-python-engine-runtimes.md`
+**Plan:** `docs/archive/plans/006-isolate-python-engine-runtimes.md`
 
 **What to build:** Move Qwen3-ASR and VibeVoice execution behind a strict,
 versioned, file-based JSON subprocess protocol. Give each Engine an independently

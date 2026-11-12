@@ -20,7 +20,7 @@ knows which Engine ran, which `GLOSSARY.md` says it must not.
 
 **Status:** done (plan 015 smoke tiers verified 2026-11-02; harness gap in issue 15)
 
-**Plan:** `plans/015-transcriber-returns-transcription.md` (design session 2026-09-24:
+**Plan:** `docs/archive/plans/015-transcriber-returns-transcription.md` (design session 2026-09-24:
 provenance dict, `load`/`unload` on the port, Aligner stays separate, RunConfig stays out).
 
 **Constraints:**

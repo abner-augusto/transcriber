@@ -1,6 +1,6 @@
 # 03 - Pin Reproducible Engine Runtime Dependencies
 
-**Plan:** `plans/003-pin-engine-runtime-dependencies.md`
+**Plan:** `docs/archive/plans/003-pin-engine-runtime-dependencies.md`
 
 **What to build:** Replace the implicit editable Qwen/VibeVoice installations and
 mixed transitive dependency list with versioned runtime manifests and immutable
