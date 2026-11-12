@@ -3,6 +3,8 @@
 *.env
 
 # Python
+.coverage
+coverage.json
 __pycache__/
 *.pyc
 *.pyo

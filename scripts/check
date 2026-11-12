@@ -15,6 +15,7 @@ trap 'rm -rf "$logs"' EXIT
 start=$(tropa gate tree)
 
 HF_HUB_OFFLINE=1 uv run --frozen --offline --extra dev python -m pytest -q \
+    --cov=api --cov=engine_runners --cov=engine_runtimes --cov=engines --cov=jobs --cov=migrations --cov=model_presets --cov=models --cov=services --cov=tasks --cov=transcriber_cli --cov=transcript --cov-report=json:coverage.json \
     -m "not model_load and not model_inference" 2>&1 | tee "$logs/pytest"
 pytest=${PIPESTATUS[0]}
 
