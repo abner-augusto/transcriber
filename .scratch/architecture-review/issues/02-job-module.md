@@ -18,7 +18,7 @@ module absorbs.
 Plan 010 (dedupe enqueue) should be re-scoped into this ticket rather than
 executed on its own.
 
-**Status:** completed
+**Status:** done
 
 **Plan:** `docs/archive/plans/017-job-module.md` (design session 2026-09-24 on 02/04/05).
 

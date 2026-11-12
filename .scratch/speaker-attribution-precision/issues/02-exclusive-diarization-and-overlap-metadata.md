@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** completed
+**Status:** done
 
 - [x] When Community-1 provides exclusive diarization, Words and Segments are attributed from those exclusive Turns.
 - [x] The original overlapping diarization and the exclusive diarization are both persisted in the Meeting's raw diarization data.

@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** completed
+**Status:** done
 
 - [x] Equal-overlap Words are resolved by an explicit deterministic policy that is independent of Turn iteration order.
 - [x] Strictly greater overlap still selects the Turn with the greatest overlap.

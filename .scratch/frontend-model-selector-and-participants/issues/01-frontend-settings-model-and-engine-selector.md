@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** completed
+**Status:** done
 
 - [x] Fetch available engines and presets from `GET /api/model-settings`.
 - [x] Display `vibevoice` as a dedicated engine selector with its available 7B model.

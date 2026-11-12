@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 - Remove Earlier-Speaker Bias in Overlap Attribution; 02 - Use Exclusive Diarization for Attribution and Preserve Overlap Metadata.
 
-**Status:** completed
+**Status:** done
 
 - [x] Attribution scores are based on overlap evidence for each candidate Speaker.
 - [x] Switching Speaker between adjacent Words incurs a tunable penalty in the intended range.

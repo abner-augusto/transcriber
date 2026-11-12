@@ -4,7 +4,7 @@
 
 **Blocked by:** 01-frontend-settings-model-and-engine-selector.md
 
-**Status:** completed
+**Status:** done
 
 - [x] Remove the AI speaker identification toggle from the pre-transcription screen.
 - [x] Add an input component for entering names of all known speakers in the meeting (e.g. tag/chip list or comma-separated names).

@@ -24,7 +24,7 @@ Meetings also keep `original.mov`/`.mp4`. One 3.6 GB Meeting folder held
 
 **Blocked by:** none.
 
-**Status:** DONE (retention by plans 045 and 046, 2026-10-14; the follow-ups were closed as won't do on 2026-10-22, below). The Settings screen for `source_roots` is ticket `02-source-roots-settings.md`.
+**Status:** done (retention by plans 045 and 046, 2026-10-14; the follow-ups were closed as won't do on 2026-10-22, below). The Settings screen for `source_roots` is ticket `02-source-roots-settings.md`.
 
 **State left by the manual cleanup (2026-10-13):** in every Meeting older than
 7 days, these were deleted: `mic_source.wav`, `system_source.wav`,

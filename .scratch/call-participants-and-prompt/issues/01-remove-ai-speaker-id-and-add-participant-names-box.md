@@ -48,7 +48,7 @@ Redesign the pre-transcription configuration to provide two dedicated, high-leve
 **Blocked by:** 
 - `.scratch/dual-track-audio/issues/01-dual-track-mic-and-system-diarization.md` (active execution).
 
-**Status:** closed-fixed
+**Status:** done
 
 - [x] Add `vocabulary_profiles` CRUD support in `preferences.py` and `api/preferences.py`.
 - [x] Replace old vocabulary/speaker inputs in `HomePage.tsx` with two dedicated fields: Participants and Domain Terms.
