@@ -1,6 +1,6 @@
 # 01 - Measure CRAP in the check and tidy the ticket files
 
-**Status:** in-progress (baseline update reserved for the orchestrator)
+**Status:** done
 
 **Source:** tropa adoption, 2026-11-12. Decisions made by the owner.
 
