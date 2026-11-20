@@ -16,20 +16,20 @@ Issue status is recorded in each file. A `ready-for-agent` issue is actionable; 
 
 ## Domain Context
 
-Read `GLOSSARY.md` before changing domain behavior. Consult relevant decisions under `docs/adr/` before changing architecture or engine boundaries.
+Read `GLOSSARY.md` before changing domain behavior. Consult `ai-memory` (`decisions/architectural-invariants.md`) before changing architecture or engine boundaries.
 
 ## Operating the app
 
 To transcribe, name Speakers, or correct a Meeting (rather than change the code),
 follow `.claude/skills/transcriber-operator/SKILL.md`; it drives the running app
-through `uv run python -m transcriber_cli`. ADR-0010 says why that is allowed.
+through `uv run python -m transcriber_cli` (see `ai-memory` for the agent operation boundary).
 
 ## Every change
 
 1. **Docs**: update the docs the change touches, so none contradicts the code or another doc.
 2. **Tests**: call the `tdd` skill; the new test goes red before the implementation.
 3. **Implementation**: only what turns the test green, with every caller of a replaced path updated in the same change.
-4. **Cleanup**: delete the code, files and docs the change made unused (git history is the backup). Unsure → ask. `docs/archive/` and `docs/adr/` are records, not cleanup targets.
+4. **Cleanup**: delete the code, files and docs the change made unused (git history is the backup). Unsure → ask. `docs/archive/` is a record, not a cleanup target.
 
 Ask before any destructive data operation (database, `storage/`, `models/`).
 

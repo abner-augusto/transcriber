@@ -19,9 +19,8 @@ AI-powered local meeting transcription with automatic speaker identification. Up
    SpeechBrain embedding matches overrides that with a real name
 7. **Results** — colour-coded transcript synced to audio playback, editable segments, export
 
-Everything runs on this machine. No audio, transcript or voice embedding is ever sent anywhere —
-see [ADR-0001](docs/adr/0001-no-data-leaves-the-machine.md). Terms in bold are defined in
-[GLOSSARY.md](GLOSSARY.md).
+Everything runs on this machine. No audio, transcript or voice embedding is ever sent anywhere.
+Terms in bold are defined in [GLOSSARY.md](GLOSSARY.md).
 
 ## Swapping the transcription engine
 
@@ -122,11 +121,11 @@ checks are in [docs/archive/plans/TEST-PLAN.md](docs/archive/plans/TEST-PLAN.md)
 8. Settle **Review Notes** in the sidebar's Review tab: answer the agent's questions, accept or dismiss its suggestions, or leave a note on a segment (hover → Note). Segments with a note are tinted and the audio bar shows one clickable mark per note, amber when it waits for you and blue when it waits for the agent. Below the notes, **Vocabulary Corrections** lists every Word the Vocabulary changed in the Meeting (cyan underline in the transcript until confirmed), with Confirm and Undo per row
 9. **Export** to SRT, WebVTT, TXT, Markdown, JSON, DOCX, or PDF
 
-**Storage.** The app does not archive your recordings: keep the originals in the meeting's project folder. When a Meeting finishes processing, the app deletes the uploaded file(s) and the intermediate tracks and keeps only `audio.wav` (16 kHz mono; a mix for a dual-track Meeting) for playback and re-runs. A Meeting that has not finished processing keeps its upload, and so does one whose Job was cancelled (the Job deletes the working files it made). A dual-track Meeting's Re-diarize, Full reprocess and Duplicate need the separate mic and system recordings, so the app keeps a **Source Reference** to each original (name, size, a fast hash and, when known, its path) and reads it from there ([ADR-0011](docs/adr/0011-the-app-keeps-no-original-recordings.md), [ADR-0012](docs/adr/0012-the-app-references-originals-it-does-not-keep.md)). `transcriber_cli upload` records the path; a browser upload records no path. When you move an original, point the Meeting at it again with `transcriber_cli set M --source NEWPATH` (`--system-source` for the second track) or in the **Original recording** section of the Meeting page; the file must be the same recording (size and hash). Meetings uploaded before references existed have none: attach one with `set M --source PATH --adopt`. Folders listed in Settings → Preferences (or the `source_roots` setting via `PUT /api/settings/preferences`, absolute paths, empty by default) are searched for a moved file with the same size and hash, down to `source_search_depth` levels below each root (default 3: a file in the root is level 0, `root/a/b/c/file` is level 3). The app only reads an original; it never moves or deletes it.
+**Storage.** The app does not archive your recordings: keep the originals in the meeting's project folder. When a Meeting finishes processing, the app deletes the uploaded file(s) and the intermediate tracks and keeps only `audio.wav` (16 kHz mono; a mix for a dual-track Meeting) for playback and re-runs. A Meeting that has not finished processing keeps its upload, and so does one whose Job was cancelled (the Job deletes the working files it made). A dual-track Meeting's Re-diarize, Full reprocess and Duplicate need the separate mic and system recordings, so the app keeps a **Source Reference** to each original (name, size, a fast hash and, when known, its path) and reads it from there. `transcriber_cli upload` records the path; a browser upload records no path. When you move an original, point the Meeting at it again with `transcriber_cli set M --source NEWPATH` (`--system-source` for the second track) or in the **Original recording** section of the Meeting page; the file must be the same recording (size and hash). Meetings uploaded before references existed have none: attach one with `set M --source PATH --adopt`. Folders listed in Settings → Preferences (or the `source_roots` setting via `PUT /api/settings/preferences`, absolute paths, empty by default) are searched for a moved file with the same size and hash, down to `source_search_depth` levels below each root (default 3: a file in the root is level 0, `root/a/b/c/file` is level 3). The app only reads an original; it never moves or deletes it.
 
 ## Command line
 
-`transcriber_cli` runs and reads Meetings from a terminal, for scripting and for a coding agent that operates the app ([ADR-0010](docs/adr/0010-an-agent-may-operate-the-local-api.md)). It uses only the standard library, talks to the running app over HTTP (`http://127.0.0.1:8000`, or `$TRANSCRIBER_URL`), and prints one compact line per Segment. `--help` lists the commands.
+`transcriber_cli` runs and reads Meetings from a terminal, for scripting and for a coding agent that operates the app. It uses only the standard library, talks to the running app over HTTP (`http://127.0.0.1:8000`, or `$TRANSCRIBER_URL`), and prints one compact line per Segment. `--help` lists the commands.
 
 ```
 uv run python -m transcriber_cli list
@@ -156,7 +155,6 @@ An edit from the command line teaches Vocabulary only with `--learn`; an agent c
 ```
 transcriber/
 ├── GLOSSARY.md                 # Domain glossary — read this first
-├── docs/adr/                  # Why things are the way they are
 ├── main.py                    # FastAPI app entry point
 ├── config.py                  # Pydantic settings (engine binaries, paths)
 ├── database.py                # SQLAlchemy + migrations
